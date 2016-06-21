@@ -103,7 +103,7 @@ class SessionManager @Inject() (ws:WSClient, dalManager: DALManager, config:Conf
       token <- request.session.get(SessionManager.KEY_TOKEN)
       secret <- request.session.get(SessionManager.KEY_SECRET)
       tick <- request.session.get(SessionManager.KEY_USER_TICK)
-      if tick.toLong >= DateTime.now().getMillis - config.sessionTimeout
+      if tick.toLong >= DateTime.now().getMillis - config.sessionTimeout || config.ignoreSessionTimeout
     } yield {
       RequestToken(token, secret)
     }

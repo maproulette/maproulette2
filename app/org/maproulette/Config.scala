@@ -32,6 +32,8 @@ class Config @Inject() (implicit val application:Application) {
     case None => List.empty
   }
 
+  lazy val ignoreSessionTimeout : Boolean = this.sessionTimeout == -1
+
   lazy val isDebugMode : Boolean =
     this.config.getBoolean(Config.KEY_DEBUG).getOrElse(false)
 

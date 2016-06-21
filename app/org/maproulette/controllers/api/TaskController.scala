@@ -7,7 +7,7 @@ import io.swagger.annotations.{Api, ApiOperation}
 import org.maproulette.actions._
 import org.maproulette.controllers.CRUDController
 import org.maproulette.models.dal.{TagDAL, TaskDAL}
-import org.maproulette.models.{Tag, Task}
+import org.maproulette.models.{Challenge, Tag, Task}
 import org.maproulette.exception.{InvalidException, NotFoundException}
 import org.maproulette.session.{SearchParameters, SessionManager, User}
 import org.maproulette.utils.Utils
@@ -71,9 +71,12 @@ class TaskController @Inject() (override val sessionManager: SessionManager,
     * @return
     */
   override def updateCreateBody(body: JsValue, user:User): JsValue = {
+    // add a default priority, this will be updated later when the task is created if there are
+    // priority rules defined in the challenge parent
+    val updatedBody = Utils.insertIntoJson(body, "priority", Challenge.PRIORITY_HIGH)(IntWrites)
     // We need to update the geometries to make sure that we handle all the different types of
     // geometries that you can deal with like WKB or GeoJSON
-    updateGeometryData(super.updateCreateBody(body, user))
+    updateGeometryData(super.updateCreateBody(updatedBody, user))
   }
 
 

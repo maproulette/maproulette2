@@ -85,6 +85,8 @@ case class User (override val id:Long,
   def isSuperUser = groups.exists(_.groupType == Group.TYPE_SUPER_USER)
 
   def isAdmin = groups.exists(_.groupType == Group.TYPE_ADMIN)
+
+  def adminForProject(projectId:Long) = groups.exists(g => g.groupType == Group.TYPE_ADMIN && g.projectId == projectId)
 }
 
 /**

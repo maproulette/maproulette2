@@ -76,12 +76,13 @@ GET     /tag/:id                                    @org.maproulette.controllers
 DELETE  /tag/:id                                    @org.maproulette.controllers.api.TagController.delete(id:Long)
 GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 # Data Controller
-GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "")
+GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long)
 GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0)
+POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "")
 GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)
 GET     /data/user/summary                          @org.maproulette.controllers.api.DataController.getUserSummary(projectList:String ?= "", start:String ?= "", end:String ?= "", survey:Int ?= 0)
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
-GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", start:String ?= "", end:String ?= "")
+GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "")
 GET     /data/challenge/:challengeId/activity       @org.maproulette.controllers.api.DataController.getChallengeActivity(challengeId:Long, start:String ?= "", end:String="")
 # Handles invalid paths that use the  prefix
 POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)

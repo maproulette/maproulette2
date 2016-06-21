@@ -11,7 +11,7 @@ import org.maproulette.models.dal.ChallengeDAL
 import org.maproulette.session.SessionManager
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json._
-import play.api.mvc.{Action, Controller}
+import play.api.mvc.{Action, AnyContentAsFormUrlEncoded, Controller}
 
 /**
   * @author cuthbertm
@@ -74,18 +74,18 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     }
   }
 
-  def getChallengeSummary(id:Long, start:String, end:String) = Action.async { implicit request =>
+  def getChallengeSummary(id:Long) = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(
-        dataManager.getChallengeSummary(None, Some(id), getDate(start), getDate(end))
+        dataManager.getChallengeSummary(None, Some(id))
       ))
     }
   }
 
-  def getProjectSummary(projects:String, start:String, end:String) = Action.async { implicit request =>
+  def getProjectSummary(projects:String) = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(
-        dataManager.getChallengeSummary(getProjectList(projects), None, getDate(start), getDate(end))
+        dataManager.getChallengeSummary(getProjectList(projects), None)
       ))
     }
   }
@@ -102,6 +102,52 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(
         dataManager.getChallengeActivity(getProjectList(projects), None, getDate(start), getDate(end))
+      ))
+    }
+  }
+
+  /**
+    * Special API for handling data table API requests for challenge summary table
+    *
+    * @param projectIds A comma separated list of projects to filter by
+    * @return
+    */
+  def getChallengeSummaries(projectIds:String) = Action.async { implicit request =>
+    sessionManager.authenticatedRequest { implicit user =>
+      val postData = request.body.asInstanceOf[AnyContentAsFormUrlEncoded].data
+      val draw = postData.get("draw").head.head.toInt
+      val start = postData.get("start").head.head.toInt
+      val length = postData.get("length").head.head.toInt
+      val search = postData.get("search[value]").head.head
+      val orderDirection = postData.get("order[0][dir]").head.head.toUpperCase
+      val orderColumnID = postData.get("order[0][column]").head.head.toInt
+      val orderColumnName = postData.get(s"columns[$orderColumnID][name]").head.headOption
+      val projectList = getProjectList(projectIds)
+      val challengeSummaries =
+        dataManager.getChallengeSummary(projectList, None, length, start, orderColumnName, orderDirection, search)
+
+      val summaryMap = challengeSummaries.map(summary => Map(
+        "id" -> summary.id.toString,
+        "name" -> summary.name,
+        "complete_percentage" -> summary.actions.percentComplete.toString,
+        "available" -> summary.actions.available.toString,
+        "available_perc" -> summary.actions.percentage(summary.actions.available).toString,
+        "fixed" -> summary.actions.fixed.toString,
+        "fixed_perc" -> summary.actions.percentage(summary.actions.fixed).toString,
+        "false_positive" -> summary.actions.falsePositive.toString,
+        "false_positive_perc" -> summary.actions.percentage(summary.actions.falsePositive).toString,
+        "skipped" -> summary.actions.skipped.toString,
+        "skipped_perc" -> summary.actions.percentage(summary.actions.skipped).toString,
+        "already_fixed" -> summary.actions.alreadyFixed.toString,
+        "already_fixed_perc" -> summary.actions.percentage(summary.actions.alreadyFixed).toString,
+        "too_hard" -> summary.actions.tooHard.toString,
+        "too_hard_perc" -> summary.actions.percentage(summary.actions.tooHard).toString
+      ))
+      Ok(Json.obj(
+        "draw" -> JsNumber(draw),
+        "recordsTotal" -> JsNumber(dataManager.getTotalSummaryCount(projectList, None)),
+        "recordsFiltered" -> JsNumber(dataManager.getTotalSummaryCount(projectList, None, search)),
+        "data" -> Json.toJson(summaryMap)
       ))
     }
   }
