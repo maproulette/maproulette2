@@ -798,11 +798,6 @@ var MRManager = (function() {
                 if (title !== "") {
                     popupString += "<b>" + title + "</b></br>";
                 }
-                if (data[i].blurb !== "") {
-                    popupString += marked(data[i].blurb);
-                } else {
-                    popupString += "</br>";
-                }
                 if (data[i].type == 1 || data[i].type == 4) {
                     // This section below is for the pie chart and small activity chart when the popup is opened
                     popupString += Messages('challenge.difficulty.title') + " " + Messages('challenge.difficulty.' + data[i].difficulty);
