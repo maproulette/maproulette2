@@ -478,6 +478,7 @@ class ChallengeController @Inject()(override val childController: TaskController
           implicit val challengeSummaryWrites = Json.writes[ChallengeSummary]
           val files:Map[String, String] = Map(
             "challenge.json" -> Json.prettyPrint(Json.toJson(c)),
+            "lineByLine.geojson" -> this.dal.getLineByLineChallengeGeometry(challengeId).values.mkString("\n"),
             "geometry.geojson" -> this.dal.getChallengeGeometry(challengeId),
             "comments.csv" -> this._extractComments(challengeId, -1, 0, request.host).mkString("\n"),
             "metrics.csv" -> Json.prettyPrint(Json.toJson(this.dalManager.data.getChallengeSummary(challengeId = Some(challengeId))))

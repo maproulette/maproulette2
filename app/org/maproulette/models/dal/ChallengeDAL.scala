@@ -378,6 +378,34 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
   }
 
   /**
+    * This retrieves all the tasks geojson as line by line. When using this format it is a lot easier to
+    * rebuild a challenge correctly.
+    *
+    * @param challengeId The id of the challenge
+    * @param c The implicit connection
+    * @return A map of Task ID to geojson string
+    */
+  def getLineByLineChallengeGeometry(challengeId:Long)(implicit c:Option[Connection]=None) : Map[Long, String] = {
+    this.withMRConnection { implicit c =>
+        SQL"""SELECT t.id, (
+                  SELECT row_to_json(fc)::text as geometries
+                  FROM ( SELECT task_id, 'FeatureCollection' As type, array_to_json(array_agg(f)) As features
+                          FROM ( SELECT task_id, 'Feature' As type,
+             					                ST_AsGeoJSON(lg.geom)::json As geometry,
+             					                hstore_to_json(lg.properties) As properties
+             					           FROM task_geometries As lg
+             					           WHERE task_id = t.id
+             				          ) As f
+             			            GROUP BY task_id
+             	        )  As fc
+                  ) AS geometry
+              FROM tasks t
+              WHERE t.parent_id = $challengeId
+        """.as((long("tasks.id") ~ str("geometry")).*).map(x => x._1 -> x._2).toMap
+    }
+  }
+
+  /**
     * Retrieves the json that contains the central points for all the tasks
     *
     * @param challengeId The id of the challenge

@@ -913,14 +913,14 @@ class TaskDAL @Inject()(override val db: Database,
       val query =
         s"""
            |INSERT INTO task_comments (osm_id, task_id, comment, action_id)
-           |VALUES ({osm_id}, {task_id}, {comment}, {action_id}) RETURNING id
+           |VALUES ({osm_id}, {task_id}, {comment}, {action_id}) RETURNING id, project_id, challenge_id
          """.stripMargin
       SQL(query).on('osm_id -> user.osmProfile.id,
                     'task_id -> taskId,
                     'comment -> comment,
-                    'action_id -> actionId).as(long("id").*).headOption match {
-        case Some(commentId) =>
-          Comment(commentId, user.osmProfile.id, user.name, taskId, -1, -1, DateTime.now(), comment, actionId)
+                    'action_id -> actionId).as((long("id") ~ long("project_id") ~ long("challenge_id")).*).headOption match {
+        case Some(ids) =>
+          Comment(ids._1._1, user.osmProfile.id, user.name, taskId, ids._1._2, ids._2, DateTime.now(), comment, actionId)
         case None => throw new Exception("Failed to add comment")
       }
     }
