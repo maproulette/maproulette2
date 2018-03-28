@@ -25,4 +25,6 @@ object Group {
 
   val TYPE_SUPER_USER = -1
   val TYPE_ADMIN = 1
+  val TYPE_WRITE_ACCESS = 2
+  val TYPE_READ_ONLY = 3
 }

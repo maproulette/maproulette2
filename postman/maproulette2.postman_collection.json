@@ -1,8 +1,7 @@
 {
 	"info": {
-		"name": "maproulette2",
 		"_postman_id": "fc293308-9da6-f4cc-0e4e-a634dc3111e8",
-		"description": "",
+		"name": "maproulette2",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -259,8 +258,7 @@
 							"query": [
 								{
 									"key": "immediate",
-									"value": "true",
-									"equals": true
+									"value": "true"
 								}
 							]
 						},
@@ -942,8 +940,7 @@
 							"query": [
 								{
 									"key": "immediate",
-									"value": "true",
-									"equals": true
+									"value": "true"
 								}
 							]
 						},
@@ -998,8 +995,7 @@
 							"query": [
 								{
 									"key": "immediate",
-									"value": "true",
-									"equals": true
+									"value": "true"
 								}
 							]
 						},
@@ -1251,7 +1247,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n\t\"name\":\"test\",\n\t\"searchParameters\":{\n\t\t\"challengeIds\": [ {{TagsChallengeID}} ],\n\t\t\"location\": {\n\t\t\t\"left\":102,\n\t\t\t\"bottom\":0,\n\t\t\t\"right\":104,\n\t\t\t\"top\":2\n\t\t}\n\t}\n}"
+							"raw": "{\n  \"name\":\"test\",\n  \"searchParameters\":{\n    \"challengeIds\": [ {{TagsChallengeID}} ],\n    \"location\": {\n      \"left\":102,\n      \"bottom\":0,\n      \"right\":104,\n      \"top\":2\n    }\n  }\n}"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge",
@@ -1265,8 +1261,7 @@
 								"v2",
 								"virtualchallenge"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1308,8 +1303,7 @@
 								"virtualchallenge",
 								"{{VirtualChallengeID}}"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1351,8 +1345,7 @@
 								"virtualchallengebyname",
 								"test"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1401,8 +1394,7 @@
 								"virtualchallenge",
 								"{{VirtualChallengeID}}"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1443,8 +1435,7 @@
 								"v2",
 								"virtualchallenges"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1489,8 +1480,7 @@
 								"{{VirtualChallengeID}}",
 								"tasks"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1532,8 +1522,7 @@
 								"{{VirtualChallengeID}}",
 								"task"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1679,8 +1668,7 @@
 								"view",
 								"{{VirtualChallengeID}}"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1722,8 +1710,7 @@
 								"clustered",
 								"{{VirtualChallengeID}}"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1765,8 +1752,141 @@
 								"virtualchallenge",
 								"{{VirtualChallengeID}}"
 							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Virtual Challenge Creation ID List",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "266672e7-9dab-437f-a9c8-96131099737d",
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"pm.globals.set(\"VirtualChallengeIDList\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"testVCList\";"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\":\"testVCList\",\n  \"taskIdList\":[{{VChallengeTask1ID}}, {{VChallengeTask2ID}}]\n}"
 						},
-						"description": ""
+						"url": {
+							"raw": "http://localhost:9000/api/v2/virtualchallenge",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"virtualchallenge"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Virtual Challenge ID Task List",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "608ddc0f-ebb0-436f-940e-4165b0c6061a",
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"tests[\"size\"] = jsonData.length === 2;"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							}
+						],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeIDList}}/tasks",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"virtualchallenge",
+								"{{VirtualChallengeIDList}}",
+								"tasks"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Virtual Challenge Delete ID List",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "a423abbb-b93e-478a-80d4-e0d2b09d5875",
+								"type": "text/javascript",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"tests[\"status\"] = jsonData.status === \"OK\";"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							}
+						],
+						"body": {},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeIDList}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"virtualchallenge",
+								"{{VirtualChallengeIDList}}"
+							]
+						}
 					},
 					"response": []
 				},
@@ -1801,7 +1921,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n\t\"name\":\"test\",\n\t\"searchParameters\":{\n\t\t\"challengeIds\": [ {{TagsChallengeID}} ],\n\t\t\"location\": {\n\t\t\t\"left\":102,\n\t\t\t\"bottom\":0,\n\t\t\t\"right\":104,\n\t\t\t\"top\":2\n\t\t}\n\t},\n\t\"expiry\":\"1 s\"\n}"
+							"raw": "{\n  \"name\":\"test\",\n  \"searchParameters\":{\n    \"challengeIds\": [ {{TagsChallengeID}} ],\n    \"location\": {\n      \"left\":102,\n      \"bottom\":0,\n      \"right\":104,\n      \"top\":2\n    }\n  },\n  \"expiry\":\"1 s\"\n}"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge",
@@ -1815,8 +1935,7 @@
 								"v2",
 								"virtualchallenge"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1856,8 +1975,7 @@
 								"virtualchallenge",
 								"11"
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				},
@@ -1908,8 +2026,7 @@
 							"query": [
 								{
 									"key": "immediate",
-									"value": "true",
-									"equals": true
+									"value": "true"
 								}
 							]
 						},
@@ -1951,12 +2068,10 @@
 							"query": [
 								{
 									"key": "priority",
-									"value": "1",
-									"equals": true
+									"value": "1"
 								}
 							]
-						},
-						"description": ""
+						}
 					},
 					"response": []
 				}
@@ -1997,7 +2112,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"SimpleProject\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":false\n}"
+							"raw": "{\n    \"name\":\"SimpleProject\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":true\n}"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/project",
@@ -2047,7 +2162,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"ProjectWithChildren\",\n    \"description\":\"Test project containing 2 children.\",\n    \"enabled\":false,\n    \"children\": [\n        {\n            \"name\":\"Challenge1 Child\",\n            \"description\":\"Challenge1 Child description\",\n            \"instruction\":\"Challenge1 Child instruction\",\n            \"children\":[\n                {\n                    \"name\":\"Task 1\",\n                    \"description\":\"Task 1 description\",\n                    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]}\n                },\n                {\n                    \"name\":\"Task 2\",\n                    \"description\":\"Task 2 description\",\n                    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103,1.5]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103.1,1.6]},\"properties\":{}}]}\n                }\n            ]\n        },\n        {\n            \"name\":\"Challenge2 Child\",\n            \"description\":\"Challenge2 Child description\",\n            \"instruction\":\"Challenge2 Child instruction\"\n        }\n    ]\n}"
+							"raw": "{\n    \"name\":\"ProjectWithChildren\",\n    \"description\":\"Test project containing 2 children.\",\n    \"enabled\":true,\n    \"children\": [\n        {\n            \"name\":\"Challenge1 Child\",\n            \"description\":\"Challenge1 Child description\",\n            \"instruction\":\"Challenge1 Child instruction\",\n            \"children\":[\n                {\n                    \"name\":\"Task 1\",\n                    \"description\":\"Task 1 description\",\n                    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]}\n                },\n                {\n                    \"name\":\"Task 2\",\n                    \"description\":\"Task 2 description\",\n                    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103,1.5]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103.1,1.6]},\"properties\":{}}]}\n                }\n            ]\n        },\n        {\n            \"name\":\"Challenge2 Child\",\n            \"description\":\"Challenge2 Child description\",\n            \"instruction\":\"Challenge2 Child instruction\"\n        }\n    ]\n}"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/project",
@@ -2203,7 +2318,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "http://localhost:9000/api/v2/project/{{ProjectWithChildren}}/tasks?cs=Child&s=2",
+							"raw": "http://localhost:9000/api/v2/project/{{ProjectWithChildren}}/tasks?cs=2&ts=2",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -2219,10 +2334,10 @@
 							"query": [
 								{
 									"key": "cs",
-									"value": "Child"
+									"value": "2"
 								},
 								{
-									"key": "s",
+									"key": "ts",
 									"value": "2"
 								}
 							]
@@ -2318,7 +2433,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "http://localhost:9000/api/v2/project/{{ProjectWithChildren}}",
+							"raw": "http://localhost:9000/api/v2/project/{{ProjectWithChildren}}?immediate=true",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -2329,6 +2444,12 @@
 								"v2",
 								"project",
 								"{{ProjectWithChildren}}"
+							],
+							"query": [
+								{
+									"key": "immediate",
+									"value": "true"
+								}
 							]
 						},
 						"description": "Deletes the project just created with the children"
@@ -2642,8 +2763,7 @@
 							"query": [
 								{
 									"key": "immediate",
-									"value": "true",
-									"equals": true
+									"value": "true"
 								}
 							]
 						},
@@ -3536,7 +3656,7 @@
 							"raw": ""
 						},
 						"url": {
-							"raw": "http://localhost:9000/api/v2/project/{{TestProject}}",
+							"raw": "http://localhost:9000/api/v2/project/{{TestProject}}?immediate=true",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -3547,6 +3667,12 @@
 								"v2",
 								"project",
 								"{{TestProject}}"
+							],
+							"query": [
+								{
+									"key": "immediate",
+									"value": "true"
+								}
 							]
 						},
 						"description": "Deletes the project just created with the children"

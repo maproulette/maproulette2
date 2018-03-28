@@ -90,9 +90,9 @@ class SchedulerActor @Inject() (config:Config,
                                 bounding = (SELECT ST_Envelope(ST_Buffer((ST_SetSRID(ST_Extent(location), 4326))::geography,2)::geometry)
                                   FROM tasks
                                   WHERE parent_id = rec.id)
-                          WHERE id = rec.id AND rec.modified > rec.last_updated;
+                          WHERE id = rec.id AND (rec.modified > rec.last_updated OR rec.last_updated IS NULL);
                           UPDATE challenges SET last_updated = NOW()
-                          WHERE id = rec.id AND rec.modified > rec.last_updated;
+                          WHERE id = rec.id AND (rec.modified > rec.last_updated OR rec.last_updated IS NULL);
                         END LOOP;
                       END$$;"""
 

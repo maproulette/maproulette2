@@ -71,7 +71,7 @@ trait TagDALMixin[T<:BaseObject[Long]] {
     */
   def deleteItemTags(id:Long, tags:List[Long], user:User)(implicit c:Option[Connection]=None) : Unit = {
     if (tags.nonEmpty) {
-      this.permission.hasWriteAccess(getItemTypeBasedOnTableName, user)(id)
+      this.permission.hasAdminAccess(getItemTypeBasedOnTableName, user)(id)
       this.withMRTransaction { implicit c =>
         SQL"""DELETE FROM tags_on_${this.tableName} WHERE ${this.name}_id = {$id} AND tag_id IN ($tags)""".execute()
       }
@@ -88,7 +88,7 @@ trait TagDALMixin[T<:BaseObject[Long]] {
     */
   def deleteItemStringTags(id:Long, tags:List[String], user:User)(implicit c:Option[Connection]=None) : Unit = {
     if (tags.nonEmpty) {
-      this.permission.hasWriteAccess(getItemTypeBasedOnTableName, user)(id)
+      this.permission.hasAdminAccess(getItemTypeBasedOnTableName, user)(id)
       val lowerTags = tags.map(_.toLowerCase)
       this.withMRTransaction { implicit c =>
         val query = s"""DELETE FROM tags_on_${this.tableName} tt USING tags t

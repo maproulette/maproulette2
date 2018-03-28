@@ -1,11 +1,9 @@
 package org.maproulette.cache
 
 import org.joda.time.DateTime
-import org.junit.runner.RunWith
 import org.maproulette.actions.{ItemType, ProjectType}
 import org.maproulette.models.BaseObject
-import org.specs2.mutable.Specification
-import org.specs2.runner.JUnitRunner
+import org.scalatestplus.play.PlaySpec
 
 /**
   * @author cuthbertm
@@ -17,12 +15,9 @@ case class TestBaseObject(override val id:Long,
   override val itemType: ItemType = ProjectType()
 }
 
-@RunWith(classOf[JUnitRunner])
-class CacheSpec extends Specification {
+class CacheSpec extends PlaySpec {
   implicit val manager = new CacheManager[Long, TestBaseObject](6, 5)
   val theCache = manager.cache
-
-  sequential
 
   "CacheManager" should {
     "cache element withOptionCaching" in {

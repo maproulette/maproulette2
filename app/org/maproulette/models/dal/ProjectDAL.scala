@@ -32,7 +32,7 @@ class ProjectDAL @Inject() (override val db:Database,
                             surveyDAL:SurveyDAL,
                             userGroupDAL: UserGroupDAL,
                             override val permission:Permission)
-  extends ParentDAL[Long, Project, Challenge] {
+  extends ParentDAL[Long, Project, Challenge] with OwnerMixin[Project] {
 
   // manager for the cache of the projects
   override val cacheManager = new CacheManager[Long, Project]
@@ -110,6 +110,8 @@ class ProjectDAL @Inject() (override val db:Database,
           db.withTransaction { implicit c =>
             // Every new project needs to have a admin group created for them
             this.userGroupDAL.createGroup(proj.id, proj.name + "_Admin", Group.TYPE_ADMIN, User.superUser)
+            this.userGroupDAL.createGroup(proj.id, proj.name + "_Write", Group.TYPE_WRITE_ACCESS, User.superUser)
+            this.userGroupDAL.createGroup(proj.id, proj.name + "_Read", Group.TYPE_READ_ONLY, User.superUser)
             Some(proj)
           }
         case None =>

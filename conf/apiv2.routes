@@ -458,18 +458,6 @@ GET     /project/:id/children                       @org.maproulette.controllers
 #   - name: id
 #     in: path
 #     description: The id of the parent project limiting the tasks to only a descendent of that project.
-#   - name: cs
-#     in: query
-#     description: The challenge search string. Retrieve only tasks that have the search string contained within the challenge name. Match is case insensitive.
-#   - name: ct
-#     in: query
-#     description: A comma separated list of challenge tags. The search will then only retrieve random tasks that are children of challenges that contain those tags
-#   - name: tags
-#     in: query
-#     description: A comma separated list of task tags. The search will only retrieve random tasks that contain those tags
-#   - name: s
-#     in: query
-#     description: The task search string. Retrieve only tasks that contain the search string in the task name. Match is case insensitive.
 #   - name: limit
 #     in: query
 #     description: Limit the number of results returned in the response. Default value is 1.
@@ -477,7 +465,7 @@ GET     /project/:id/children                       @org.maproulette.controllers
 #     in: query
 #     description: Id of task that you wish to find the next task based on the proximity of that task
 ###
-GET     /project/:id/tasks                          @org.maproulette.controllers.api.ProjectController.getRandomTasks(id:Long, cs:String ?= "", ct:String ?= "", tags:String ?= "", s:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
+GET     /project/:id/tasks                          @org.maproulette.controllers.api.ProjectController.getRandomTasks(id:Long, limit:Int ?= 1, proximity:Long ?= -1)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -2975,7 +2963,49 @@ PUT    /user/:userId                                @org.maproulette.controllers
 #     in: path
 #     description: The osm id of the user to update the settings for
 ###
-PUT    /user/:userId/refresh                        @org.maproulette.controllers.api.UserController.refreshProfile(userId:Long)
+PUT     /user/:userId/refresh                        @org.maproulette.controllers.api.UserController.refreshProfile(userId:Long)
+###
+# tags: [ User ]
+# summary: Add user to project group
+# description: Adds a user with the specific id to a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to add
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+###
+PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.addUserToProject(userId:Long, projectId:Long, groupType:Int)
+###
+# tags: [ User ]
+# summary: Removes a user from a project group
+# description: Removes a user with the specific id from a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to add
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+###
+DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.removeUserFromProject(userId:Long, projectId:Long, groupType:Int)
 ### NoDocs ###
 POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
 ### NoDocs ###

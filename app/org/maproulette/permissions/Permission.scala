@@ -10,7 +10,7 @@ import org.maproulette.actions._
 import org.maproulette.exception.NotFoundException
 import org.maproulette.models.dal.DALManager
 import org.maproulette.models._
-import org.maproulette.session.User
+import org.maproulette.session.{Group, User}
 
 /**
   * @author cuthbertm
@@ -26,13 +26,13 @@ class Permission @Inject() (dalManager: Provider[DALManager]) {
     * @param obj The object you are checking to see if the user has read access on the object
     * @param user The user requesting the access.
     */
-  def hasReadAccess(obj:BaseObject[Long], user:User) : Unit = {
-    if (!user.isSuperUser) {
-      obj.itemType match {
-        case UserType() if obj.id != user.id & obj.asInstanceOf[User].osmProfile.id != user.osmProfile.id =>
-          throw new IllegalAccessException(s"User does not have read access to requested user object [${obj.id}]")
-        case _ => // don't do anything, they have access
-      }
+  def hasObjectReadAccess(obj:BaseObject[Long], user:User)(implicit c:Option[Connection]=None) : Unit =  if (!user.isSuperUser) {
+    obj.itemType match {
+      case UserType() if obj.id != user.id & obj.asInstanceOf[User].osmProfile.id != user.osmProfile.id =>
+        throw new IllegalAccessException(s"User does not have read access to requested user object [${obj.id}]")
+      case GroupType() =>
+        this.hasProjectTypeAccess(user)(obj.asInstanceOf[Group].projectId)
+      case _ => // don't do anything, they have access
     }
   }
 
@@ -45,21 +45,18 @@ class Permission @Inject() (dalManager: Provider[DALManager]) {
     * @param user The user checking whether they have access or not
     * @param id The id of the object
     */
-  def hasReadAccess(itemType:ItemType, user:User)(implicit id:Long) : Unit = {
-    if (!user.isSuperUser) {
-      itemType match {
-        case UserType() if id != user.id =>
-          throw new IllegalAccessException(s"User does not have read access to requested user object [$id]")
-        case _ =>
-          // Don't actually check, because currently all users will have read access on all objects
-          /*dalManager.getManager(itemType).retrieveById match {
-            case Some(obj) => hasReadAccess(obj.asInstanceOf[BaseObject[Long]], user)
-            case None =>
-              throw new NotFoundException(
-                s"No ${Actions.getTypeName(itemType.typeId).getOrElse("Unknown")} found using id [$id] to check read access"
-              )
-          }*/
-      }
+  def hasReadAccess(itemType:ItemType, user:User)(implicit id:Long, c:Option[Connection]=None) : Unit = {
+    val retrieveFunction = itemType match {
+      case UserType() => dalManager.get().user.retrieveById
+      case GroupType() => dalManager.get().userGroup.getGroup
+      case _ => dalManager.get().getManager(itemType).retrieveById
+    }
+    retrieveFunction match {
+      case Some(obj) => this.hasObjectReadAccess(obj.asInstanceOf[BaseObject[Long]], user)
+      case None =>
+        throw new NotFoundException(
+          s"No ${Actions.getTypeName(itemType.typeId).getOrElse("Unknown")} found using id [$id] to check read access"
+        )
     }
   }
 
@@ -69,30 +66,76 @@ class Permission @Inject() (dalManager: Provider[DALManager]) {
     * @param obj The object in question
     * @param user The user requesting write access
     */
-  def hasObjectWriteAccess(obj:BaseObject[Long], user:User)(implicit c:Option[Connection]=None) : Unit = {
+  def hasObjectWriteAccess(obj:BaseObject[Long], user:User, groupType:Int = Group.TYPE_WRITE_ACCESS)(implicit c:Option[Connection]=None) : Unit =
     if (!user.isSuperUser) {
       obj.itemType match {
-        case UserType() => hasReadAccess(obj, user)
-        case ProjectType() => hasProjectAccess(Some(obj.asInstanceOf[Project]), user)
+        case UserType() => this.hasObjectReadAccess(obj, user)
+        case ProjectType() => this.hasProjectAccess(Some(obj.asInstanceOf[Project]), user, groupType)
         case ChallengeType() | SurveyType() =>
           if (obj.asInstanceOf[Challenge].general.owner != user.osmProfile.id) {
-            hasProjectAccess(dalManager.get().challenge.retrieveRootObject(Right(obj.asInstanceOf[Challenge]), user), user)
+            this.hasProjectAccess(dalManager.get().challenge.retrieveRootObject(Right(obj.asInstanceOf[Challenge]), user), user, groupType)
           }
         case VirtualChallengeType() =>
           if (obj.asInstanceOf[VirtualChallenge].ownerId != user.osmProfile.id) {
             throw new IllegalAccessException(s"Only super users or the owner of the Virtual Challenge can write to it.")
           }
         case TaskType() =>
-          hasProjectAccess(dalManager.get().task.retrieveRootObject(Right(obj.asInstanceOf[Task]), user), user)
+          this.hasProjectAccess(dalManager.get().task.retrieveRootObject(Right(obj.asInstanceOf[Task]), user), user, groupType)
         case TagType() =>
         case GroupType() =>
-          // Currently only super users have access to group objects
-          throw new IllegalAccessException(s"Only super users have access to group objects")
+          this.hasProjectTypeAccess(user, Group.TYPE_ADMIN)(obj.asInstanceOf[Group].projectId)
         case _ =>
           throw new IllegalAccessException(s"Unknown object type ${obj.itemType.toString}")
       }
     }
-  }
+
+  def hasWriteAccess(itemType:ItemType, user:User, groupType:Int = Group.TYPE_WRITE_ACCESS)(implicit id:Long, c:Option[Connection]=None) : Unit =
+    if (!user.isSuperUser) {
+      itemType match {
+        case UserType() =>
+          // we use read access here, simply because read and write access on a user is the same in that
+          // you are required to the super user or owner to access the User object. It is much stricter
+          // than other objects in the system
+          this.hasReadAccess(itemType, user)
+        case GroupType() =>
+          dalManager.get().userGroup.getGroup match {
+            case Some(obj) => this.hasObjectWriteAccess(obj.asInstanceOf[BaseObject[Long]], user, groupType)
+            case None =>
+              throw new NotFoundException(
+                s"No Group found using id [$id] to check write access"
+              )
+          }
+        case _ =>
+          dalManager.get().getManager(itemType).retrieveById match {
+            case Some(obj) => this.hasObjectWriteAccess(obj.asInstanceOf[BaseObject[Long]], user, groupType)
+            case None =>
+              throw new NotFoundException(
+                s"No ${Actions.getTypeName(itemType.typeId).getOrElse("Unknown")} found using id [$id] to check write access"
+              )
+          }
+      }
+    }
+
+  /**
+    * Uses the hasWriteAccess function, but switches to check for users membership to the admin group instead of the write group
+    *
+    * @param obj The object that we are checking to see if they have access to it
+    * @param user The user making the request
+    * @param c An implicit database connection
+    */
+  def hasObjectAdminAccess(obj:BaseObject[Long], user:User)(implicit c:Option[Connection]=None) : Unit =
+    this.hasObjectWriteAccess(obj, user, Group.TYPE_ADMIN)
+
+  /**
+    * Uses the hasWriteAccess function, but switches to check for users membership to the admin group instead of the write group
+    *
+    * @param itemType The type of object that the user want's access too
+    * @param user The user making the request
+    * @param id The id of the object
+    * @param c An implicit database connection
+    */
+  def hasAdminAccess(itemType:ItemType, user:User)(implicit id:Long, c:Option[Connection]=None) : Unit =
+    this.hasWriteAccess(itemType, user, Group.TYPE_ADMIN)
 
   /**
     * Checks if a user is a super user
@@ -103,37 +146,17 @@ class Permission @Inject() (dalManager: Provider[DALManager]) {
     throw new IllegalAccessException(s"Only super users can perform this action.")
   }
 
-  def hasWriteAccess(itemType:ItemType, user:User)(implicit id:Long, c:Option[Connection]=None) : Unit = {
-    if (!user.isSuperUser) {
-      itemType match {
-        case UserType() =>
-          // we use read access here, simply because read and write access on a user is the same in that
-          // you are required to the super user or owner to access the User object. It is much stricter
-          // than other objects in the system
-          hasReadAccess(itemType, user)
-        case _ =>
-          dalManager.get().getManager(itemType).retrieveById match {
-            case Some(obj) => hasObjectWriteAccess(obj.asInstanceOf[BaseObject[Long]], user)
-            case None =>
-              throw new NotFoundException(
-                s"No ${Actions.getTypeName(itemType.typeId).getOrElse("Unknown")} found using id [$id] to check write access"
-              )
-          }
-      }
-    }
-  }
+  def hasProjectTypeAccess(user:User, groupType:Int = Group.TYPE_ADMIN)(implicit id:Long, c:Option[Connection]=None) : Unit =
+    this.hasProjectAccess(dalManager.get().project.retrieveById, user, groupType)
 
-  // TODO this function needs to take into account user groups
-  private def hasProjectAccess(project:Option[Project], user:User) : Unit = {
-    if (!user.isSuperUser) {
-      project match {
-        case Some(p) =>
-          if (project.get.owner != user.osmProfile.id && !user.groups.exists(p.id == _.id)) {
-            throw new IllegalAccessException(s"User [${user.id}] does not have access to this project [${p.id}]")
-          }
-        case None =>
-          throw new NotFoundException(s"No project found to check access for object")
-      }
+  def hasProjectAccess(project:Option[Project], user:User, groupType:Int = Group.TYPE_ADMIN)(implicit c:Option[Connection]=None) : Unit = if (!user.isSuperUser) {
+    project match {
+      case Some(p) =>
+        if (project.get.owner != user.osmProfile.id && !user.groups.exists(g => p.id == g.projectId && g.groupType <= groupType)) {
+          throw new IllegalAccessException(s"User [${user.id}] does not have access to this project [${p.id}]")
+        }
+      case None =>
+        throw new NotFoundException(s"No project found to check access for object")
     }
   }
 }

@@ -112,7 +112,7 @@ class TaskDAL @Inject()(override val db: Database,
           }
         }
       case Right(task) =>
-        this.permission.hasReadAccess(task, user)
+        this.permission.hasObjectReadAccess(task, user)
         this.projectDAL.get().cacheManager.withOptionCaching { () =>
           this.withMRConnection { implicit c =>
             SQL"""SELECT p.* FROM projects p
@@ -178,6 +178,8 @@ class TaskDAL @Inject()(override val db: Database,
       val name = (value \ "name").asOpt[String].getOrElse(cachedItem.name)
       val parentId = (value \ "parentId").asOpt[Long].getOrElse(cachedItem.parent)
       val instruction = (value \ "instruction").asOpt[String].getOrElse(cachedItem.instruction.getOrElse(""))
+      // status should probably not be allowed to be set through the update function, and rather
+      // it should be forced to use the setTaskStatus function
       val status = (value \ "status").asOpt[Int].getOrElse(cachedItem.status.getOrElse(0))
       if (!Task.isValidStatusProgression(cachedItem.status.getOrElse(0), status)) {
         throw new InvalidException(s"Could not set status for task [$id], " +
@@ -217,25 +219,28 @@ class TaskDAL @Inject()(override val db: Database,
       Some(cachedItem)
     }(id, true, true)
     val updatedTask:Option[Task] = this.withMRTransaction { implicit c =>
-        val query = "SELECT create_update_task({name}, {parentId}, {instruction}, {status}, {id}, {priority}, {changesetId}, {reset})"
+      val query = "SELECT create_update_task({name}, {parentId}, {instruction}, {status}, {id}, {priority}, {changesetId}, {reset})"
 
-        val updatedTaskId = SQL(query).on(
-          NamedParameter("name", ParameterValue.toParameterValue(element.name)),
-          NamedParameter("parentId", ParameterValue.toParameterValue(element.parent)),
-          NamedParameter("instruction", ParameterValue.toParameterValue(element.instruction.getOrElse(""))),
-          NamedParameter("status", ParameterValue.toParameterValue(element.status.getOrElse(Task.STATUS_CREATED))),
-          NamedParameter("id", ParameterValue.toParameterValue(element.id)),
-          NamedParameter("priority", ParameterValue.toParameterValue(element.priority)),
-          NamedParameter("changesetId", ParameterValue.toParameterValue(element.changesetId.getOrElse(-1L))),
-          NamedParameter("reset", ParameterValue.toParameterValue(config.taskReset + " days"))
-        ).as(long("create_update_task").*).head
-        if (cachedItem.isEmpty || !StringUtils.equalsIgnoreCase(cachedItem.get.geometries, element.geometries)) {
-          c.commit()
-          this.updateGeometries(updatedTaskId, Json.parse(element.geometries))
-          this.updateTaskLocation(updatedTaskId)
-        }
-        Some(element.copy(id = updatedTaskId))
-      }
+      val updatedTaskId = SQL(query).on(
+        NamedParameter("name", ParameterValue.toParameterValue(element.name)),
+        NamedParameter("parentId", ParameterValue.toParameterValue(element.parent)),
+        NamedParameter("instruction", ParameterValue.toParameterValue(element.instruction.getOrElse(""))),
+        NamedParameter("status", ParameterValue.toParameterValue(element.status.getOrElse(Task.STATUS_CREATED))),
+        NamedParameter("id", ParameterValue.toParameterValue(element.id)),
+        NamedParameter("priority", ParameterValue.toParameterValue(element.priority)),
+        NamedParameter("changesetId", ParameterValue.toParameterValue(element.changesetId.getOrElse(-1L))),
+        NamedParameter("reset", ParameterValue.toParameterValue(config.taskReset + " days"))
+      ).as(long("create_update_task").*).head
+      c.commit()
+      // These updates were originally only done on insert or when the geometry actual was updated. However
+      // a couple reasons why it is always performed. Firstly the location and geometry of a task is very
+      // important and so it is vital that the database reflects the requirements from the user. And secondly
+      // there were some issues where the database would not be updated and you may get null locations
+      // or null geometries. So this always makes sure that the task data is correct
+      this.updateGeometries(updatedTaskId, Json.parse(element.geometries))
+      this.updateTaskLocation(updatedTaskId)
+      Some(element.copy(id = updatedTaskId))
+    }
     updatedTask match {
       case Some(t) => Future { this.updateTaskPriority(t.id, user) }
       case None => //just ignore and do nothing
@@ -882,7 +887,7 @@ class TaskDAL @Inject()(override val db: Database,
         this.appendInWhereClause(whereClause, s"challenge_id IN (${challengeIdList.mkString(",")})")
       }
       if (taskIdList.nonEmpty) {
-        this.appendInWhereClause(whereClause, s"challenge_id IN (${taskIdList.mkString(",")})")
+        this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
 
       SQL(s"""
@@ -966,7 +971,7 @@ class TaskDAL @Inject()(override val db: Database,
     withMRConnection { implicit c =>
       this.retrieveById(taskId) match {
         case Some(task) =>
-          this.permission.hasObjectWriteAccess(task, user)
+          this.permission.hasObjectAdminAccess(task, user)
           SQL("DELETE FROM task_comments WHERE id = {id}").on('id -> commentId)
         case None =>
           throw new NotFoundException("Task was not found.")

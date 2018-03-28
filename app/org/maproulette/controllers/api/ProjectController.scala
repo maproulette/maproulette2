@@ -81,29 +81,18 @@ class ProjectController @Inject() (override val childController:ChallengeControl
   /**
     * Gets a random task that is an descendant of the project.
     *
-    * @param projectId The project id, ie. the ancestor of the child.
-    * @param challengeSearch Filter based on the name of the challenge
-    * @param challengeTags Filter based on the tags of the challenge
-    * @param tags A comma separated list of tags that optionally can be used to further filter the tasks
-    * @param taskSearch Filter based on the name of the task
     * @param limit Limit of how many tasks should be returned
     * @param proximityId Id of task that you wish to find the next task based on the proximity of that task
     * @return A list of Tasks that match the supplied filters
     */
-  def getRandomTasks(projectId: Long, challengeSearch:String, challengeTags:String,
-                     tags: String, taskSearch:String, limit:Int, proximityId:Long) : Action[AnyContent] = Action.async { implicit request =>
+  def getRandomTasks(projectId:Long, limit:Int, proximityId:Long) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
-      val params = SearchParameters(
-        projectIds = Some(List(projectId)),
-        challengeSearch = Some(challengeSearch),
-        challengeTags = Some(Utils.split(challengeTags)),
-        taskSearch = Some(taskSearch),
-        taskTags = Some(Utils.split(tags))
-      )
-
-      val result = this.taskDAL.getRandomTasks(User.userOrMocked(user), params, limit, None, Utils.negativeToOption(proximityId))
-      result.foreach(task => this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), ""))
-      Ok(Json.toJson(result))
+      SearchParameters.withSearch { params =>
+        params.copy(projectIds = Some(List(projectId)))
+        val result = this.taskDAL.getRandomTasks(User.userOrMocked(user), params, limit, None, Utils.negativeToOption(proximityId))
+        result.foreach(task => this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), ""))
+        Ok(Json.toJson(result))
+      }
     }
   }
 

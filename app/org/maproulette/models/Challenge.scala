@@ -7,23 +7,60 @@ import org.joda.time.DateTime
 import play.api.data._
 import play.api.data.Forms._
 import org.maproulette.actions.{Actions, ChallengeType, ItemType}
+import org.maproulette.exception.InvalidException
 import org.maproulette.models.utils.{ChallengeReads, ChallengeWrites}
 import play.api.libs.json._
 
 // Answer cass class for Surveys
 case class Answer(id:Long = -1, answer:String)
 
-case class PriorityRule(operator:String, key:String, value:String) {
+case class PriorityRule(operator:String, key:String, value:String, valueType:String) {
   def doesMatch(properties:Map[String, String]) : Boolean = {
     properties.find(pair => StringUtils.equalsIgnoreCase(pair._1, key)) match {
-      case Some(v) => operator match {
-        case "equal" => StringUtils.equals(v._2, value)
-        case "not_equal" => !StringUtils.equals(v._2, value)
-        case "contains" => StringUtils.contains(v._2, value)
-        case "not_contains" => !StringUtils.contains(v._2, value)
-        case "is_empty" => StringUtils.isEmpty(v._2)
-        case "is_not_empty" => StringUtils.isNotEmpty(v._2)
-      }
+      case Some(v) =>
+        valueType match {
+          case "string" =>
+            operator match {
+              case "equal" => StringUtils.equals(v._2, value)
+              case "not_equal" => !StringUtils.equals(v._2, value)
+              case "contains" => StringUtils.contains(v._2, value)
+              case "not_contains" => !StringUtils.contains(v._2, value)
+              case "is_empty" => StringUtils.isEmpty(v._2)
+              case "is_not_empty" => StringUtils.isNotEmpty(v._2)
+              case _ => throw new InvalidException(s"Operator $operator not supported")
+            }
+          case "integer" =>
+            operator match {
+              case "==" => v._2.toInt == value.toInt
+              case "!=" => v._2.toInt != value.toInt
+              case "<" => v._2.toInt < value.toInt
+              case "<=" => v._2.toInt <= value.toInt
+              case ">" => v._2.toInt > value.toInt
+              case ">=" => v._2.toInt >= value.toInt
+              case _ => throw new InvalidException(s"Operator $operator not supported")
+            }
+          case "double" =>
+            operator match {
+              case "==" => v._2.toDouble == value.toDouble
+              case "!=" => v._2.toDouble != value.toDouble
+              case "<" => v._2.toDouble < value.toDouble
+              case "<=" => v._2.toDouble <= value.toDouble
+              case ">" => v._2.toDouble > value.toDouble
+              case ">=" => v._2.toDouble >= value.toDouble
+              case _ => throw new InvalidException(s"Operator $operator not supported")
+            }
+          case "long" =>
+            operator match {
+              case "==" => v._2.toLong == value.toLong
+              case "!=" => v._2.toLong != value.toLong
+              case "<" => v._2.toLong < value.toLong
+              case "<=" => v._2.toLong <= value.toLong
+              case ">" => v._2.toLong > value.toLong
+              case ">=" => v._2.toLong >= value.toLong
+              case _ => throw new InvalidException(s"Operator $operator not supported")
+            }
+          case x => throw new InvalidException(s"Type $x not supported by Priority Rules")
+        }
       case None => false
     }
   }
@@ -89,7 +126,8 @@ case class Challenge(override val id:Long,
         implicit val reads = Writes
         val rules = (ruleJSON \ "rules").as[List[JsValue]].map(jsValue => {
           val keyValue = (jsValue \ "value").as[String].split("\\.")
-          PriorityRule((jsValue \ "operator").as[String], keyValue(0), keyValue(1))
+          val valueType = (jsValue \ "type").as[String]
+          PriorityRule((jsValue \ "operator").as[String], keyValue(0), keyValue(1), valueType)
         })
         val matched = rules.filter(_.doesMatch(properties))
         if (cnf && matched.size == rules.size) {

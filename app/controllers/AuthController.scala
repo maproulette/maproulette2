@@ -10,7 +10,7 @@ import org.maproulette.Config
 import org.maproulette.controllers.ControllerHelper
 import org.maproulette.exception._
 import org.maproulette.models.dal.DALManager
-import org.maproulette.session.{SessionManager, User}
+import org.maproulette.session.{Group, SessionManager, User}
 import play.api.i18n.{I18nSupport, MessagesApi}
 import play.api.libs.json.{JsString, Json}
 import play.api.mvc._
@@ -156,7 +156,7 @@ class AuthController @Inject() (val messagesApi: MessagesApi,
           if (addUser.groups.exists(_.projectId == projectId)) {
             throw new InvalidException(s"User ${addUser.name} is already part of project $projectId")
           }
-          dalManager.user.addUserToProject(addUser.osmProfile.id, projectId, user)
+          dalManager.user.addUserToProject(addUser.osmProfile.id, projectId, Group.TYPE_ADMIN, user)
           Ok(Json.toJson(StatusMessage("OK", JsString(s"User ${addUser.name} added to project $projectId"))))
         case None => throw new NotFoundException(s"Could not find user with ID $userId")
       }

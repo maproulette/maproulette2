@@ -34,7 +34,7 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
                               override val tagDAL: TagDAL,
                               projectDAL: Provider[ProjectDAL],
                               override val permission:Permission)
-  extends ParentDAL[Long, Challenge, Task] with TagDALMixin[Challenge] {
+  extends ParentDAL[Long, Challenge, Task] with TagDALMixin[Challenge] with OwnerMixin[Challenge] {
 
   import scala.concurrent.ExecutionContext.Implicits.global
   // The manager for the challenge cache
@@ -132,7 +132,7 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
           }
         }
       case Right(challenge) =>
-        this.permission.hasReadAccess(challenge, user)
+        this.permission.hasObjectReadAccess(challenge, user)
         this.projectDAL.get().cacheManager.withOptionCaching { () =>
           this.withMRConnection { implicit c =>
             SQL"""SELECT * FROM projects WHERE id = ${challenge.general.parent}""".as(projectDAL.get().parser.*).headOption
@@ -568,7 +568,7 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
           if (challenge.general.instruction.isEmpty) {
             throw new InvalidException("Cannot reset Task instructions if there is no Challenge instruction available.")
           }
-          this.permission.hasObjectWriteAccess(challenge, user)
+          this.permission.hasObjectAdminAccess(challenge, user)
           SQL("UPDATE tasks SET instruction = '' WHERE parent_id = {id}").on('id -> challengeId).executeUpdate()
         case None =>
           throw new NotFoundException(s"No challenge found with id $challengeId")

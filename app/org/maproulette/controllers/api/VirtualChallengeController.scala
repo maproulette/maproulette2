@@ -51,10 +51,10 @@ class VirtualChallengeController @Inject() (override val sessionManager: Session
     val jsonBody = super.updateCreateBody(body, user)
     // if expiry is set as a hours from now, pull it out and convert to timestamp.
     val expiryValue = (jsonBody \ "expiry").asOpt[String] match {
-      case Some(ex) => Duration(ex).toHours.toInt
-      case None => config.virtualChallengeExpiry.toHours.toInt
+      case Some(ex) => Duration(ex).toMillis.toInt
+      case None => config.virtualChallengeExpiry.toMillis.toInt
     }
-    val expiryUpdate = Utils.insertIntoJson(jsonBody, "expiry", DateTime.now().plusHours(expiryValue))(DefaultJodaDateWrites)
+    val expiryUpdate = Utils.insertIntoJson(jsonBody, "expiry", DateTime.now().plusMillis(expiryValue), true)(DefaultJodaDateWrites)
     val searchUpdate = Utils.insertIntoJson(expiryUpdate, "searchParameters", SearchParameters())
     Utils.insertIntoJson(searchUpdate, "ownerId", user.osmProfile.id)
   }

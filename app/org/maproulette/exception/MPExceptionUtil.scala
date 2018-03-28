@@ -150,33 +150,31 @@ object MPExceptionUtil {
     val featuredChallenges = dalManager.challenge.getFeaturedChallenges(config.numberOfChallenges, 0)
     val hotChallenges = dalManager.challenge.getHotChallenges(config.numberOfChallenges, 0)
     val newChallenges = dalManager.challenge.getNewChallenges(config.numberOfChallenges, 0)
-    val activities = dalManager.action.getRecentActivity(user, config.numberOfChallenges, 0)
-    val saved = dalManager.user.getSavedChallenges(user.id, user)
     e match {
       case e:InvalidException =>
         Logger.error(e.getMessage, e)
         BadRequest(views.html.index("MapRoulette Error", user, config,
-          hotChallenges, newChallenges, featuredChallenges, activities, saved)
+          hotChallenges, newChallenges, featuredChallenges, List.empty, List.empty)
           (views.html.error.error(e.getMessage)))
       case e:OAuthNotAuthorizedException =>
         Logger.error(e.getMessage)
         Unauthorized(views.html.index("MapRoulette Error", user, config,
-          hotChallenges, newChallenges, featuredChallenges, activities, saved)
+          hotChallenges, newChallenges, featuredChallenges, List.empty, List.empty)
           (views.html.error.error("Unauthorized: " + e.getMessage, "Unauthorized", play.api.http.Status.UNAUTHORIZED))).withNewSession
       case e:IllegalAccessException =>
         Logger.error(e.getMessage)
         Forbidden(views.html.index("MapRoulette Error", user, config,
-          hotChallenges, newChallenges, featuredChallenges, activities, saved)
+          hotChallenges, newChallenges, featuredChallenges, List.empty, List.empty)
           (views.html.error.error("Forbidden: " + e.getMessage, "Forbidden", play.api.http.Status.FORBIDDEN)))
       case e:NotFoundException =>
         Logger.error(e.getMessage, e)
         NotFound(views.html.index("MapRoulette Error", user, config,
-          hotChallenges, newChallenges, featuredChallenges, activities, saved)
+          hotChallenges, newChallenges, featuredChallenges, List.empty, List.empty)
           (views.html.error.error("Not Found: " + e.getMessage)))
       case e:Throwable =>
         Logger.error(e.getMessage, e)
         InternalServerError(views.html.index("MapRoulette Error", user, config,
-          hotChallenges, newChallenges, featuredChallenges, activities, saved)
+          hotChallenges, newChallenges, featuredChallenges, List.empty, List.empty)
           (views.html.error.error("Internal Server Error: " + e.getMessage)))
     }
   }

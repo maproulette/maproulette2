@@ -106,7 +106,7 @@ class UserDAL @Inject() (override val db:Database,
       val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE osm_id = {id}"""
       SQL(query).on('id -> id).as(this.parser.*).headOption match {
         case Some(u) =>
-          this.permission.hasReadAccess(u, user)
+          this.permission.hasObjectReadAccess(u, user)
           Some(u)
         case None => None
       }
@@ -125,7 +125,7 @@ class UserDAL @Inject() (override val db:Database,
       val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
       SQL(query).on('id -> id, 'apiKey -> apiKey).as(this.parser.*).headOption match {
         case Some(u) =>
-          this.permission.hasReadAccess(u, user)
+          this.permission.hasObjectReadAccess(u, user)
           Some(u)
         case None => None
       }
@@ -179,7 +179,7 @@ class UserDAL @Inject() (override val db:Database,
         // double check that the token and secret still match, in case it came from the cache
         if (StringUtils.equals(u.osmProfile.requestToken.token, requestToken.token) &&
           StringUtils.equals(u.osmProfile.requestToken.secret, requestToken.secret)) {
-          this.permission.hasReadAccess(u, user)
+          this.permission.hasObjectReadAccess(u, user)
           Some(u)
         } else {
           None
@@ -214,7 +214,7 @@ class UserDAL @Inject() (override val db:Database,
     * @return None if failed to update or create.
     */
   override def insert(item:User, user: User)(implicit c:Option[Connection]=None): User = this.cacheManager.withOptionCaching { () =>
-    this.permission.hasObjectWriteAccess(item, user)
+    this.permission.hasObjectAdminAccess(item, user)
     this.withMRTransaction { implicit c =>
       val ewkt = new WKTWriter().write(
         new GeometryFactory().createPoint(
@@ -299,7 +299,7 @@ class UserDAL @Inject() (override val db:Database,
     */
   override def update(value:JsValue, user:User)(implicit id:Long, c:Option[Connection]=None): Option[User] = {
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
-      this.permission.hasObjectWriteAccess(cachedItem, user)
+      this.permission.hasObjectAdminAccess(cachedItem, user)
       this.withMRTransaction { implicit c =>
         val apiKey = (value \ "apiKey").asOpt[String].getOrElse(cachedItem.apiKey.getOrElse("")) match {
           case "" => User.generateAPIKey(id)
@@ -353,7 +353,7 @@ class UserDAL @Inject() (override val db:Database,
   }
 
   def updateGroups(value:JsValue, user:User)(implicit id:Long, c:Option[Connection]=None): Unit = {
-    this.permission.hasWriteAccess(UserType(), user)
+    this.permission.hasAdminAccess(UserType(), user)
     this.withMRTransaction { implicit c =>
       // list of groups to delete
       (value \ "groups" \ "delete").asOpt[List[Long]] match {
@@ -414,10 +414,11 @@ class UserDAL @Inject() (override val db:Database,
     *
     * @param osmID The OSM ID of the user to add to the project
     * @param projectId The project that user is being added too
+    * @param groupType The type of group to add 1 - Admin, 2 - Write, 3 - Read
     * @param user The user that is adding the user to the project
     */
-  def addUserToProject(osmID:Long, projectId:Long, user:User)(implicit c:Option[Connection]=None) : User = {
-    this.permission.hasSuperAccess(user)
+  def addUserToProject(osmID:Long, projectId:Long, groupType:Int, user:User)(implicit c:Option[Connection]=None) : User = {
+    this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user)
     implicit val osmKey = osmID
     implicit val superUser = user
     // expire the user group cache
@@ -426,8 +427,33 @@ class UserDAL @Inject() (override val db:Database,
       this.withMRTransaction { implicit c =>
         SQL"""INSERT INTO user_groups (osm_user_id, group_id)
             SELECT $osmID, id FROM groups
-            WHERE group_type = 1 AND project_id = $projectId
+            WHERE group_type = $groupType AND project_id = $projectId
          """.executeUpdate()
+      }
+      Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, superUser)))
+    }.get
+  }
+
+  /**
+    * Removes a user from a project
+    *
+    * @param osmID The OSM ID of the user
+    * @param projectId The id of the project to remove the user from
+    * @param groupType The type of group to add 1 - Admin, 2 - Write, 3 - Read
+    * @param user The user making the request
+    * @param c
+    */
+  def removeUserFromProject(osmID:Long, projectId:Long, groupType:Int, user:User)(implicit c:Option[Connection]=None) : Unit = {
+    this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user)
+    implicit val osmKey = osmID
+    implicit val superUser = user
+    userGroupDAL.clearUserCache(osmID)
+    this.cacheManager.withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
+      this.withMRTransaction { implicit c =>
+        SQL"""DELETE FROM user_groups
+              WHERE group_id =
+                (SELECT id FROM groups WHERE group_type = $groupType AND project_id = $projectId)
+           """.executeUpdate()
       }
       Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, superUser)))
     }.get
@@ -471,7 +497,7 @@ class UserDAL @Inject() (override val db:Database,
     * @return An optional variable that will contain the updated user if successful
     */
   def generateAPIKey(apiKeyUser:User, user:User) : Option[User] = {
-    this.permission.hasWriteAccess(UserType(), user)(apiKeyUser.id)
+    this.permission.hasAdminAccess(UserType(), user)(apiKeyUser.id)
     this.update(Json.parse(s"""{"apiKey":"${User.generateAPIKey(apiKeyUser.osmProfile.id)}"}"""), User.superUser)(apiKeyUser.id)
   }
 
@@ -498,7 +524,7 @@ class UserDAL @Inject() (override val db:Database,
     }
     // make sure the user is an admin of this project
     if (!user.groups.exists(g => g.projectId == homeProjectId)) {
-      this.addUserToProject(user.osmProfile.id, homeProjectId, User.superUser)
+      this.addUserToProject(user.osmProfile.id, homeProjectId, Group.TYPE_ADMIN, User.superUser)
     } else {
       user
     }

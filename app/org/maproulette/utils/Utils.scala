@@ -63,7 +63,7 @@ object Utils extends DefaultWrites {
     if (overwrite) {
       json.as[JsObject] + (key -> Json.toJson(value))
     } else {
-      (json \ key).asOpt[Long] match {
+      (json \ key).toOption match {
         case Some(_) => json
         case None => json.as[JsObject] + (key -> Json.toJson(value))
       }

@@ -1,63 +1,48 @@
 package org.maproulette.models
 
-import javax.inject.Inject
-
-import org.joda.time.DateTime
-import org.junit.runner.RunWith
-import org.maproulette.models.dal.{ChallengeDAL, ProjectDAL}
-import org.maproulette.session.User
-import org.specs2.mutable.Specification
-import org.specs2.runner.JUnitRunner
-import play.api.libs.json.Json
-import play.api.test.WithApplication
+import org.scalatestplus.play.PlaySpec
 
 /**
   * @author cuthbertm
   */
-@RunWith(classOf[JUnitRunner])
-class ChallengeSpec @Inject() (projectDAL: ProjectDAL, challengeDAL: ChallengeDAL) extends Specification {
+class ChallengeSpec() extends PlaySpec {
   implicit var challengeID:Long = -1
 
-  sequential
-
-  "Challenges" should {
-    "write challenge object to database" in new WithApplication {
-      val projectID = projectDAL.insert(Project(-1, User.DEFAULT_SUPER_USER_ID, "RootProject_challengeTest", DateTime.now(), DateTime.now()), User.superUser).id
-      val newChallenge = Challenge(challengeID, "NewChallenge", DateTime.now(), DateTime.now(), Some("This is a new challenge"), false, None,
-        ChallengeGeneral(-1, projectID, ""),
-        ChallengeCreation(),
-        ChallengePriority(),
-        ChallengeExtra()
-      )
-      challengeID = challengeDAL.insert(newChallenge, User.superUser).id
-      challengeDAL.retrieveById match {
-        case Some(t) =>
-          t.name mustEqual newChallenge.name
-          t.description mustEqual newChallenge.description
-        case None =>
-          // fail here automatically because we should have retrieved the tag
-          1 mustEqual 2
-      }
+  "PriorityRule" should {
+    "string types should operate correctly" in {
+      PriorityRule("equal", "key", "value", "string").doesMatch(Map("key" -> "value")) mustEqual true
+      PriorityRule("not_equal", "key", "value", "string").doesMatch(Map("key" -> "value2")) mustEqual true
+      PriorityRule("contains", "key", "Value", "string").doesMatch(Map("key" -> "TheValue")) mustEqual true
+      PriorityRule("not_contains", "key", "value", "string").doesMatch(Map("key" -> "Nothing")) mustEqual true
+      PriorityRule("is_empty", "key", "", "string").doesMatch(Map("key" -> "")) mustEqual true
+      PriorityRule("is_not_empty", "key", "", "string").doesMatch(Map("Key" -> "value")) mustEqual true
     }
 
-    "update challenge object to database" in new WithApplication {
-      challengeDAL.update(Json.parse(
-        """{
-          "name":"UpdatedChallenge"
-        }""".stripMargin), User.superUser)(challengeID)
-      challengeDAL.retrieveById match {
-        case Some(t) =>
-          t.name mustEqual "UpdatedChallenge"
-          t.id mustEqual challengeID
-        case None =>
-          // fail here automatically because we should have retrieved the tag
-          1 mustEqual 2
-      }
+    "integer types should operate correctly" in {
+      PriorityRule("==", "key", "0", "integer").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule("!=", "key", "0", "integer").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule("<", "key", "0", "integer").doesMatch(Map("key" -> "-1")) mustEqual true
+      PriorityRule("<=", "key", "0", "integer").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule(">", "key", "0", "integer").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule(">=", "key", "0", "integer").doesMatch(Map("Key" -> "0")) mustEqual true
     }
 
-    "delete challenge object in database" in new WithApplication {
-      challengeDAL.delete(challengeID, User.superUser)
-      challengeDAL.retrieveById mustEqual None
+    "double types should operate correctly" in {
+      PriorityRule("==", "key", "0", "double").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule("!=", "key", "0", "double").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule("<", "key", "0", "double").doesMatch(Map("key" -> "-1")) mustEqual true
+      PriorityRule("<=", "key", "0", "double").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule(">", "key", "0", "double").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule(">=", "key", "0", "double").doesMatch(Map("Key" -> "0")) mustEqual true
+    }
+
+    "long types should operate correctly" in {
+      PriorityRule("==", "key", "0", "long").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule("!=", "key", "0", "long").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule("<", "key", "0", "long").doesMatch(Map("key" -> "-1")) mustEqual true
+      PriorityRule("<=", "key", "0", "long").doesMatch(Map("key" -> "0")) mustEqual true
+      PriorityRule(">", "key", "0", "long").doesMatch(Map("key" -> "1")) mustEqual true
+      PriorityRule(">=", "key", "0", "long").doesMatch(Map("Key" -> "0")) mustEqual true
     }
   }
 }

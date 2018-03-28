@@ -1,10 +1,9 @@
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
-
-import org.maproulette.exception.{NotFoundException, StatusMessage}
+import org.maproulette.exception.{InvalidException, NotFoundException, StatusMessage}
 import org.maproulette.models.{Challenge, Task}
-import org.maproulette.session.dal.UserDAL
+import org.maproulette.session.dal.{UserDAL, UserGroupDAL}
 import org.maproulette.session.{SessionManager, User, UserSettings}
 import play.api.libs.json._
 import play.api.mvc._
@@ -15,7 +14,7 @@ import scala.util.{Failure, Success}
 /**
   * @author cuthbertm
   */
-class UserController @Inject()(userDAL: UserDAL, sessionManager: SessionManager) extends Controller with DefaultWrites {
+class UserController @Inject()(userDAL: UserDAL, userGroupDAL:UserGroupDAL, sessionManager: SessionManager) extends Controller with DefaultWrites {
   import scala.concurrent.ExecutionContext.Implicits.global
 
   implicit val userReadWrite = User.UserFormat
@@ -131,6 +130,60 @@ class UserController @Inject()(userDAL: UserDAL, sessionManager: SessionManager)
     this.sessionManager.authenticatedRequest { implicit user =>
       this.userDAL.unsaveTask(userId, taskId, user)
       Ok(Json.toJson(StatusMessage("OK", JsString(s"Task $taskId unsaved from user $userId"))))
+    }
+  }
+
+  /**
+    * Add the user to the Admin group of a Project
+    *
+    * @param userId The id of the User to add
+    * @param projectId The project to add too
+    * @param groupType The type of group 1 - Admin, 2 - Write, 3 - Read
+    * @return Standard status message
+    */
+  def addUserToProject(userId:Long, projectId:Long, groupType:Int) : Action[AnyContent] = Action.async { implicit request =>
+    sessionManager.authenticatedRequest { implicit user =>
+      val addUser = this.userDAL.retrieveById(userId) match {
+        case Some(addUser) => addUser
+        case None =>
+          // check to see if the osm id was supplied instead
+          this.userDAL.retrieveByOSMID(userId, user) match {
+            case Some(u) => u
+            case None => throw new NotFoundException(s"Could not find user with ID $userId")
+          }
+      }
+      if (addUser.groups.exists(g => g.projectId == projectId && g.groupType == groupType)) {
+        throw new InvalidException(s"User ${addUser.name} is already part of project $projectId")
+      }
+      this.userDAL.addUserToProject(addUser.osmProfile.id, projectId, groupType, user)
+      // clear group caches
+      this.userGroupDAL.clearCache()
+      Ok(Json.toJson(StatusMessage("OK", JsString(s"User ${addUser.name} added to project $projectId"))))
+    }
+  }
+
+  /**
+    * Removes the user from the Admin group of the Project
+    *
+    * @param userId
+    * @param projectId
+    * @return
+    */
+  def removeUserFromProject(userId:Long, projectId:Long, groupType:Int) : Action[AnyContent] = Action.async { implicit request =>
+    sessionManager.authenticatedRequest { implicit user =>
+      val addUser = this.userDAL.retrieveById(userId) match {
+        case Some(addUser) => addUser
+        case None =>
+          // check to see if the osm id was supplied instead
+          this.userDAL.retrieveByOSMID(userId, user) match {
+            case Some(u) => u
+            case None => throw new NotFoundException(s"Could not found user with ID $userId")
+          }
+      }
+      this.userDAL.removeUserFromProject(addUser.osmProfile.id, projectId, groupType, user)
+      // clear group caches
+      this.userGroupDAL.clearCache()
+      Ok(Json.toJson(StatusMessage("OK", JsString(s"User ${addUser.name} removed from project $projectId"))))
     }
   }
 }
