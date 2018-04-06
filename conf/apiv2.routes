@@ -2378,6 +2378,44 @@ PUT     /task/:id/changeset                         @org.maproulette.controllers
 ###
 PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "")
 ###
+# tags: [ Challenge ]
+# summary: Retrieves task clusters
+# produces: [ application/json ]
+# description: Retrieves task clusters that contain the centroid location for a group of tasks
+# responses:
+#   '200':
+#     description: An array of task clusters that represents clusters of tasks for a challenge. If none found will return an empty list
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.TaskCluster'
+# parameters:
+#   - name: points
+#     in: query
+#     description: The number of clusters that you want returned
+###
+GET     /taskCluster                                @org.maproulette.controllers.api.TaskController.getTaskClusters(points:Int ?= 100)
+###
+# tags: [ Challenge ]
+# summary: Retrieves tasks in a cluster
+# produces: [ application/json ]
+# description: Retrieves tasks contained in a cluster retrieved from api /api/v2/challenge/:id/taskCluster
+# responses:
+#   '200':
+#     description: An array of tasks that are contained in a cluster. If none found will return an empty list.
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.ClusteredPoint'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent project.
+#   - name: clusterId
+#     in: path
+#     description: The id of the single cluster.
+#   - name: points
+#     in: query
+#     description: The number of clusters that you want returned
+###
+GET     /tasksInCluster/:clusterId                  @org.maproulette.controllers.api.TaskController.getTasksInCluster(clusterId:Int, points:Int ?= 100)
+###
 # tags: [ Comment ]
 # summary: Retrieves a comment
 # produces: [ application/json ]
@@ -2967,7 +3005,7 @@ PUT     /user/:userId/refresh                        @org.maproulette.controller
 ###
 # tags: [ User ]
 # summary: Add user to project group
-# description: Adds a user with the specific id to a Admin, Write or Read project group
+# description: Adds a user with the specific ids to a Admin, Write or Read project group
 # responses:
 #   '200':
 #     description: Ok with a standard message
@@ -2985,6 +3023,30 @@ PUT     /user/:userId/refresh                        @org.maproulette.controller
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
 ###
 PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.addUserToProject(userId:Long, projectId:Long, groupType:Int)
+###
+# tags: [ User ]
+# summary: Adds a list of user to project group
+# description: Adds a list of users with the specific ids to a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     required: true
+#     schema:
+#       type: array
+###
+PUT     /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.addUsersToProject(projectId:Long, groupType:Int)
 ###
 # tags: [ User ]
 # summary: Removes a user from a project group
@@ -3006,6 +3068,30 @@ PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controller
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
 ###
 DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.removeUserFromProject(userId:Long, projectId:Long, groupType:Int)
+###
+# tags: [ User ]
+# summary: Removes a list of users from a project group
+# description: Removes a list of users with the specific id from a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     required: true
+#     schema:
+#       type: array
+###
+DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.removeUsersFromProject(projectId:Long, groupType:Int)
 ### NoDocs ###
 POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
 ### NoDocs ###

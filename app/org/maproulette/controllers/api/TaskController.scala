@@ -327,4 +327,35 @@ class TaskController @Inject() (override val sessionManager: SessionManager,
       Ok
     }
   }
+
+  /**
+    * Gets clusters of tasks for the challenge. Uses kmeans method in postgis.
+    *
+    * @param numberOfPoints Number of clustered points you wish to have returned
+    * @return A list of ClusteredPoint's that represent clusters of tasks
+    */
+  def getTaskClusters(numberOfPoints:Int) : Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      SearchParameters.withSearch { implicit params =>
+        Ok(Json.toJson(this.dal.getTaskClusters(params, numberOfPoints)))
+      }
+    }
+  }
+
+  /**
+    * Gets the list of tasks that are contained within the single cluster
+    *
+    * @param clusterId The cluster id, when "getTaskClusters" is executed it will return single point clusters
+    *                  representing all the tasks in the cluster. Each cluster will contain an id, supplying
+    *                  that id to this method will allow you to retrieve all the tasks in the cluster
+    * @param numberOfPoints Number of clustered points that was originally used to get all the clusters
+    * @return A list of ClusteredPoint's that represent each of the tasks within a single cluster
+    */
+  def getTasksInCluster(clusterId:Int, numberOfPoints:Int) : Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      SearchParameters.withSearch { implicit params =>
+        Ok(Json.toJson(this.dal.getTasksInCluster(clusterId, params, numberOfPoints)))
+      }
+    }
+  }
 }

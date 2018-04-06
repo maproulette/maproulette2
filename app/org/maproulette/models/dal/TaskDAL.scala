@@ -671,6 +671,107 @@ class TaskDAL @Inject()(override val db: Database,
   }
 
   /**
+    * Retrieves task clusters
+    *
+    * @param params SearchParameters used to filter the tasks in the cluster
+    * @param numberOfPoints Number of cluster points to group all the tasks by
+    * @param c an implicit connection
+    * @return A list of task clusters
+    */
+  def getTaskClusters(params:SearchParameters, numberOfPoints:Int=100)
+                     (implicit c:Option[Connection]=None) : List[TaskCluster] = {
+    this.withMRConnection { implicit c =>
+      val taskClusterParser = int("kmeans") ~ int("numberOfPoints") ~
+                              str("geom") ~ str("bounding") map {
+        case kmeans ~ totalPoints ~ geom ~ bounding =>
+          val locationJSON = Json.parse(geom)
+          val coordinates = (locationJSON \ "coordinates").as[List[Double]]
+          val point = Point(coordinates(1), coordinates.head)
+          TaskCluster(kmeans, totalPoints, params, point, Json.parse(bounding))
+      }
+
+      val whereClause = new StringBuilder
+      val joinClause = new StringBuilder(
+        """
+          INNER JOIN challenges c ON c.id = t.parent_id
+          INNER JOIN projects p ON p.id = c.parent_id
+        """
+      )
+      val parameters = this.updateWhereClause(params, whereClause, joinClause)(false)
+      val where = if (whereClause.isEmpty) {
+        whereClause.toString
+      } else {
+        "WHERE " + whereClause.toString
+      }
+
+      val query = s"""SELECT kmeans, count(*) as numberOfPoints,
+                ST_AsGeoJSON(ST_Centroid(ST_Collect(location))) AS geom,
+                ST_AsGeoJSON(ST_ConvexHull(ST_Collect(location))) AS bounding
+             FROM (
+               SELECT ST_ClusterKMeans(t.location,
+                          (SELECT
+                              CASE WHEN COUNT(*) < $numberOfPoints THEN COUNT(*) ELSE $numberOfPoints END
+                            FROM tasks t
+                            ${joinClause.toString}
+                            $where
+                          )::Integer
+                        ) OVER () AS kmeans, t.location
+               FROM tasks t
+               ${joinClause.toString}
+               $where
+             ) AS ksub
+             GROUP BY kmeans
+             ORDER BY kmeans
+           """
+      SQL(query).as(taskClusterParser.*)
+    }
+  }
+
+  /**
+    * Gets the specific tasks within a cluster
+    *
+    * @param clusterId The id of the cluster
+    * @param params SearchParameters used to filter the tasks in the cluster
+    * @param numberOfPoints Number of cluster points to group all the tasks by
+    * @param c an implicit connection
+    * @return A list of clustered task points
+    */
+  def getTasksInCluster(clusterId:Int, params:SearchParameters, numberOfPoints:Int=100)
+                       (implicit c:Option[Connection]=None) : List[ClusteredPoint] = {
+    this.withMRConnection { implicit c =>
+      val whereClause = new StringBuilder
+      val joinClause = new StringBuilder(
+        """
+              INNER JOIN challenges c ON c.id = t.parent_id
+              INNER JOIN projects p ON p.id = c.parent_id
+            """
+      )
+      val parameters = this.updateWhereClause(params, whereClause, joinClause)(false)
+      val where = if (whereClause.isEmpty) {
+        whereClause.toString
+      } else {
+        "WHERE " + whereClause.toString
+      }
+
+      val query =
+        s"""SELECT * FROM (
+                      SELECT ST_ClusterKMeans(t.location,
+           							                      (SELECT
+           								                      CASE WHEN COUNT(*) < 10 THEN COUNT(*) ELSE 10 END
+                                              FROM tasks t
+                                              ${joinClause.toString}
+                                              $where)::Integer
+           						  ) OVER () as kmeans, *
+             	        FROM tasks t
+                      ${joinClause.toString}
+             	        $where
+            ) AS t WHERE t.kmeans = $clusterId
+         """
+      SQL(query).as(challengeDAL.get().pointParser.*)
+    }
+  }
+
+  /**
     * Gets a random task. This will first retrieve a random challenge from the list of criteria for the
     * challenges. If a challenge id is provided all other search criteria will be ignored. Generally
     * this would be called to get a single random task, if multiple random tasks are requested all
@@ -775,33 +876,14 @@ class TaskDAL @Inject()(override val db: Database,
     params.location match {
       case Some(sl) =>
         withMRConnection { implicit c =>
-          val parameters = new ListBuffer[NamedParameter]()
-          val whereClause = new StringBuilder(
-            s"""
-               WHERE t.location @ ST_MakeEnvelope (${sl.left}, ${sl.bottom}, ${sl.right}, ${sl.top}, 4326)
-               AND p.deleted = false AND c.deleted = false
-              """
-          )
+          val whereClause = new StringBuilder(" WHERE p.deleted = false AND c.deleted = false")
           val joinClause = new StringBuilder(
             """
               INNER JOIN challenges c ON c.id = t.parent_id
               INNER JOIN projects p ON p.id = c.parent_id
             """
           )
-
-          params.taskStatus match {
-            case Some(sl) if sl.nonEmpty => appendInWhereClause(whereClause, s"t.status IN ($sl)")
-            case _ => appendInWhereClause(whereClause, "t.status IN (0,3,6)")
-          }
-
-          params.priority match {
-            case Some(p) if p == 0 || p == 1 || p == 2 => appendInWhereClause(whereClause, s"t.priority = $p")
-            case _ => // ignore
-          }
-
-          parameters ++= addSearchToQuery(params, whereClause)
-          parameters ++= addChallengeTagMatchingToQuery(params, whereClause, joinClause)
-
+          val parameters = this.updateWhereClause(params, whereClause, joinClause)
           val query =
             s"""
               SELECT t.id, t.name, t.parent_id, c.name, t.instruction, t.status,
@@ -977,5 +1059,28 @@ class TaskDAL @Inject()(override val db: Database,
           throw new NotFoundException("Task was not found.")
       }
     }
+  }
+
+  def updateWhereClause(params:SearchParameters, whereClause:StringBuilder, joinClause:StringBuilder)(implicit projectSearch:Boolean=true) : ListBuffer[NamedParameter] = {
+    val parameters = new ListBuffer[NamedParameter]()
+    params.location match {
+      case Some(sl) => this.appendInWhereClause(whereClause, s"t.location @ ST_MakeEnvelope (${sl.left}, ${sl.bottom}, ${sl.right}, ${sl.top}, 4326)")
+      case None => // do nothing
+    }
+
+    params.taskStatus match {
+      case Some(sl) if sl.nonEmpty => this.appendInWhereClause(whereClause, s"t.status IN (${sl.mkString(",")})")
+      case Some(sl) if sl.isEmpty => //ignore this scenario
+      case _ => this.appendInWhereClause(whereClause, "t.status IN (0,3,6)")
+    }
+
+    params.priority match {
+      case Some(p) if p == 0 || p == 1 || p == 2 => this.appendInWhereClause(whereClause, s"t.priority = $p")
+      case _ => // ignore
+    }
+
+    parameters ++= this.addSearchToQuery(params, whereClause)(projectSearch)
+    parameters ++= this.addChallengeTagMatchingToQuery(params, whereClause, joinClause)
+    parameters
   }
 }

@@ -111,6 +111,24 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
     }
   }
 
+  val pointParser: RowParser[ClusteredPoint] = {
+    get[Long]("tasks.id") ~
+    get[String]("tasks.name") ~
+    get[Long]("tasks.parent_id") ~
+    get[String]("challenges.name") ~
+    get[String]("tasks.instruction") ~
+    get[String]("location") ~
+    get[Int]("tasks.status") ~
+    get[Int]("tasks.priority") map {
+    case id ~ name ~ parentId ~ parentName ~ instruction ~ location ~ status ~ priority =>
+      val locationJSON = Json.parse(location)
+      val coordinates = (locationJSON \ "coordinates").as[List[Double]]
+      val point = Point(coordinates(1), coordinates.head)
+      ClusteredPoint(id, -1, "", name, parentId, parentName, point, JsString(""),
+        instruction, DateTime.now(), -1, Actions.ITEM_TYPE_TASK, status, priority)
+    }
+  }
+
   /**
     * This will retrieve the root object in the hierarchy of the object, by default the root
     * object is itself.
@@ -413,32 +431,23 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
     * @return A list of clustered point objects
     */
   def getClusteredPoints(challengeId:Long, statusFilter:Option[List[Int]]=None, limit:Int=2500)
-                               (implicit c:Option[Connection]=None) : List[ClusteredPoint] = {
+                        (implicit c:Option[Connection]=None) : List[ClusteredPoint] = {
     this.withMRConnection { implicit c =>
       val filter = statusFilter match {
         case Some(s) => s"AND status IN (${s.mkString(",")}"
         case None => ""
       }
-      val pointParser = long("tasks.id") ~ str("tasks.name") ~ long("tasks.parent_id") ~ str("challenges.name") ~
-                        str("tasks.instruction") ~ str("location") ~ int("tasks.status") ~ int("tasks.priority") map {
-        case id ~ name ~ parentId ~ parentName ~ instruction ~ location ~ status ~ priority =>
-          val locationJSON = Json.parse(location)
-          val coordinates = (locationJSON \ "coordinates").as[List[Double]]
-          val point = Point(coordinates(1), coordinates.head)
-          ClusteredPoint(id, -1, "", name, parentId, parentName, point, JsString(""),
-            instruction, DateTime.now(), -1, Actions.ITEM_TYPE_TASK, status, priority)
-      }
-        SQL"""SELECT t.id, t.name, t.instruction, t.status, t.parent_id, c.name,
-                      ST_AsGeoJSON(t.location) AS location, t.priority
-              FROM tasks t
-              INNER JOIN challenges c ON c.id = t.parent_id
-              INNER JOIN projects p ON p.id = c.parent_id
-              WHERE t.parent_id = $challengeId
-                AND p.deleted = false AND c.deleted = false
-                AND ST_AsGeoJSON(t.location) IS NOT NULL
-              #$filter
-              LIMIT #${sqlLimit(limit)}"""
-          .as(pointParser.*)
+      SQL"""SELECT t.id, t.name, t.instruction, t.status, t.parent_id, c.name,
+                    ST_AsGeoJSON(t.location) AS location, t.priority
+            FROM tasks t
+            INNER JOIN challenges c ON c.id = t.parent_id
+            INNER JOIN projects p ON p.id = c.parent_id
+            WHERE t.parent_id = $challengeId
+              AND p.deleted = false AND c.deleted = false
+              AND ST_AsGeoJSON(t.location) IS NOT NULL
+            #$filter
+            LIMIT #${sqlLimit(limit)}"""
+        .as(this.pointParser.*)
     }
   }
 
