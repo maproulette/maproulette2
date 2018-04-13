@@ -58,8 +58,9 @@ case class ChallengeActivity(date:DateTime, status:Int, statusName:String, count
 case class RawActivity(date:DateTime, osmUserId:Long, osmUsername:String, projectId:Long,
                        projectName:String, challengeId:Long, challengeName:String,
                        taskId:Long, oldStatus:Int, status:Int)
-case class LeaderboardUser(userId:Long, osmUserId:Long, name:String, avatarURL:String,
-                           score:Int)
+case class LeaderboardChallenge(id:Long, name:String, activity:Int)
+case class LeaderboardUser(userId:Long, name:String, avatarURL:String,
+                           score:Int, topChallenges:List[LeaderboardChallenge])
 
 /**
   * @author cuthbertm
@@ -449,7 +450,8 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     * over the given period. Scoring for each completed task is based on status
     * assigned to the task. Users are returned in descending order with top
     * scores first; ties are broken by OSM user id with the lowest/earliest ids
-    * being ranked ahead of higher/later ids.
+    * being ranked ahead of higher/later ids. Also included with each user are
+    * their top challenges (by amount of activity).
     *
     * @param start the start date
     * @param end the end date
@@ -462,27 +464,61 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     db.withConnection { implicit c =>
       val parser = for {
         userId <- long("users.id")
-        osmUserId <- long("actions.osm_user_id")
         name <- str("users.name")
         avatarURL <- str("users.avatar_url")
         score <- int("score")
-      } yield LeaderboardUser(userId, osmUserId, name, avatarURL, score)
+      } yield LeaderboardUser(userId, name, avatarURL, score,
+                              this.getUserTopChallenges(userId, start, end))
 
-      SQL"""SELECT users.id, users.name, users.avatar_url, actions.osm_user_id, SUM(
-              CASE actions.status
+      SQL"""SELECT users.id, users.name, users.avatar_url, SUM(
+              CASE sa.status
                 WHEN ${Task.STATUS_FIXED} THEN 5          /* points */
                 WHEN ${Task.STATUS_FALSE_POSITIVE} THEN 3 /* points */
                 WHEN ${Task.STATUS_ALREADY_FIXED} THEN 3  /* points */
                 WHEN ${Task.STATUS_TOO_HARD} THEN 1       /* points */
                 ELSE 0
               END
-            ) AS score FROM actions, users
-              WHERE #${getDateClause("actions.created", start, end)} AND
-                    actions.action = ${Actions.ACTION_TYPE_TASK_STATUS_SET} AND
-                    users.osm_id = actions.osm_user_id
-              GROUP BY actions.osm_user_id, users.id
-              ORDER BY score DESC, actions.osm_user_id ASC
-              LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+            ) AS score
+            FROM status_actions sa, users
+            WHERE #${getDateClause("sa.created", start, end)} AND
+                  users.osm_id = sa.osm_user_id
+            GROUP BY sa.osm_user_id, users.id
+            ORDER BY score DESC, sa.osm_user_id ASC
+            LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+       """.as(parser.*)
+    }
+
+  /**
+    * Gets the top challenges by activity for the given user over the given period.
+    * Challenges are in descending order by amount of activity, with ties broken
+    * by the challenge id with the lowest/earliest ids being ranked ahead of
+    * higher/later ids.
+    *
+    * @param start the start date
+    * @param end the end date
+    * @param limit limit the number of returned users
+    * @param offset paging, starting at 0
+    * @return Returns list of leaderboard challenges
+    */
+  def getUserTopChallenges(userId:Long, start:Option[DateTime]=None, end:Option[DateTime]=None,
+                           limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardChallenge] =
+
+    db.withConnection { implicit c =>
+      val parser = for {
+        id <- long("status_actions.challenge_id")
+        name <- str("challenges.name")
+        activity <- int("activity")
+      } yield LeaderboardChallenge(id, name, activity)
+
+      SQL"""SELECT sa.challenge_id, c.name, count(sa.challenge_id) as activity
+            FROM status_actions sa, challenges c, users u
+            WHERE #${getDateClause("sa.created", start, end)} AND
+                  u.id = ${userId} AND
+                  sa.osm_user_id = u.osm_id AND
+                  sa.challenge_id = c.id
+            GROUP BY sa.challenge_id, c.name
+            ORDER BY activity DESC, sa.challenge_id ASC
+            LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
        """.as(parser.*)
     }
 
