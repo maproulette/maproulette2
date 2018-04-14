@@ -2749,6 +2749,10 @@ GET     /data/user/activity                         @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/user/summary                          @org.maproulette.controllers.api.DataController.getUserSummary(projectList:String ?= "", start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###
+GET     /data/user/leaderboard                      @org.maproulette.controllers.api.DataController.getUserLeaderboard(start:String ?= "", end:String ?= "", limit:Int ?= 20, offset:Int ?= 0)
+### NoDocs ###
+GET     /data/user/:userId/topChallenges            @org.maproulette.controllers.api.DataController.getUserTopChallenges(userId:Long, start:String ?= "", end:String ?= "", limit:Int ?= 20, offset:Int ?= 0)
+### NoDocs ###
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
 ### NoDocs ###
 GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "")
