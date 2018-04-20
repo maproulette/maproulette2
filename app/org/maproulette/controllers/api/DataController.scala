@@ -90,18 +90,24 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
 
   /**
     * Gets the top scoring users, based on task completion, over the given
-    * start and end dates.
+    * start and end dates. Included with each user is their top challenges
+    * (by amount of activity).
     *
+    * @param userIds restrict to specified users
+    * @param projectIds restrict to specified projects
+    * @param challengeIds restrict to specified challenges
     * @param start the start date
     * @param end the end date
     * @param limit the limit on the number of users returned
+    * @param onlyEnabled only include enabled in user top challenges (doesn't affect scoring)
     * @param offset paging, starting at 0
     * @return Top-ranked users with scores based on task completion activity
     */
-  def getUserLeaderboard(start:String, end:String, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
+  def getUserLeaderboard(userIds:String, projectIds:String, challengeIds:String, start:String, end:String, onlyEnabled:Boolean, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getUserLeaderboard(
-        Utils.getDate(start), Utils.getDate(end), limit, offset
+        Utils.toLongList(userIds), Utils.toLongList(projectIds), Utils.toLongList(challengeIds),
+        Utils.getDate(start), Utils.getDate(end), onlyEnabled, limit, offset
       )))
     }
   }
@@ -110,16 +116,20 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * Gets the user's top challenges, based on activity, over the given start
     * and end dates.
     *
+    * @param userId the id of the user
+    * @param projectIds restrict to specified projects
+    * @param challengeIds restrict to specified challenges
     * @param start the start date
     * @param end the end date
+    * @param onlyEnabled only get enabled challenges
     * @param limit the limit on the number of challenges returned
     * @param offset paging, starting at 0
     * @return Top challenges based on user's activity
     */
-  def getUserTopChallenges(userId:Long, start:String, end:String, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
+  def getUserTopChallenges(userId:Long, projectIds:String, challengeIds:String, start:String, end:String, onlyEnabled:Boolean, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getUserTopChallenges(
-        userId, Utils.getDate(start), Utils.getDate(end), limit, offset
+        userId, Utils.toLongList(projectIds), Utils.toLongList(projectIds), Utils.getDate(start), Utils.getDate(end), onlyEnabled, limit, offset
       )))
     }
   }
