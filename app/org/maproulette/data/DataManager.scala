@@ -454,14 +454,22 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     * higher/later ids. Also included with each user are their top challenges
     * (by amount of activity).
     *
+    * If the optional userFilter, projectFilter or challengeFilter are given,
+    * activity will be limited to those users, projects and/or challenges.
+    *
+    * @param userFilter a filter for users
+    * @param projectFilter a filter for projects
+    * @param challengeFilter a filter for challenges
     * @param start the start date
     * @param end the end date
+    * @param onlyEnabled only enabled in user top challenges (doesn't affect scoring)
     * @param limit limit the number of returned users
     * @param offset paging, starting at 0
     * @return Returns list of leaderboard users with scores
     */
-  def getUserLeaderboard(start:Option[DateTime]=None, end:Option[DateTime]=None,
-                         limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardUser] =
+  def getUserLeaderboard(userFilter:Option[List[Long]]=None, projectFilter:Option[List[Long]]=None,
+                         challengeFilter:Option[List[Long]]=None, start:Option[DateTime]=None, end:Option[DateTime]=None,
+                         onlyEnabled:Boolean=true, limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardUser] =
     db.withConnection { implicit c =>
       val parser = for {
         userId <- long("users.id")
@@ -469,7 +477,7 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
         avatarURL <- str("users.avatar_url")
         score <- int("score")
       } yield LeaderboardUser(userId, name, avatarURL, score,
-                              this.getUserTopChallenges(userId, start, end))
+                              this.getUserTopChallenges(userId, projectFilter, challengeFilter, start, end, onlyEnabled))
 
       SQL"""SELECT users.id, users.name, users.avatar_url, SUM(
               CASE sa.status
@@ -484,6 +492,9 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
             FROM status_actions sa, users
             WHERE #${getDateClause("sa.created", start, end)} AND
                   users.osm_id = sa.osm_user_id
+                  #${getLongListFilter(userFilter, "users.id")}
+                  #${getLongListFilter(projectFilter, "sa.project_id")}
+                  #${getLongListFilter(challengeFilter, "sa.challenge_id")}
             GROUP BY sa.osm_user_id, users.id
             ORDER BY score DESC, sa.osm_user_id ASC
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
@@ -496,16 +507,21 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     * by the challenge id with the lowest/earliest ids being ranked ahead of
     * higher/later ids.
     *
+    * @param userId the id of the user
+    * @param projectFilter a filter for projects
+    * @param challengeFilter a filter for challenges
     * @param start the start date
     * @param end the end date
+    * @param onlyEnabled only get enabled challenges
     * @param limit limit the number of returned challenges
     * @param offset paging, starting at 0
     * @return Returns list of leaderboard challenges
     */
-  def getUserTopChallenges(userId:Long, start:Option[DateTime]=None, end:Option[DateTime]=None,
+  def getUserTopChallenges(userId:Long, projectFilter:Option[List[Long]]=None, challengeFilter:Option[List[Long]]=None,
+                           start:Option[DateTime]=None, end:Option[DateTime]=None, onlyEnabled:Boolean=true,
                            limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardChallenge] =
-
     db.withConnection { implicit c =>
+      val enabledFilter = if (onlyEnabled) "AND p.id = sa.project_id AND c.enabled = TRUE and p.enabled = TRUE" else ""
       val parser = for {
         id <- long("status_actions.challenge_id")
         name <- str("challenges.name")
@@ -513,11 +529,14 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
       } yield LeaderboardChallenge(id, name, activity)
 
       SQL"""SELECT sa.challenge_id, c.name, count(sa.challenge_id) as activity
-            FROM status_actions sa, challenges c, users u
+            FROM status_actions sa, challenges c, projects p, users u
             WHERE #${getDateClause("sa.created", start, end)} AND
-                  u.id = ${userId} AND
+                  u.id = #${userId} AND
                   sa.osm_user_id = u.osm_id AND
                   sa.challenge_id = c.id
+                  #${getLongListFilter(projectFilter, "sa.project_id")}
+                  #${getLongListFilter(challengeFilter, "sa.challenge_id")}
+                  #${enabledFilter}
             GROUP BY sa.challenge_id, c.name
             ORDER BY activity DESC, sa.challenge_id ASC
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
