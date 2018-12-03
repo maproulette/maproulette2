@@ -115,6 +115,31 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
   }
 
   /**
+    * Gets the leaderboard ranking for a user, based on task completion, over
+    * the given start and end dates. Included with the user is their top challenges
+    * (by amount of activity). Also a bracketing number of users above and below
+    * the user in the rankings.
+    *
+    * @param userId user Id for user
+    * @param projectIds restrict to specified projects
+    * @param challengeIds restrict to specified challenges
+    * @param start the start date
+    * @param end the end date
+    * @param onlyEnabled only include enabled in user top challenges (doesn't affect scoring)
+    * @param bracket the number of users to return above and below the given user (0 returns just the user)
+    * @return User with score and ranking based on task completion activity
+    */
+  def getLeaderboardForUser(userId:Long, projectIds:String, challengeIds:String,
+                            start:String, end:String, onlyEnabled:Boolean, bracket:Int) : Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      Ok(Json.toJson(this.dataManager.getLeaderboardForUser(
+        userId, Utils.toLongList(projectIds), Utils.toLongList(challengeIds),
+        Utils.getDate(start), Utils.getDate(end), onlyEnabled, bracket
+      )))
+    }
+  }
+
+  /**
     * Gets the user's top challenges, based on activity, over the given start
     * and end dates.
     *
