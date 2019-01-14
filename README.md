@@ -101,6 +101,16 @@ osm.consumerKey=<APPLICATION_CONSUMER_KEY>
 osm.consumerSecret=<APPLICATION_CONSUMER_SECRET>
 ```
 
+#### SSL
+
+Openstreetmap.org recently moved to SSL only. This means that to authenticate against any SSL server you are now required to make sure that Java trusts the OSM SSL certificates. This is not very difficult to do, however they need to be completed for it to work. The steps below are for linux/Mac systems.
+
+1. execute the following command ```openssl s_client -showcerts -connect "www.openstreetmap.org:443" -servername www.openstreetmap.org </dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > osm.pem```
+2. execute the following command ```keytool -importcert -noprompt -trustcacerts -alias www.openstreetmap.org -file osm.pem -keystore osmcacerts -storepass openstreetmap```
+3. Run server using sbt ```sbt run -Dconfig.resource=dev.conf -Djavax.net.ssl.trustStore=/path/to/file/osmcacerts -Djavax.net.ssl.trustStorePassword=openstreetmap```
+
+If you want to connect to the dev servers you can simply replace all instances of www.openstreetmap.org with master.apis.dev.openstreetmap.org
+
 ## Creating new Challenges
 
 [The wiki for this repo](https://github.com/maproulette/maproulette2/wiki) has some information on creating challenges.

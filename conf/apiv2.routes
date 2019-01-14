@@ -3486,6 +3486,49 @@ DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controller
 #         type: integer
 ###
 DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.removeUsersFromProject(projectId:Long, groupType:Int)
+###
+# tags: [ Changes ]
+# summary: Test Changes
+# description: Takes in a group of changes and instead of submitting them to OSM will return a standard OSMChange XML that would have been submitted to the OSM servers
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: groupType
+#     in: query
+#     description: delta to return a delta version of the changes that would be applied. osmchange for the actual OSMChange value that would be applied to the OSM servers
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.services.osm.ChangeObjects.TagChange'
+###
+POST    /change/tag/test                            @org.maproulette.controllers.OSMChangesetController.testTagChange(changeType:String ?= "delta")
+###
+# tags: [ Changes ]
+# summary: Submit Changes
+# description: Submit a group of changes to OSM. Will return a standard OSMChange XML that has been applied to the OSM servers
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     required: true
+#     schema:
+#       type: object
+#       $ref: '#/definitions/org.maproulette.services.osm.ChangeObjects.TagChangeSubmission'
+###
+POST    /change/tag/submit                          @org.maproulette.controllers.OSMChangesetController.submitTagChange
 ### NoDocs ###
 POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
 ### NoDocs ###

@@ -41,15 +41,21 @@ case class Task(override val id:Long,
                 instruction: Option[String]=None,
                 location: Option[String]=None,
                 geometries:String,
+                suggestedFix:Option[String]=None,
                 status:Option[Int]=None,
                 priority:Int=Challenge.PRIORITY_HIGH,
                 changesetId:Option[Long]=None,
                 mapillaryImages:Option[List[MapillaryImage]]=None) extends BaseObject[Long] with DefaultReads with LowPriorityDefaultReads {
   override val itemType: ItemType = TaskType()
 
-  def getGeometryProperties() : List[Map[String, String]] = {
-    if (StringUtils.isNotEmpty(geometries)) {
-      val geojson = Json.parse(geometries)
+  def getGeometryProperties(fixGeometry:Boolean=false) : List[Map[String, String]] = {
+    val g = if (fixGeometry) {
+      suggestedFix.getOrElse("")
+    } else {
+      geometries
+    }
+    if (StringUtils.isNotEmpty(g)) {
+      val geojson = Json.parse(g)
       (geojson \ "features").as[List[JsValue]].map(json => (json \ "properties").as[Map[String, String]])
     } else {
       List.empty
@@ -170,6 +176,7 @@ object Task {
         case STATUS_DELETED => toSet == STATUS_CREATED
         case STATUS_ALREADY_FIXED => false
         case STATUS_ANSWERED => false
+        case STATUS_VALIDATED => false
       }
     }
   }
@@ -204,6 +211,7 @@ object Task {
       "instruction" -> optional(text),
       "location" -> optional(text),
       "geometries" -> nonEmptyText,
+      "suggestedFix" -> optional(text),
       "status" -> optional(number),
       "priority" -> default(number, Challenge.PRIORITY_HIGH),
       "changesetId" -> optional(longNumber),

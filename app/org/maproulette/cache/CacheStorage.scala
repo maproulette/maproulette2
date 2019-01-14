@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 package org.maproulette.cache
 
-import org.maproulette.models.BaseObject
-
 /**
   * This is a very basic Cache Storage class that will store all items in memory. Ultimately this
   * class should be extended to use the Play Cache API
@@ -13,7 +11,7 @@ import org.maproulette.models.BaseObject
   *
   * @author cuthbertm
   */
-class CacheStorage[Key, Value<:BaseObject[Key]] (cacheLimit:Int=CacheManager.DEFAULT_CACHE_LIMIT, cacheExpiry:Int=CacheManager.DEFAULT_CACHE_EXPIRY)
+class CacheStorage[Key, Value<:CacheObject[Key]] (cacheLimit:Int=CacheManager.DEFAULT_CACHE_LIMIT, cacheExpiry:Int=CacheManager.DEFAULT_CACHE_EXPIRY)
   extends BasicCache[Key, Value](cacheLimit, cacheExpiry) {
 
   /**

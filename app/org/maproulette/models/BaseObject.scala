@@ -4,6 +4,7 @@ package org.maproulette.models
 
 import org.joda.time.DateTime
 import org.maproulette.actions.ItemType
+import org.maproulette.cache.CacheObject
 
 /**
   * Every object in the system uses this trait, with exception to the User object. This enables
@@ -13,9 +14,7 @@ import org.maproulette.actions.ItemType
   *
   * @author cuthbertm
   */
-trait BaseObject[Key] {
-  def name:String
-  def id:Key
+trait BaseObject[Key] extends CacheObject[Key] {
   def created:DateTime
   def modified:DateTime
   def description:Option[String] = None

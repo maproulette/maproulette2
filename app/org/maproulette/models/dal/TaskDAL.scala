@@ -73,7 +73,14 @@ class TaskDAL @Inject()(override val db: Database,
       get[Int]("tasks.priority") ~
       get[Option[Long]]("tasks.changeset_id") map {
       case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ status ~ priority ~ changesetId =>
-        Task(id, name, created, modified, parent_id, instruction, location, this.getTaskGeometries(id), status, priority, changesetId)
+        val suggestedFixGeometry = this.getSuggestedFix(id)
+        val optionsFix = if (StringUtils.isEmpty(suggestedFixGeometry)) {
+          None
+        } else {
+          Some(suggestedFixGeometry)
+        }
+        Task(id, name, created, modified, parent_id, instruction, location,
+          this.getTaskGeometries(id), optionsFix, status, priority, changesetId)
     }
   }
 
@@ -128,9 +135,9 @@ class TaskDAL @Inject()(override val db: Database,
     }
   }
 
-  private def getTaskGeometries(id: Long)(implicit c:Connection=null): String = taskGeometries(id, "task_geometries")
+  private def getTaskGeometries(id: Long)(implicit c:Connection=null): String = this.taskGeometries(id, "task_geometries")
 
-  def getSuggestedFix(id: Long)(implicit c:Connection=null): String = taskGeometries(id, "task_suggested_fix")
+  def getSuggestedFix(id: Long)(implicit c:Connection=null): String = this.taskGeometries(id, "task_suggested_fix")
 
   /**
     * Retrieve all the geometries for the task
@@ -192,6 +199,7 @@ class TaskDAL @Inject()(override val db: Database,
       }
       val priority = (value \ "priority").asOpt[Int].getOrElse(cachedItem.priority)
       val geometries = (value \ "geometries").asOpt[String].getOrElse(cachedItem.geometries)
+      val suggestedFixGeometries = (value \ "suggestedFix").asOpt[String].getOrElse("")
       val changesetId = (value \ "changesetId").asOpt[Long].getOrElse(cachedItem.changesetId.getOrElse(-1L))
 
       val task = this.mergeUpdate(cachedItem.copy(name = name,
@@ -199,6 +207,7 @@ class TaskDAL @Inject()(override val db: Database,
         instruction = Some(instruction),
         status = Some(status),
         geometries = geometries,
+        suggestedFix = if (StringUtils.isEmpty(suggestedFixGeometries)) { None } else { Some(suggestedFixGeometries) },
         priority = priority,
         changesetId = Some(changesetId)), user)
 
@@ -252,6 +261,10 @@ class TaskDAL @Inject()(override val db: Database,
       // there were some issues where the database would not be updated and you may get null locations
       // or null geometries. So this always makes sure that the task data is correct
       this.updateGeometries(updatedTaskId, Json.parse(element.geometries))
+      element.suggestedFix match {
+        case Some(value) => this.addSuggestedFix(updatedTaskId, Json.parse(value))
+        case None => // just do nothing
+      }
       this.updateTaskLocation(updatedTaskId)
       Some(element.copy(id = updatedTaskId))
     }

@@ -32,3 +32,10 @@ class LockedException(message:String) extends Exception(message)
   * @param message The message to send with the exception
   */
 class UniqueViolationException(message:String) extends Exception(message)
+
+/**
+  * Exception for handling any conflicts found during changeset conflation
+  *
+  * @param message The message to send with the exception
+  */
+class ChangeConflictException(message:String) extends Exception(message)

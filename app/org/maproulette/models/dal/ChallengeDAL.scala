@@ -711,10 +711,11 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
           get[Option[String]]("tasks.instruction") ~
           get[Option[String]]("location") ~
           get[String]("geometry") ~
+          get[Option[String]]("suggestedFix") ~
           get[Option[Int]]("tasks.status") ~
           get[Int]("tasks.priority") map {
-          case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ geometry ~ status ~ priority =>
-            Task(id, name, created, modified, parent_id, instruction, location, geometry, status, priority)
+          case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ geometry ~ suggestedFix ~ status ~ priority =>
+            Task(id, name, created, modified, parent_id, instruction, location, geometry, suggestedFix, status, priority)
         }
       }
 
@@ -726,8 +727,18 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
                                                 hstore_to_json(lg.properties) As properties
                                         FROM task_geometries As lg
                                         WHERE task_id = tasks.id
-                                  ) As f
-                          ) As fc)::text AS geometry FROM tasks
+                                      ) As f
+                                ) As fc)::text AS geometry,
+                        (SELECT row_to_json(fc)::text as geometries
+                           FROM ( SELECT 'FeatureCollection' As type, array_to_json(array_agg(f)) As features
+                                  FROM ( SELECT 'Feature' As type,
+                                                  ST_AsGeoJSON(lg.geom)::json As geometry,
+                                                  hstore_to_json(lg.properties) As properties
+                                         FROM task_geometries As lg
+                                         WHERE task_id = tasks.id
+                                       ) As f
+                                 ) As fc)::text AS suggestedFix
+                      FROM tasks
                       WHERE parent_id = {id} ${this.enabled(onlyEnabled)}
                       ${this.searchField("name")}
                       ${this.order(orderColumn=Some(orderColumn), orderDirection=orderDirection, nameFix=true)}

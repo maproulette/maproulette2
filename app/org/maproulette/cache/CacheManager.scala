@@ -16,7 +16,7 @@ import scala.collection.mutable
   *
   * @author cuthbertm
   */
-class CacheManager[Key, A<:BaseObject[Key]](cacheLimit:Int=CacheManager.DEFAULT_CACHE_LIMIT, cacheExpiry:Int=CacheManager.DEFAULT_CACHE_EXPIRY) {
+class CacheManager[Key, A<:CacheObject[Key]](cacheLimit:Int=CacheManager.DEFAULT_CACHE_LIMIT, cacheExpiry:Int=CacheManager.DEFAULT_CACHE_EXPIRY) {
   val cache = new CacheStorage[Key, A](cacheLimit, cacheExpiry)
   val nameCache = mutable.Map[String, Key]()
 

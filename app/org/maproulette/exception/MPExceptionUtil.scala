@@ -127,6 +127,9 @@ object MPExceptionUtil {
       case e:NotFoundException =>
         Logger.error(e.getMessage, e)
         NotFound(Json.toJson(StatusMessage("NotFound", JsString(e.getMessage))))
+      case e:ChangeConflictException =>
+        Logger.error(e.getMessage, e)
+        Conflict(Json.toJson(StatusMessage("Conflict", JsString(e.getMessage))))
       case e:Throwable =>
         Logger.error(e.getMessage, e)
         InternalServerError(Json.toJson(StatusMessage("KO", JsString(e.getMessage))))
