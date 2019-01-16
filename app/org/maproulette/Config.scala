@@ -150,6 +150,15 @@ class Config @Inject() (implicit val application:Application) {
   }
 
   /**
+   * Retrieves a value from the configuration file
+   *
+   * @param key Configuration Key
+   */
+  def getValue(key:String) : Option[String] = {
+    this.config.getOptional[String](key)
+  }
+
+  /**
     * Retrieves a FiniteDuration config value from the configuration and executes the
     * block of code when found.
     *
@@ -204,6 +213,8 @@ object Config {
   val KEY_SCHEDULER_CLEAN_DELETED = s"$SUB_GROUP_SCHEDULER.cleanDeleted.interval"
   val KEY_SCHEDULER_KEEPRIGHT = s"$SUB_GROUP_SCHEDULER.keepright.interval"
   val KEY_SCHEDULER_CHALLENGES_LEADERBOARD = s"$SUB_GROUP_SCHEDULER.challengesLeaderboard.interval"
+  val KEY_SCHEDULER_COUNTRY_LEADERBOARD = s"$SUB_GROUP_SCHEDULER.countryLeaderboard.interval"
+  val KEY_SCHEDULER_COUNTRY_LEADERBOARD_START = s"$SUB_GROUP_SCHEDULER.countryLeaderboard.startTime"
 
   val SUB_GROUP_MAPILLARY = s"$GROUP_MAPROULETTE.mapillary"
   val KEY_MAPILLARY_HOST = s"$SUB_GROUP_MAPILLARY.host"

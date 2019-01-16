@@ -99,6 +99,7 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param userIds restrict to specified users
     * @param projectIds restrict to specified projects
     * @param challengeIds restrict to specified challenges
+    * @param countryCodes restrict tasks to specified countries
     * @param monthDuration number of months to fetch (do not include if using start/end dates)
     * @param start the start date (if not using monthDuration)
     * @param end the end date (if not using monthDuration)
@@ -107,11 +108,13 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param offset paging, starting at 0
     * @return Top-ranked users with scores based on task completion activity
     */
-  def getUserLeaderboard(userIds:String, projectIds:String, challengeIds:String, monthDuration:String, start:String, end:String,
+  def getUserLeaderboard(userIds:String, projectIds:String, challengeIds:String, countryCodes:String,
+                         monthDuration:String, start:String, end:String,
                          onlyEnabled:Boolean, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getUserLeaderboard(
-        Utils.toLongList(userIds), Utils.toLongList(projectIds), Utils.toLongList(challengeIds),
+        Utils.toLongList(userIds), Utils.toLongList(projectIds),
+        Utils.toLongList(challengeIds), Utils.toStringList(countryCodes),
         Try(monthDuration.toInt).toOption, Utils.getDate(start), Utils.getDate(end), onlyEnabled, limit, offset
       )))
     }
@@ -126,6 +129,7 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param userId user Id for user
     * @param projectIds restrict to specified projects
     * @param challengeIds restrict to specified challenges
+    * @param countryCodes restrict tasks to specified countries
     * @param monthDuration number of months to fetch (do not include if using start and end dates)
     * @param start the start date (if not using monthDuration)
     * @param end the end date (if not using monthDuration)
@@ -133,11 +137,11 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param bracket the number of users to return above and below the given user (0 returns just the user)
     * @return User with score and ranking based on task completion activity
     */
-  def getLeaderboardForUser(userId:Long, projectIds:String, challengeIds:String,
+  def getLeaderboardForUser(userId:Long, projectIds:String, challengeIds:String, countryCodes:String,
                             monthDuration:String, start:String, end:String, onlyEnabled:Boolean, bracket:Int) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getLeaderboardForUser(
-        userId, Utils.toLongList(projectIds), Utils.toLongList(challengeIds),
+        userId, Utils.toLongList(projectIds), Utils.toLongList(challengeIds), Utils.toStringList(countryCodes),
         Try(monthDuration.toInt).toOption, Utils.getDate(start), Utils.getDate(end), onlyEnabled, bracket
       )))
     }
@@ -150,6 +154,7 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param userId the id of the user
     * @param projectIds restrict to specified projects
     * @param challengeIds restrict to specified challenges
+    * @param countryCodes restrict tasks to specified countries
     * @param monthDuration number of months (do not include if using start/end dates)
     * @param start the start date (if not using monthDuration)
     * @param end the end date (if not using monthDuration)
@@ -158,11 +163,12 @@ class DataController @Inject() (sessionManager: SessionManager, challengeDAL: Ch
     * @param offset paging, starting at 0
     * @return Top challenges based on user's activity
     */
-  def getUserTopChallenges(userId:Long, projectIds:String, challengeIds:String, monthDuration:String,
-                           start:String, end:String, onlyEnabled:Boolean, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
+  def getUserTopChallenges(userId:Long, projectIds:String, challengeIds:String, countryCodes:String,
+                           monthDuration:String, start:String, end:String,
+                           onlyEnabled:Boolean, limit:Int, offset:Int) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getUserTopChallenges(
-        userId, Utils.toLongList(projectIds), Utils.toLongList(projectIds),
+        userId, Utils.toLongList(projectIds), Utils.toLongList(projectIds), Utils.toStringList(countryCodes),
         Try(monthDuration.toInt).toOption, Utils.getDate(start), Utils.getDate(end), onlyEnabled, limit, offset
       )))
     }

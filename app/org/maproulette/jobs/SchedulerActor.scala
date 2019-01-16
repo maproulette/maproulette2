@@ -2,10 +2,6 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 package org.maproulette.jobs
 
-import java.time.LocalDate;
-import java.time.Month;
-import java.time.Period;
-import java.time.format.DateTimeFormatter;
 import javax.inject.{Inject, Singleton}
 import akka.actor.{Actor, Props}
 import play.api.{Application, Logger}
@@ -21,6 +17,9 @@ import org.maproulette.models.Task.STATUS_CREATED
 import org.maproulette.models.dal.DALManager
 import org.maproulette.services.{KeepRight, KeepRightBox, KeepRightError, KeepRightService}
 import org.maproulette.session.User
+
+import org.maproulette.jobs.utils.LeaderboardHelper
+import org.maproulette.utils.BoundingBoxFinder.boundingBoxforAll
 
 import scala.util.{Failure, Success}
 
@@ -46,6 +45,7 @@ class SchedulerActor @Inject() (config:Config,
 
   override def receive: Receive = {
     case RunJob("rebuildChallengesLeaderboard", action) => this.rebuildChallengesLeaderboard(action)
+    case RunJob("rebuildCountryLeaderboard", action) => this.rebuildCountryLeaderboard(action)
     case RunJob("cleanLocks", action) => this.cleanLocks(action)
     case RunJob("runChallengeSchedules", action) => this.runChallengeSchedules(action)
     case RunJob("updateLocations", action) => this.updateLocations(action)
@@ -302,90 +302,58 @@ class SchedulerActor @Inject() (config:Config,
 
     db.withConnection { implicit c =>
       // Clear TABLEs
-      SQL("DELETE FROM user_leaderboard").executeUpdate()
-      SQL("DELETE FROM user_top_challenges").executeUpdate()
+      SQL("DELETE FROM user_leaderboard WHERE country_code IS NULL").executeUpdate()
+      SQL("DELETE FROM user_top_challenges WHERE country_code IS NULL").executeUpdate()
 
       // Past Month
-      SQL(this.rebuildChallengesLeaderboardSQL(1)).executeUpdate()
-      SQL(this.rebuildTopChallengesSQL(1)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(1, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(1, config)).executeUpdate()
 
       // Past 3 Months
-      SQL(this.rebuildChallengesLeaderboardSQL(3)).executeUpdate()
-      SQL(this.rebuildTopChallengesSQL(3)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(3, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(3, config)).executeUpdate()
 
       // Past 6 Months
-      SQL(this.rebuildChallengesLeaderboardSQL(6)).executeUpdate()
-      SQL(this.rebuildTopChallengesSQL(6)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(6, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(6, config)).executeUpdate()
 
       // Past Year
-      SQL(this.rebuildChallengesLeaderboardSQL(12)).executeUpdate()
-      SQL(this.rebuildTopChallengesSQL(12)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(12, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(12, config)).executeUpdate()
 
       Logger.info(s"Rebuilt Challenges Leaderboard succesfully.")
       val totalTime = System.currentTimeMillis - start
       Logger.debug("Time to rebuild leaderboard: %1d ms".format(totalTime))
-
     }
   }
 
   /**
-   * Returns the SQL to rebuild the Challenges Leaderboard table with the
-   * given dates
+   * Rebuilds the user_leaderboard table.
    *
-   * @param start_date
-   * @param end_date
+   * @param action - action string
    */
-  private def rebuildChallengesLeaderboardSQL(monthDuration:Integer) : String = {
-    val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-    val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+  def rebuildCountryLeaderboard(action:String) : Unit = {
+    val start = System.currentTimeMillis
+    Logger.info(action)
 
-    s"""INSERT INTO user_leaderboard
-        (month_duration, user_id, user_name, user_avatar_url, user_ranking, user_score)
-        SELECT $monthDuration, users.id, users.name, users.avatar_url,
-                ROW_NUMBER() OVER( ORDER BY ${this.scoreSumSQL()} DESC, sa.osm_user_id ASC),
-                ${this.scoreSumSQL()} AS score
-                FROM status_actions sa, users
-                WHERE sa.created::DATE BETWEEN '$startMonth' AND '$today' AND
-                      sa.old_status <> sa.status AND
-                      users.osm_id = sa.osm_user_id AND
-                      users.leaderboard_opt_out = FALSE
-                GROUP BY sa.osm_user_id, users.id
-                ORDER BY score DESC, sa.osm_user_id ASC"""
-  }
+    db.withConnection { implicit c =>
+      // Clear TABLEs
+      SQL("DELETE FROM user_leaderboard WHERE country_code IS NOT NULL").executeUpdate()
+      SQL("DELETE FROM user_top_challenges WHERE country_code IS NOT NULL").executeUpdate()
 
-  /**
-   * Returns the SQL to rebuild the Top Challenges table with the
-   * given dates
-   *
-   * @param start_date
-   * @param end_date
-   */
-  private def rebuildTopChallengesSQL(monthDuration:Integer) : String = {
-    val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-    val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+      val countryCodeMap = boundingBoxforAll()
+      for ((countryCode, boundingBox) <- countryCodeMap) {
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(1, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(3, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(6, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(12, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildTopChallengesSQLCountry(12, countryCode, boundingBox, config)).executeUpdate()
+      }
 
-    s"""INSERT INTO user_top_challenges
-        (month_duration, user_id, challenge_id, challenge_name, activity)
-        SELECT $monthDuration, u.id, sa.challenge_id, c.name, count(sa.challenge_id) as activity
-          FROM status_actions sa, challenges c, projects p, users u
-          WHERE sa.created::DATE BETWEEN '$startMonth' AND '$today' AND
-            sa.osm_user_id = u.osm_id AND sa.challenge_id = c.id AND
-            p.id = sa.project_id AND c.enabled = TRUE and p.enabled = TRUE
-          GROUP BY sa.challenge_id, c.name, u.id"""
-  }
-
-  /**
-   * Returns the SQL to sum a user's status actions for ranking purposes
-   **/
-  private def scoreSumSQL(statusActionsTableName:String="sa") : String = {
-    s"""SUM(CASE ${statusActionsTableName}.status
-             WHEN ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed}
-             WHEN ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive}
-             WHEN ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed}
-             WHEN ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard}
-             WHEN ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped}
-             ELSE 0
-           END)"""
+      Logger.info(s"Rebuilt Country Leaderboard succesfully.")
+      val totalTime = System.currentTimeMillis - start
+      Logger.debug("Time to rebuild country leaderboard: %1d ms".format(totalTime))
+    }
   }
 
 }

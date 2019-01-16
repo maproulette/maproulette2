@@ -118,6 +118,12 @@ object Utils extends DefaultWrites {
     case None => None
   }
 
+  def toStringList(stringList:String) : Option[List[String]] = if (stringList.isEmpty) {
+    None
+  } else {
+    Some(stringList.split(",").toList)
+  }
+
   def toLongList(stringList:String) : Option[List[Long]] = if (stringList.isEmpty) {
     None
   } else {
