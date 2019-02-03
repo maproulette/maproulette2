@@ -140,7 +140,8 @@ case class User(override val id: Long,
                 apiKey: Option[String] = None,
                 guest: Boolean = false,
                 settings: UserSettings = UserSettings(),
-                properties: Option[String] = None) extends BaseObject[Long] {
+                properties: Option[String] = None,
+                score: Option[Int] = None) extends BaseObject[Long] {
   // for users the display name is always retrieved from OSM
   override def name: String = osmProfile.displayName
 
@@ -293,7 +294,7 @@ object User {
         try {
           val decryptedAPIKey = Some(s"${user.id}|${crypto.decrypt(key)}")
           new User(user.id, user.created, user.modified, user.osmProfile, user.groups,
-                   decryptedAPIKey, user.guest, user.settings, user.properties)
+                   decryptedAPIKey, user.guest, user.settings, user.properties, user.score)
         } catch {
           case _:BadPaddingException | _:IllegalBlockSizeException =>
             Logger.debug("Invalid key found, could be that the application secret on server changed.")

@@ -78,10 +78,11 @@ class UserDAL @Inject() (override val db:Database,
       get[Option[Boolean]]("users.leaderboard_opt_out") ~
       get[Option[String]]("users.locale") ~
       get[Option[Int]]("users.theme") ~
-      get[Option[String]]("properties") map {
+      get[Option[String]]("properties") ~
+      get[Option[Int]]("score") map {
       case id ~ osmId ~ created ~ modified ~ osmCreated ~ displayName ~ description ~ avatarURL ~
         homeLocation ~ apiKey ~ oauthToken ~ oauthSecret ~ defaultEditor ~ defaultBasemap ~ defaultBasemapId ~
-        customBasemap ~ emailOptIn ~ leaderboardOptOut ~ locale ~ theme ~ properties =>
+        customBasemap ~ emailOptIn ~ leaderboardOptOut ~ locale ~ theme ~ properties ~ score =>
         val locationWKT = homeLocation match {
           case Some(wkt) => new WKTReader().read(wkt).asInstanceOf[Point]
           case None => new GeometryFactory().createPoint(new Coordinate(0, 0))
@@ -94,7 +95,8 @@ class UserDAL @Inject() (override val db:Database,
           ),
           apiKey, false,
           UserSettings(defaultEditor, defaultBasemap, defaultBasemapId, customBasemap, locale, emailOptIn, leaderboardOptOut, theme),
-          properties
+          properties,
+          score
         )
     }
   }
@@ -132,7 +134,8 @@ class UserDAL @Inject() (override val db:Database,
     */
   def retrieveByOSMID(implicit id: Long, user:User): Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE osm_id = {id}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                      WHERE u.id = um.user_id AND osm_id = {id}"""
       SQL(query).on('id -> id).as(this.parser.*).headOption match {
         case Some(u) =>
           this.permission.hasObjectReadAccess(u, user)
@@ -151,7 +154,8 @@ class UserDAL @Inject() (override val db:Database,
     */
   def retrieveByAPIKey(apiKey:String, user:User)(implicit id:Long) : Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                      WHERE id = um.user_id AND (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
       SQL(query).on('id -> id, 'apiKey -> apiKey).as(this.parser.*).headOption match {
         case Some(u) =>
           this.permission.hasObjectReadAccess(u, user)
@@ -163,7 +167,8 @@ class UserDAL @Inject() (override val db:Database,
 
   def retrieveByUsernameAndAPIKey(username:String, apiKey:String) : Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE name = {name} AND api_key = {apiKey}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                      WHERE id = um.user_id AND name = {name} AND api_key = {apiKey}"""
       SQL(query).on('name -> username, 'apiKey -> apiKey).as(this.parser.*).headOption
     }
   }
@@ -180,7 +185,8 @@ class UserDAL @Inject() (override val db:Database,
     // only only this kind of request if the user is a super user
     if (user.isSuperUser) {
       this.db.withConnection { implicit c =>
-        val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE name = {name}"""
+        val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                        WHERE id = um.user_id AND name = {name}"""
         SQL(query).on('name -> username).as(this.parser.*).headOption
       }
     } else {
@@ -217,8 +223,8 @@ class UserDAL @Inject() (override val db:Database,
   def matchByRequestTokenAndId(requestToken: RequestToken, user:User)(implicit id:Long): Option[User] = {
     val requestedUser = this.cacheManager.withCaching { () =>
       this.db.withConnection { implicit c =>
-        val query = s"""SELECT ${this.retrieveColumns} FROM users
-                        WHERE id = {id} AND oauth_token = {token} AND oauth_secret = {secret}"""
+        val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                        WHERE id = {id} AND id = um.user_id AND oauth_token = {token} AND oauth_secret = {secret}"""
         SQL(query).on('id -> id, 'token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
       }
     }
@@ -244,8 +250,8 @@ class UserDAL @Inject() (override val db:Database,
     */
   def matchByRequestToken(requestToken: RequestToken, user:User): Option[User] = {
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns} FROM users
-                      WHERE oauth_token = {token} AND oauth_secret = {secret}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                      WHERE id = um.user_id AND oauth_token = {token} AND oauth_secret = {secret}"""
       SQL(query).on('token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
     }
   }
@@ -298,7 +304,8 @@ class UserDAL @Inject() (override val db:Database,
     // We do this separately from the transaction because if we don't the user_group mappings
     // wont be accessible just yet.
     val retUser = this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns} FROM users WHERE osm_id = {id}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
+                      WHERE id = um.user_id AND osm_id = {id}"""
       SQL(query).on('id -> item.osmProfile.id).as(this.parser.*).head
     }
 
@@ -375,7 +382,8 @@ class UserDAL @Inject() (override val db:Database,
                                           default_basemap = {defaultBasemap}, default_basemap_id = {defaultBasemapId}, custom_basemap_url = {customBasemap},
                                           locale = {locale}, email_opt_in = {emailOptIn}, leaderboard_opt_out = {leaderboardOptOut},
                                           theme = {theme}, properties = {properties}
-                        WHERE id = {id} RETURNING ${this.retrieveColumns}"""
+                        WHERE id = {id} RETURNING ${this.retrieveColumns},
+                        (SELECT score FROM user_metrics um WHERE um.user_id = ${user.id}) as score"""
         SQL(query).on(
           'name -> displayName,
           'description -> description,
@@ -629,7 +637,9 @@ class UserDAL @Inject() (override val db:Database,
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
       this.withMRTransaction { implicit c =>
         val newAPIKey = crypto.encrypt(this.generateAPIKey)
-        val query = s"""UPDATE users SET api_key = {apiKey} WHERE id = {id} RETURNING ${this.retrieveColumns}"""
+        val query = s"""UPDATE users SET api_key = {apiKey} WHERE id = {id}
+                        RETURNING ${this.retrieveColumns},
+                        (SELECT score FROM user_metrics um WHERE um.user_id = {id}) as score"""
         SQL(query).on('apiKey -> newAPIKey, 'id -> apiKeyUser.id).as(this.parser.*).headOption
       }
     }
@@ -790,6 +800,50 @@ class UserDAL @Inject() (override val db:Database,
     this.permission.hasWriteAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
       SQL(s"""DELETE FROM saved_tasks WHERE user_id = $userId AND task_id = $task_id""").execute()
+    }
+  }
+
+  /**
+    * Updates the user's score in the user_metrics table.
+    *
+    * @param taskStatus The new status of the task to credit the user for.
+    * @param user The user who should get the credit
+    */
+  def updateUserScore(taskStatus:Int, user:User)(implicit c:Connection = null) = {
+    withMRTransaction { implicit c =>
+
+      var statusBump = ""
+
+      val pointsToAward = taskStatus match {
+        case Task.STATUS_FIXED => {
+          statusBump = ", total_fixed=(total_fixed + 1)"
+          config.taskScoreFixed
+        }
+        case Task.STATUS_FALSE_POSITIVE => {
+          statusBump = ", total_false_positive=(total_false_positive + 1)"
+          config.taskScoreFalsePositive
+        }
+        case Task.STATUS_ALREADY_FIXED => {
+          statusBump = ", total_already_fixed=(total_already_fixed + 1)"
+          config.taskScoreAlreadyFixed
+        }
+        case Task.STATUS_TOO_HARD => {
+          statusBump = ", total_too_hard=(total_too_hard + 1)"
+          config.taskScoreTooHard
+        }
+        case Task.STATUS_SKIPPED => {
+          statusBump = ", total_skipped=(total_skipped + 1)"
+          config.taskScoreSkipped
+        }
+        case default => 0
+      }
+
+      val scoreBump = "score=(score + " + pointsToAward + ")"
+
+      val updateScoreQuery =
+        s"""UPDATE user_metrics SET ${scoreBump} ${statusBump} WHERE user_id = ${user.id} """
+
+      SQL(updateScoreQuery).executeUpdate()
     }
   }
 

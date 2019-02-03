@@ -57,6 +57,7 @@ class SchedulerActor @Inject() (config:Config,
     case RunJob("OSMChangesetMatcher", action) => this.matchChangeSets(action)
     case RunJob("cleanDeleted", action) => this.cleanDeleted(action)
     case RunJob("KeepRightUpdate", action) => this.keepRightUpdate(action)
+    case RunJob("snapshotUserMetrics", action) => this.snapshotUserMetrics(action)
   }
 
   /**
@@ -362,6 +363,21 @@ class SchedulerActor @Inject() (config:Config,
       Logger.info(s"Rebuilt Country Leaderboard succesfully.")
       val totalTime = System.currentTimeMillis - start
       Logger.debug("Time to rebuild country leaderboard: %1d ms".format(totalTime))
+    }
+  }
+
+  /**
+   * Snapshots the user_metrics table and stores in in user_metrics_history
+   *
+   * @param action - action string
+   */
+  def snapshotUserMetrics(action:String) : Unit = {
+    Logger.info(action)
+
+    db.withConnection { implicit c =>
+      SQL("INSERT INTO user_metrics_history SELECT *, CURRENT_TIMESTAMP FROM user_metrics").executeUpdate()
+
+      Logger.info(s"Succesfully created snapshot of user metrics.")
     }
   }
 

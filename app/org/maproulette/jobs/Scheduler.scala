@@ -36,6 +36,10 @@ class Scheduler @Inject() (val system: ActorSystem,
   scheduleAtTime("rebuildCountryLeaderboard", "Rebuilding Country Leaderboard",
     config.getValue(Config.KEY_SCHEDULER_COUNTRY_LEADERBOARD_START), Config.KEY_SCHEDULER_COUNTRY_LEADERBOARD)
 
+  // Run the user metrics snapshot at
+  scheduleAtTime("snapshotUserMetrics", "Snapshotting User Metrics",
+    config.getValue(Config.KEY_SCHEDULER_SNAPSHOT_USER_METRICS_START), Config.KEY_SCHEDULER_SNAPSHOT_USER_METRICS)
+
   /**
     * Conditionally schedules message event when configured with a valid duration
     *
