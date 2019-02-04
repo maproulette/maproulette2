@@ -19,7 +19,7 @@ import org.maproulette.services.{KeepRight, KeepRightBox, KeepRightError, KeepRi
 import org.maproulette.session.User
 
 import org.maproulette.jobs.utils.LeaderboardHelper
-import org.maproulette.utils.BoundingBoxFinder.boundingBoxforAll
+import org.maproulette.utils.BoundingBoxFinder
 
 import scala.util.{Failure, Success}
 
@@ -34,7 +34,8 @@ class SchedulerActor @Inject() (config:Config,
                                 application:Application,
                                 db:Database,
                                 dALManager: DALManager,
-                                keepRightService: KeepRightService) extends Actor {
+                                keepRightService: KeepRightService,
+                                boundingBoxFinder: BoundingBoxFinder) extends Actor {
   val appConfig = application.configuration
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -349,7 +350,7 @@ class SchedulerActor @Inject() (config:Config,
       SQL("DELETE FROM user_leaderboard WHERE country_code IS NOT NULL").executeUpdate()
       SQL("DELETE FROM user_top_challenges WHERE country_code IS NOT NULL").executeUpdate()
 
-      val countryCodeMap = boundingBoxforAll()
+      val countryCodeMap = boundingBoxFinder.boundingBoxforAll()
       for ((countryCode, boundingBox) <- countryCodeMap) {
         SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(1, countryCode, boundingBox, config)).executeUpdate()
         SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(3, countryCode, boundingBox, config)).executeUpdate()

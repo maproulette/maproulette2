@@ -3,15 +3,18 @@ package org.maproulette.utils
 import play.api.libs.json.Json
 import play.api.libs.json.JsObject
 import play.api.libs.json.JsArray
+import play.Environment;
+import javax.inject.{Inject, Singleton}
 
 /**
   * Parses bounding boxes for country codes from a file.
   *
   * @author krotstan
   */
-object BoundingBoxFinder {
-  private val input_file = "./conf/country-code-bounding-box.json"
-  private val jsonContent = scala.io.Source.fromFile(input_file).mkString
+
+@Singleton
+class BoundingBoxFinder @Inject() (implicit val env:Environment) {
+  private val jsonContent = scala.io.Source.fromInputStream(env.resourceAsStream("country-code-bounding-box.json")).mkString
   private val jsonData = Json.parse(jsonContent).as[JsObject]
 
   /**

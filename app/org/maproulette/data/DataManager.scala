@@ -12,7 +12,7 @@ import org.maproulette.Config
 import org.maproulette.actions.Actions
 import org.maproulette.models.Task
 import org.maproulette.models.utils.{AND, DALHelper, WHERE}
-import org.maproulette.utils.BoundingBoxFinder.boundingBoxforCountry
+import org.maproulette.utils.BoundingBoxFinder
 import play.api.Application
 import play.api.db.Database
 
@@ -67,7 +67,7 @@ case class LeaderboardUser(userId:Long, name:String, avatarURL:String,
   * @author cuthbertm
   */
 @Singleton
-class DataManager @Inject()(config: Config, db:Database)(implicit application:Application) extends DALHelper {
+class DataManager @Inject()(config: Config, db:Database, boundingBoxFinder:BoundingBoxFinder)(implicit application:Application) extends DALHelper {
   private def getDistinctUsers(projectFilter:String, survey:Boolean=false, onlyEnabled:Boolean=true,
                                start:Option[DateTime]=None, end:Option[DateTime]=None, priority:Option[Int])(implicit c:Connection) : Int = {
     SQL"""SELECT COUNT(DISTINCT osm_user_id) AS count
@@ -125,7 +125,7 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
         taskTableIfNeeded = ", tasks t"
         val boundingBoxes = ccList.map { cc =>
               s"""
-                ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxforCountry(cc)}, 4326))
+                ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxFinder.boundingBoxforCountry(cc)}, 4326))
               """
           }
         boundingSearch = "t.id = sa.task_id AND (" + boundingBoxes.mkString(" OR ") + ") AND "
@@ -783,7 +783,7 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
           taskTableIfNeeded = ", tasks t"
           val boundingBoxes = ccList.map { cc =>
                 s"""
-                  ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxforCountry(cc)}, 4326))
+                  ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxFinder.boundingBoxforCountry(cc)}, 4326))
                 """
             }
           boundingSearch = "t.id = sa.task_id AND (" + boundingBoxes.mkString(" OR ") + ") AND "
