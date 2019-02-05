@@ -12,6 +12,7 @@ import org.maproulette.Config
 import org.maproulette.actions.Actions
 import org.maproulette.models.Task
 import org.maproulette.models.utils.{AND, DALHelper, WHERE}
+import org.maproulette.utils.BoundingBoxFinder
 import play.api.Application
 import play.api.db.Database
 
@@ -60,13 +61,13 @@ case class RawActivity(date:DateTime, osmUserId:Long, osmUsername:String, projec
                        taskId:Long, oldStatus:Int, status:Int)
 case class LeaderboardChallenge(id:Long, name:String, activity:Int)
 case class LeaderboardUser(userId:Long, name:String, avatarURL:String,
-                           score:Int, topChallenges:List[LeaderboardChallenge])
+                           score:Int, rank:Int, topChallenges:List[LeaderboardChallenge])
 
 /**
   * @author cuthbertm
   */
 @Singleton
-class DataManager @Inject()(config: Config, db:Database)(implicit application:Application) extends DALHelper {
+class DataManager @Inject()(config: Config, db:Database, boundingBoxFinder:BoundingBoxFinder)(implicit application:Application) extends DALHelper {
   private def getDistinctUsers(projectFilter:String, survey:Boolean=false, onlyEnabled:Boolean=true,
                                start:Option[DateTime]=None, end:Option[DateTime]=None, priority:Option[Int])(implicit c:Connection) : Int = {
     SQL"""SELECT COUNT(DISTINCT osm_user_id) AS count
@@ -92,6 +93,61 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
           #${this.getEnabledPriorityClause(onlyEnabled, survey, start, end, priority)}  #$projectFilter
           AND sa.created::date BETWEEN current_date - INTERVAL '2 days' AND current_date"""
       .as(get[Option[Int]]("count").single).getOrElse(0)
+  }
+
+  /**
+   * Returns the SQL to sum a user's status actions for ranking purposes
+   **/
+  private def scoreSumSQL(statusActionsTableName:String="sa") : String = {
+    s"""SUM(CASE ${statusActionsTableName}.status
+             WHEN ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed}
+             WHEN ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive}
+             WHEN ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed}
+             WHEN ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard}
+             WHEN ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped}
+             ELSE 0
+           END)"""
+  }
+
+
+  /**
+   * Returns the SQL to fetch the ordered leaderboard data with rankings. Can be filtered
+   * by a list of projects, challenges, users and start/end date.
+   **/
+  private def leaderboardWithRankSQL(userFilter:Option[List[Long]]=None, projectFilter:Option[List[Long]]=None,
+                         challengeFilter:Option[List[Long]]=None, countryCodeFilter:Option[List[String]]=None,
+                         start:Option[DateTime]=None, end:Option[DateTime]=None) : String = {
+    var taskTableIfNeeded = ""
+    var boundingSearch = ""
+
+    countryCodeFilter match {
+      case Some(ccList) if ccList.nonEmpty =>
+        taskTableIfNeeded = ", tasks t"
+        val boundingBoxes = ccList.map { cc =>
+              s"""
+                ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxFinder.boundingBoxforCountry(cc)}, 4326))
+              """
+          }
+        boundingSearch = "t.id = sa.task_id AND (" + boundingBoxes.mkString(" OR ") + ") AND "
+      case _ => ""
+    }
+
+    s"""
+        SELECT users.id, users.name, users.avatar_url, ${this.scoreSumSQL()} AS score,
+               ROW_NUMBER() OVER( ORDER BY ${this.scoreSumSQL()} DESC, sa.osm_user_id ASC)
+        FROM status_actions sa, users
+        $taskTableIfNeeded
+        WHERE ${getDateClause("sa.created", start, end)} AND
+              sa.old_status <> sa.status AND
+              users.osm_id = sa.osm_user_id AND
+              $boundingSearch
+              users.leaderboard_opt_out = FALSE
+              ${getLongListFilter(userFilter, "users.id")}
+              ${getLongListFilter(projectFilter, "sa.project_id")}
+              ${getLongListFilter(challengeFilter, "sa.challenge_id")}
+        GROUP BY sa.osm_user_id, users.id
+        ORDER BY score DESC, sa.osm_user_id ASC
+      """
   }
 
   def getUserSurveySummary(projectList:Option[List[Long]]=None, surveyId:Option[Long]=None,
@@ -460,47 +516,188 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     * @param userFilter a filter for users
     * @param projectFilter a filter for projects
     * @param challengeFilter a filter for challenges
-    * @param start the start date
-    * @param end the end date
+    * @param countryCodeFilter a filter for limiting tasks to certain countries
+    * @param monthDuration number of months to fetch
+    * @param start the start date (if not using monthDuration)
+    * @param end the end date (if not using monthDuration)
     * @param onlyEnabled only enabled in user top challenges (doesn't affect scoring)
     * @param limit limit the number of returned users
     * @param offset paging, starting at 0
     * @return Returns list of leaderboard users with scores
     */
   def getUserLeaderboard(userFilter:Option[List[Long]]=None, projectFilter:Option[List[Long]]=None,
-                         challengeFilter:Option[List[Long]]=None, start:Option[DateTime]=None, end:Option[DateTime]=None,
+                         challengeFilter:Option[List[Long]]=None, countryCodeFilter:Option[List[String]]=None,
+                         monthDuration:Option[Int]=None, start:Option[DateTime]=None, end:Option[DateTime]=None,
                          onlyEnabled:Boolean=true, limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardUser] =
     db.withConnection { implicit c =>
+      // We can attempt to use the pre-built user_leaderboard table if we have no user, project and challenge filters.
+      if (userFilter == None && projectFilter == None && challengeFilter == None &&
+          onlyEnabled && monthDuration != None) {
+
+        val parser = for {
+          userId <- long("user_id")
+          name <- str("user_name")
+          avatarURL <- str("user_avatar_url")
+          score <- int("user_score")
+          rank <- int("user_ranking")
+        } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+                                this.getUserTopChallenges(userId, projectFilter, challengeFilter,
+                                  countryCodeFilter, monthDuration, start, end, onlyEnabled))
+
+        if (countryCodeFilter == None) {
+          val result = SQL"""SELECT *
+                FROM user_leaderboard
+                WHERE month_duration = ${monthDuration} AND country_code IS NULL
+                ORDER BY user_ranking ASC
+                LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+           """.as(parser.*)
+
+           if(result.length > 0) {
+             return result
+           }
+         }
+         else if (countryCodeFilter.toList.head.length == 1) {
+           val result = SQL"""SELECT *
+                 FROM user_leaderboard
+                 WHERE month_duration = ${monthDuration} AND
+                 country_code = ${countryCodeFilter.toList.head.head}
+                 ORDER BY user_ranking ASC
+                 LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+            """.as(parser.*)
+
+            if(result.length > 0) {
+              return result
+            }
+         }
+      }
+
       val parser = for {
         userId <- long("users.id")
         name <- str("users.name")
         avatarURL <- str("users.avatar_url")
         score <- int("score")
-      } yield LeaderboardUser(userId, name, avatarURL, score,
-                              this.getUserTopChallenges(userId, projectFilter, challengeFilter, start, end, onlyEnabled))
+        rank <- int("row_number")
+      } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+                              this.getUserTopChallenges(userId, projectFilter,
+                                challengeFilter, countryCodeFilter,
+                                monthDuration, start, end, onlyEnabled))
 
-      SQL"""SELECT users.id, users.name, users.avatar_url, SUM(
-              CASE sa.status
-                WHEN ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed}
-                WHEN ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive}
-                WHEN ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed}
-                WHEN ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard}
-                WHEN ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped}
-                ELSE 0
-              END
-            ) AS score
-            FROM status_actions sa, users
-            WHERE #${getDateClause("sa.created", start, end)} AND
-                  sa.old_status <> sa.status AND
-                  users.osm_id = sa.osm_user_id AND
-                  users.leaderboard_opt_out = FALSE
-                  #${getLongListFilter(userFilter, "users.id")}
-                  #${getLongListFilter(projectFilter, "sa.project_id")}
-                  #${getLongListFilter(challengeFilter, "sa.challenge_id")}
-            GROUP BY sa.osm_user_id, users.id
-            ORDER BY score DESC, sa.osm_user_id ASC
+      var startDate = start
+      var endDate = end
+      if (monthDuration != None) {
+        endDate = Option(new DateTime())
+        startDate = Option(new DateTime().minusMonths(monthDuration.get))
+      }
+
+      SQL"""#${this.leaderboardWithRankSQL(userFilter, projectFilter, challengeFilter,
+                     countryCodeFilter, startDate, endDate)}
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
        """.as(parser.*)
+    }
+
+    /**
+      * Gets leaderboard rank for a user based on task completion activity
+      * over the given period. Scoring for each completed task is based on status
+      * assigned to the task (status point values are configurable). Also included
+      * is the user's top challenges (by amount of activity).
+      *
+      * If the optional projectFilter or challengeFilter are given,
+      * activity will be limited to those projects and/or challenges.
+      *
+      * @param userId user id
+      * @param projectFilter a filter for projects
+      * @param challengeFilter a filter for challenges
+      * @param countryCodeFilter a filter for limiting tasks to certain countries
+      * @param monthDuration number of months to fetch
+      * @param start the start date (if not using monthDuration)
+      * @param end the end date (if not using monthDuration)
+      * @param onlyEnabled only enabled in user top challenges (doesn't affect scoring)
+      * @param bracket the number of users to also return who rank above and below userId
+      * @return Returns leaderboard for user with score
+      */
+    def getLeaderboardForUser(userId:Long, projectFilter:Option[List[Long]]=None,
+                           challengeFilter:Option[List[Long]]=None, countryCodeFilter:Option[List[String]],
+                           monthDuration:Option[Int]=None, start:Option[DateTime]=None, end:Option[DateTime]=None,
+                           onlyEnabled:Boolean=true, bracket:Int=0) : List[LeaderboardUser] = {
+      db.withConnection { implicit c =>
+        // We can attempt to use the pre-built user_leaderboard table if we have no project and challenge filters.
+        if (projectFilter == None && challengeFilter == None && onlyEnabled && monthDuration != None) {
+          val parser = for {
+            userId <- long("user_id")
+            name <- str("user_name")
+            avatarURL <- str("user_avatar_url")
+            score <- int("user_score")
+            rank <- int("user_ranking")
+          } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+                                  this.getUserTopChallenges(userId, projectFilter, challengeFilter,
+                                    countryCodeFilter, monthDuration, start, end, onlyEnabled))
+
+          if (countryCodeFilter == None) {
+            val result = SQL"""
+              WITH rankVariable (rankNum) as (
+                SELECT user_ranking FROM user_leaderboard
+                WHERE user_id = #${userId} AND month_duration = ${monthDuration}
+                AND country_code IS NULL
+              )
+
+              SELECT * FROM user_leaderboard, rankVariable
+                  WHERE month_duration = ${monthDuration} AND country_code IS NULL AND
+                  user_ranking BETWEEN (rankNum - #${bracket}) AND (rankNum + #${bracket})
+             """.as(parser.*)
+
+             if(result.length > 0) {
+               return result
+             }
+          }
+          else if (countryCodeFilter.toList.head.length == 1) {
+            val result = SQL"""
+              WITH rankVariable (rankNum) as (
+                SELECT user_ranking FROM user_leaderboard
+                WHERE user_id = #${userId} AND month_duration = ${monthDuration}
+                      AND country_code = ${countryCodeFilter.toList.head.head}
+              )
+
+              SELECT * FROM user_leaderboard, rankVariable
+                WHERE month_duration = ${monthDuration} AND
+                      country_code = ${countryCodeFilter.toList.head.head} AND
+                      user_ranking BETWEEN (rankNum - #${bracket}) AND (rankNum + #${bracket})
+             """.as(parser.*)
+
+             if(result.length > 0) {
+               return result
+             }
+          }
+        }
+
+        val parser = for {
+          userId <- long("users.id")
+          name <- str("users.name")
+          avatarURL <- str("users.avatar_url")
+          score <- int("score")
+          rank <- int("row_number")
+        } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+                                this.getUserTopChallenges(userId, projectFilter, challengeFilter,
+                                  countryCodeFilter, monthDuration, start, end, onlyEnabled))
+
+        var startDate = start
+        var endDate = end
+        if (monthDuration != None) {
+          endDate = Option(new DateTime())
+          startDate = Option(new DateTime().minusMonths(monthDuration.get))
+        }
+
+        val sqlSelectWithRank = this.leaderboardWithRankSQL(None, projectFilter,
+                                        challengeFilter, countryCodeFilter, startDate, endDate)
+
+        SQL"""WITH rankVariable (rankNum) as (
+          SELECT row_number FROM (#${sqlSelectWithRank}) user_rank
+          WHERE id = #${userId}
+        )
+
+        SELECT * FROM (#${sqlSelectWithRank}) ranks, rankVariable
+            WHERE row_number BETWEEN (rankNum - #${bracket}) AND (rankNum + #${bracket})
+         """.as(parser.*)
+      }
     }
 
   /**
@@ -512,29 +709,94 @@ class DataManager @Inject()(config: Config, db:Database)(implicit application:Ap
     * @param userId the id of the user
     * @param projectFilter a filter for projects
     * @param challengeFilter a filter for challenges
-    * @param start the start date
-    * @param end the end date
+    * @param countryCodeFilter a filter for limiting tasks to certain countries
+    * @param monthDuration number of months to fetch
+    * @param start the start date (if not using monthDuration)
+    * @param end the end date (if not using monthDuration)
     * @param onlyEnabled only get enabled challenges
     * @param limit limit the number of returned challenges
     * @param offset paging, starting at 0
     * @return Returns list of leaderboard challenges
     */
-  def getUserTopChallenges(userId:Long, projectFilter:Option[List[Long]]=None, challengeFilter:Option[List[Long]]=None,
-                           start:Option[DateTime]=None, end:Option[DateTime]=None, onlyEnabled:Boolean=true,
-                           limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardChallenge] =
+  def getUserTopChallenges(userId:Long, projectFilter:Option[List[Long]]=None,
+                           challengeFilter:Option[List[Long]]=None, countryCodeFilter:Option[List[String]],
+                           monthDuration:Option[Int]=None, start:Option[DateTime]=None, end:Option[DateTime]=None,
+                           onlyEnabled:Boolean=true, limit:Int=Config.DEFAULT_LIST_SIZE, offset:Int=0) : List[LeaderboardChallenge] =
     db.withConnection { implicit c =>
+      // We can attempt to use the pre-built user_top_challenges table if we have no project and challenge filters.
+      if (projectFilter == None && challengeFilter == None && onlyEnabled && monthDuration != None) {
+        val parser = for {
+          id <- long("challenge_id")
+          name <- str("challenge_name")
+          activity <- int("activity")
+        } yield LeaderboardChallenge(id, name, activity)
+
+        val dates = getDates(start, end)
+
+        if (countryCodeFilter == None) {
+          val result = SQL"""SELECT challenge_id, challenge_name, activity
+                FROM user_top_challenges
+                WHERE user_id = #${userId} AND month_duration = ${monthDuration}
+                      AND country_code IS NULL
+                ORDER BY activity DESC, challenge_id ASC
+                LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+           """.as(parser.*)
+
+           if(result.length > 0) {
+             return result
+           }
+        }
+        else if (countryCodeFilter.toList.head.length == 1) {
+          val result = SQL"""SELECT challenge_id, challenge_name, activity
+                FROM user_top_challenges
+                WHERE user_id = #${userId} AND month_duration = ${monthDuration}
+                      AND country_code = ${countryCodeFilter.toList.head.head}
+                ORDER BY activity DESC, challenge_id ASC
+                LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
+           """.as(parser.*)
+
+           if(result.length > 0) {
+             return result
+           }
+        }
+      }
+
       val enabledFilter = if (onlyEnabled) "AND p.id = sa.project_id AND c.enabled = TRUE and p.enabled = TRUE" else ""
+
       val parser = for {
         id <- long("status_actions.challenge_id")
         name <- str("challenges.name")
         activity <- int("activity")
       } yield LeaderboardChallenge(id, name, activity)
 
+      var startDate = start
+      var endDate = end
+      if (monthDuration != None) {
+        endDate = Option(new DateTime())
+        startDate = Option(new DateTime().minusMonths(monthDuration.get))
+      }
+
+      var taskTableIfNeeded = ""
+      var boundingSearch = ""
+      countryCodeFilter match {
+        case Some(ccList) if ccList.nonEmpty =>
+          taskTableIfNeeded = ", tasks t"
+          val boundingBoxes = ccList.map { cc =>
+                s"""
+                  ST_Intersects(t.location, ST_MakeEnvelope(${boundingBoxFinder.boundingBoxforCountry(cc)}, 4326))
+                """
+            }
+          boundingSearch = "t.id = sa.task_id AND (" + boundingBoxes.mkString(" OR ") + ") AND "
+        case _ => ""
+      }
+
       SQL"""SELECT sa.challenge_id, c.name, count(sa.challenge_id) as activity
             FROM status_actions sa, challenges c, projects p, users u
-            WHERE #${getDateClause("sa.created", start, end)} AND
+            #${taskTableIfNeeded}
+            WHERE #${getDateClause("sa.created", startDate, endDate)} AND
                   u.id = #${userId} AND
                   sa.osm_user_id = u.osm_id AND
+                  #${boundingSearch}
                   sa.challenge_id = c.id
                   #${getLongListFilter(projectFilter, "sa.project_id")}
                   #${getLongListFilter(challengeFilter, "sa.challenge_id")}

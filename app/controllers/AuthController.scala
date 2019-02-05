@@ -180,7 +180,13 @@ class AuthController @Inject() (messagesApi: MessagesApi,
     if (StringUtils.isEmpty(redirect) && referer.isDefined) {
       referer.get
     } else if (StringUtils.isNotEmpty(redirect)) {
-      s"${redirectURL.substring(0, redirectURL.length - 1)}$redirect"
+      if (config.mr3DevMode) {
+        // In dev mode, allow redirects to anywhere so frontend can be run separately
+        redirect
+      }
+      else {
+        s"${redirectURL.substring(0, redirectURL.length - 1)}$redirect"
+      }
     } else {
       redirectURL
     }

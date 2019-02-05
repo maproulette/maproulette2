@@ -18,6 +18,9 @@ import org.maproulette.models.dal.DALManager
 import org.maproulette.services.{KeepRight, KeepRightBox, KeepRightError, KeepRightService}
 import org.maproulette.session.User
 
+import org.maproulette.jobs.utils.LeaderboardHelper
+import org.maproulette.utils.BoundingBoxFinder
+
 import scala.util.{Failure, Success}
 
 /**
@@ -31,7 +34,8 @@ class SchedulerActor @Inject() (config:Config,
                                 application:Application,
                                 db:Database,
                                 dALManager: DALManager,
-                                keepRightService: KeepRightService) extends Actor {
+                                keepRightService: KeepRightService,
+                                boundingBoxFinder: BoundingBoxFinder) extends Actor {
   val appConfig = application.configuration
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -41,6 +45,8 @@ class SchedulerActor @Inject() (config:Config,
   )
 
   override def receive: Receive = {
+    case RunJob("rebuildChallengesLeaderboard", action) => this.rebuildChallengesLeaderboard(action)
+    case RunJob("rebuildCountryLeaderboard", action) => this.rebuildCountryLeaderboard(action)
     case RunJob("cleanLocks", action) => this.cleanLocks(action)
     case RunJob("runChallengeSchedules", action) => this.runChallengeSchedules(action)
     case RunJob("updateLocations", action) => this.updateLocations(action)
@@ -293,6 +299,72 @@ class SchedulerActor @Inject() (config:Config,
         Logger.warn(s"The KeepRight challenge creation failed. ${f.getMessage}")
     }
   }
+
+  /**
+   * Rebuilds the user_leaderboard table.
+   *
+   * @param action - action string
+   */
+  def rebuildChallengesLeaderboard(action:String) : Unit = {
+    val start = System.currentTimeMillis
+    Logger.info(action)
+
+    db.withConnection { implicit c =>
+      // Clear TABLEs
+      SQL("DELETE FROM user_leaderboard WHERE country_code IS NULL").executeUpdate()
+      SQL("DELETE FROM user_top_challenges WHERE country_code IS NULL").executeUpdate()
+
+      // Past Month
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(1, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(1, config)).executeUpdate()
+
+      // Past 3 Months
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(3, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(3, config)).executeUpdate()
+
+      // Past 6 Months
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(6, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(6, config)).executeUpdate()
+
+      // Past Year
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(12, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(12, config)).executeUpdate()
+
+      Logger.info(s"Rebuilt Challenges Leaderboard succesfully.")
+      val totalTime = System.currentTimeMillis - start
+      Logger.debug("Time to rebuild leaderboard: %1d ms".format(totalTime))
+    }
+  }
+
+  /**
+   * Rebuilds the user_leaderboard table.
+   *
+   * @param action - action string
+   */
+  def rebuildCountryLeaderboard(action:String) : Unit = {
+    val start = System.currentTimeMillis
+    Logger.info(action)
+
+    db.withConnection { implicit c =>
+      // Clear TABLEs
+      SQL("DELETE FROM user_leaderboard WHERE country_code IS NOT NULL").executeUpdate()
+      SQL("DELETE FROM user_top_challenges WHERE country_code IS NOT NULL").executeUpdate()
+
+      val countryCodeMap = boundingBoxFinder.boundingBoxforAll()
+      for ((countryCode, boundingBox) <- countryCodeMap) {
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(1, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(3, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(6, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(12, countryCode, boundingBox, config)).executeUpdate()
+        SQL(LeaderboardHelper.rebuildTopChallengesSQLCountry(12, countryCode, boundingBox, config)).executeUpdate()
+      }
+
+      Logger.info(s"Rebuilt Country Leaderboard succesfully.")
+      val totalTime = System.currentTimeMillis - start
+      Logger.debug("Time to rebuild country leaderboard: %1d ms".format(totalTime))
+    }
+  }
+
 }
 
 object SchedulerActor {
