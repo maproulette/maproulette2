@@ -134,8 +134,9 @@ class UserDAL @Inject() (override val db:Database,
     */
   def retrieveByOSMID(implicit id: Long, user:User): Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                      WHERE u.id = um.user_id AND osm_id = {id}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                      LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                      WHERE osm_id = {id}"""
       SQL(query).on('id -> id).as(this.parser.*).headOption match {
         case Some(u) =>
           this.permission.hasObjectReadAccess(u, user)
@@ -154,8 +155,9 @@ class UserDAL @Inject() (override val db:Database,
     */
   def retrieveByAPIKey(apiKey:String, user:User)(implicit id:Long) : Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                      WHERE id = um.user_id AND (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                      LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                      WHERE (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
       SQL(query).on('id -> id, 'apiKey -> apiKey).as(this.parser.*).headOption match {
         case Some(u) =>
           this.permission.hasObjectReadAccess(u, user)
@@ -167,8 +169,9 @@ class UserDAL @Inject() (override val db:Database,
 
   def retrieveByUsernameAndAPIKey(username:String, apiKey:String) : Option[User] = this.cacheManager.withOptionCaching { () =>
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                      WHERE id = um.user_id AND name = {name} AND api_key = {apiKey}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                      LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                      WHERE name = {name} AND api_key = {apiKey}"""
       SQL(query).on('name -> username, 'apiKey -> apiKey).as(this.parser.*).headOption
     }
   }
@@ -185,8 +188,9 @@ class UserDAL @Inject() (override val db:Database,
     // only only this kind of request if the user is a super user
     if (user.isSuperUser) {
       this.db.withConnection { implicit c =>
-        val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                        WHERE id = um.user_id AND name = {name}"""
+        val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                        LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                        WHERE name = {name}"""
         SQL(query).on('name -> username).as(this.parser.*).headOption
       }
     } else {
@@ -223,8 +227,9 @@ class UserDAL @Inject() (override val db:Database,
   def matchByRequestTokenAndId(requestToken: RequestToken, user:User)(implicit id:Long): Option[User] = {
     val requestedUser = this.cacheManager.withCaching { () =>
       this.db.withConnection { implicit c =>
-        val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                        WHERE id = {id} AND id = um.user_id AND oauth_token = {token} AND oauth_secret = {secret}"""
+        val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                        LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                        WHERE id = {id} AND oauth_token = {token} AND oauth_secret = {secret}"""
         SQL(query).on('id -> id, 'token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
       }
     }
@@ -250,8 +255,9 @@ class UserDAL @Inject() (override val db:Database,
     */
   def matchByRequestToken(requestToken: RequestToken, user:User): Option[User] = {
     this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                      WHERE id = um.user_id AND oauth_token = {token} AND oauth_secret = {secret}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                      LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                      WHERE oauth_token = {token} AND oauth_secret = {secret}"""
       SQL(query).on('token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
     }
   }
@@ -304,8 +310,9 @@ class UserDAL @Inject() (override val db:Database,
     // We do this separately from the transaction because if we don't the user_group mappings
     // wont be accessible just yet.
     val retUser = this.db.withConnection { implicit c =>
-      val query = s"""SELECT ${this.retrieveColumns}, score FROM users, user_metrics um
-                      WHERE id = um.user_id AND osm_id = {id}"""
+      val query = s"""SELECT ${this.retrieveColumns}, score FROM users
+                      LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+                      WHERE osm_id = {id}"""
       SQL(query).on('id -> item.osmProfile.id).as(this.parser.*).head
     }
 

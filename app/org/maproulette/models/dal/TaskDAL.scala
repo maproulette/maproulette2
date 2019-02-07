@@ -963,7 +963,9 @@ class TaskDAL @Inject()(override val db: Database,
     withMRConnection { implicit c =>
       val query =
         s"""
-           |SELECT ${userDAL.get().retrieveColumns} FROM users WHERE osm_id IN (
+           |SELECT ${userDAL.get().retrieveColumns}, score FROM users
+           |  LEFT JOIN user_metrics ON users.id = user_metrics.user_id
+           |  WHERE osm_id IN (
            |  SELECT osm_user_id FROM status_actions WHERE task_id = {id}
            |  ORDER BY created DESC
            |  LIMIT {limit}
