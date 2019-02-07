@@ -613,7 +613,7 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
     this.withMRConnection { implicit c =>
       this.retrieveById(id) match {
         case Some(challenge) =>
-          if (challenge.status.get == Challenge.STATUS_READY) {
+          if (challenge.status.getOrElse(Challenge.STATUS_NA) == Challenge.STATUS_READY) {
             this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit item =>
               // If the challenge has no tasks in the created status it need to be marked finished.
               val updateStatusQuery =
@@ -644,7 +644,7 @@ class ChallengeDAL @Inject() (override val db:Database, taskDAL: TaskDAL,
     this.withMRConnection { implicit c =>
       this.retrieveById(id) match {
         case Some(challenge) =>
-          if (challenge.status.get == Challenge.STATUS_FINISHED) {
+          if (challenge.status.getOrElse(Challenge.STATUS_NA) == Challenge.STATUS_FINISHED) {
             this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit item =>
               // If the challenge was finished and any tasks were reset back to created
               // we need to set the challenge status back to ready
