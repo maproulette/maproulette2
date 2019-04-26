@@ -544,7 +544,7 @@ GET     /task/:id/history                       @org.maproulette.controllers.api
 #     in: path
 #     description: The id of the task to fetch and claim
 ###
-GET     /task/:id/review/start                       @org.maproulette.controllers.api.TaskController.startTaskReview(id:Long)
+GET     /task/:id/review/start                       @org.maproulette.controllers.api.TaskReviewController.startTaskReview(id:Long)
 ###
 # summary: Cancels a claim on a task for review
 # produces: [ application/json ]
@@ -560,7 +560,7 @@ GET     /task/:id/review/start                       @org.maproulette.controller
 #     in: path
 #     description: The id of the task to cancel claim on
 ###
-GET     /task/:id/review/cancel                       @org.maproulette.controllers.api.TaskController.cancelTaskReview(id:Long)
+GET     /task/:id/review/cancel                       @org.maproulette.controllers.api.TaskReviewController.cancelTaskReview(id:Long)
 ###
 # summary: Retrieves tasks that need review
 # produces: [ application/json ]
@@ -596,7 +596,7 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #     in: query
 #     description: The search string used to match the name of the person requesting the review. (review_requested_by)
 ###
-GET     /tasks/review                          @org.maproulette.controllers.api.TaskController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves reviewed tasks that have been reviewed either by this user or where the user requested
 #          the review.
@@ -643,7 +643,7 @@ GET     /tasks/review                          @org.maproulette.controllers.api.
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskController.getReviewedTasks(startDate: String ?= null, endDate: String ?= null, asReviewer:Boolean ?= false, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskReviewController.getReviewedTasks(startDate: String ?= null, endDate: String ?= null, asReviewer:Boolean ?= false, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves and claims a the next review needed Task
 # produces: [ application/json ]
@@ -671,35 +671,31 @@ GET     /tasks/reviewed                          @org.maproulette.controllers.ap
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskController.nextTaskReview(sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(sort:String ?= "", order:String ?= "ASC")
 ###
-# summary: Retrieves and claims a the next review needed Task
+# summary: Retrieves tasks that need review
 # produces: [ application/json ]
-# description: Retrieves the next Task (given the search parameters) and claims that task for review
+# description: Retrieves list of Tasks and total count
 # responses:
 #   '200':
-#     description: The task
+#     description: The list of tasks that need review (and that the user has group permission to access)
 #     schema:
-#       type: object
-#       $ref: '#/definitions/org.maproulette.models.Task'
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
 # parameters:
-#   - name: sort
+#   - name: reviewTasksType
 #     in: query
-#     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
-#   - name: order
+#     description: integer value > 1 - To Be Reviewed 2 - User's reviewed Tasks 3 - All reviewed by users
+#   - name: startDate
 #     in: query
-#     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
-#   - name: cs
+#     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
+#   - name: endDate
 #     in: query
-#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
-#   - name: o
-#     in: query
-#     description: The search string used to match the name of the person requesting the review. (review_requested_by)
-#   - name: r
-#     in: query
-#     description: The search string used to match the Reviewer names. (reviewed_by)
+#     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
 ###
-GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskController.nextTaskReview(sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -2895,6 +2891,34 @@ PUT     /task/:id/review/:status                           @org.maproulette.cont
 #     description: The number of clusters that you want returned
 ###
 GET     /taskCluster                                @org.maproulette.controllers.api.TaskController.getTaskClusters(points:Int ?= 100)
+###
+# tags: [ TaskReview ]
+# summary: Retrieves task review clusters
+# produces: [ application/json ]
+# description: Retrieves task clusters that contain the centroid location for a group of review tasks
+# responses:
+#   '200':
+#     description: An array of task clusters that represents clusters of tasks for the review criteria. If none found will return an empty list
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.TaskCluster'
+# parameters:
+#   - name: reviewTasksType
+#     in: query
+#     description: integer value > 1 - To Be Reviewed 2 - User's reviewed Tasks 3 - All reviewed by users
+#   - name: points
+#     in: query
+#     description: The number of clusters that you want returned
+#   - name: startDate
+#     in: query
+#     description: The start date to search within
+#   - name: endDate
+#     in: query
+#     description: The end date to search within
+###
+GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves tasks in a cluster

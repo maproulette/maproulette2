@@ -29,3 +29,10 @@ object TaskWithReview {
   implicit val taskWithReviewWrites: Writes[TaskWithReview] = Json.writes[TaskWithReview]
   implicit val taskWithReviewReads: Reads[TaskWithReview] = Json.reads[TaskWithReview]
 }
+
+case class ReviewMetrics(total: Int,
+  reviewRequested: Int, reviewApproved: Int, reviewRejected: Int, reviewAssisted: Int, reviewDisputed: Int,
+  fixed: Int, falsePositive: Int, skipped: Int, alreadyFixed: Int, tooHard: Int)
+object ReviewMetrics {
+  implicit val reviewMetricsWrites = Json.writes[ReviewMetrics]
+}
