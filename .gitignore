@@ -14,7 +14,7 @@ dist
 /RUNNING_PID
 /.settings
 /.sbtserver
-conf/dev.conf
+# conf/dev.conf
 project/.sbtserver
 project/.sbtserver.lock
 project/play-fork-run.sbt

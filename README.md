@@ -41,7 +41,8 @@ For more details on the app registration process, see the [OSM OAuth wiki page](
 * Create a PostgreSQL superuser `osm`: `createuser -sW osm`. Use `osm` as the password.
 * Create a new PostgreSQL database `mp_dev` owned by `osm`: `createdb -O osm mp_dev`.
 * Setup your environment variables:
-    - Database connection JDBC string as `MR_DATABASE_URL`: `export MR_DATABASE_URL='jdbc:postgresql://localhost:5432/mp_dev?user=osm&password=osm'`
+    - Copy `conf/dev.conf.example` to `conf/dev.conf`
+    - Update database connection JDBC string as `MR_DATABASE_URL`: `export MR_DATABASE_URL='jdbc:postgresql://localhost:5432/mp_dev?user=osm&password=osm'`
     - Consumer key from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_KEY`: `export MR_OAUTH_CONSUMER_KEY=<APPLICATION_CONSUMER_KEY>`
     - Consumer secret from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_SECRET`: `export MR_OAUTH_CONSUMER_SECRET=<APPLICATION_CONSUMER_SECRET>`
     - OSM server URL as `MR_OSM_SERVER` if you wish to use the dev server (defaults to production): `export MR_OSM_SERVER='http://master.dev.openstreetmap.org'`

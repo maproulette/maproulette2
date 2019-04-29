@@ -1,7 +1,7 @@
 include "application.conf"
 
 db.default {
-  url="jdbc:postgresql://localhost:5433/06_14_2018_prod"
+  url="jdbc:postgresql://localhost:5432/mp_dev"
   username="osm"
   password="osm"
 }
