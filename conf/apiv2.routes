@@ -2569,6 +2569,42 @@ PUT     /tasks                                      @org.maproulette.controllers
 GET     /task/:id                                   @org.maproulette.controllers.api.TaskController.read(id:Long)
 ###
 # tags: [ Task ]
+# summary: Start working on a Task (locks it for the user)
+# produces: [ application/json ]
+# description: Locks a Task based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The locked Task
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+#   '404':
+#     description: ID field supplied but no Task found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Task to retrieve
+###
+GET     /task/:id/start                               @org.maproulette.controllers.api.TaskController.startOnTask(id:Long)
+###
+# tags: [ Task ]
+# summary: Release a Task (unlocks it)
+# produces: [ application/json ]
+# description: Unlocks a Task based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The unlocked Task
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+#   '404':
+#     description: ID field supplied but no Task found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Task to retrieve
+###
+GET     /task/:id/release                               @org.maproulette.controllers.api.TaskController.releaseTask(id:Long)
+###
+# tags: [ Task ]
 # summary: Retrieves an already existing Task
 # produces: [ application/json ]
 # description: Retrieves an already existing Task based on the name of the Task rather than an ID

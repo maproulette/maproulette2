@@ -146,6 +146,32 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
   }
 
   /**
+    * Start on task (lock it). An error will be returned if someone else has the lock.
+    *
+    * @param taskId     Id of task that you wish to start
+    * @return
+    */
+  def startOnTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      val result = this.dal.startOnTask(user, taskId)
+      Ok(Json.toJson(result))
+    }
+  }
+
+  /**
+    * Releases the task (unlock it).
+    *
+    * @param taskId    Id of task that you wish to release
+    * @return
+    */
+  def releaseTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      val result = this.dal.releaseTask(user, taskId)
+      Ok(Json.toJson(result))
+    }
+  }
+
+  /**
     * Gets a random task(s) given the provided tags.
     *
     * @param projectSearch   Filter on the name of the project

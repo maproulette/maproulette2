@@ -548,6 +548,49 @@ class TaskDAL @Inject()(override val db: Database,
   }
 
   /**
+    * Locks a task.
+    *
+    * @param user        The user executing the request
+    * @param taskId      Id of task that you wish to lock
+    * @return the locked task
+    */
+  def startOnTask(user: User, taskId: Long)
+                    (implicit c: Option[Connection] = None): Task = {
+    val task = this.retrieveById(taskId) match {
+      case Some(t) => t
+      case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+    }
+
+    val success = this.lockItem(user, task)
+    if (success == 0) {
+      throw new IllegalAccessException(s"Current task [${taskId}] is locked by another user.")
+    }
+    return task
+  }
+
+  /**
+    * Unlocks a task.
+    *
+    * @param user        The user executing the request
+    * @param taskId      Id of task that you wish to lock
+    * @return the unlocked task
+    */
+  def releaseTask(user: User, taskId: Long)
+                    (implicit c: Option[Connection] = None): Task = {
+    val task = this.retrieveById(taskId) match {
+      case Some(t) => t
+      case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+    }
+
+    try {
+      this.unlockItem(user, task)
+    } catch {
+      case e: Exception => logger.warn(e.getMessage)
+    }
+    return task
+  }
+
+  /**
     * Sets the task for a given user. The user cannot set the status of a task unless the object has
     * been locked by the same user before hand.
     * Will throw an InvalidException if the task status cannot be set due to the current task status
@@ -930,6 +973,7 @@ class TaskDAL @Inject()(override val db: Database,
         case Nil => Task.statusMap.keys.toSeq
         case t => t
       }
+
       SQL(query).on('statusList -> slist).as(lp.*).headOption match {
         case Some(t) => Some(t)
         case None =>
