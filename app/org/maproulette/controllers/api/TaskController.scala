@@ -153,8 +153,17 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     */
   def startOnTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      val result = this.dal.startOnTask(user, taskId)
-      Ok(Json.toJson(result))
+      val task = this.dal.retrieveById(taskId) match {
+        case Some(t) => t
+        case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+      }
+
+      val success = this.dal.lockItem(user, task)
+      if (success == 0) {
+        throw new IllegalAccessException(s"Current task [${taskId}] is locked by another user.")
+      }
+
+      Ok(Json.toJson(task))
     }
   }
 
@@ -166,8 +175,18 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     */
   def releaseTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      val result = this.dal.releaseTask(user, taskId)
-      Ok(Json.toJson(result))
+      val task = this.dal.retrieveById(taskId) match {
+        case Some(t) => t
+        case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+      }
+
+      try {
+        this.dal.unlockItem(user, task)
+      } catch {
+        case e: Exception => logger.warn(e.getMessage)
+      }
+
+      Ok(Json.toJson(task))
     }
   }
 
