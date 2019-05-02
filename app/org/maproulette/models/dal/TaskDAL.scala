@@ -930,6 +930,7 @@ class TaskDAL @Inject()(override val db: Database,
         case Nil => Task.statusMap.keys.toSeq
         case t => t
       }
+
       SQL(query).on('statusList -> slist).as(lp.*).headOption match {
         case Some(t) => Some(t)
         case None =>
