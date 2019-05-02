@@ -634,7 +634,8 @@ class TaskDAL @Inject()(override val db: Database,
     }
     if (user.settings.needsReview.get != User.REVIEW_NOT_NEEDED) {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
-                                                 reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED))) }
+                                                 reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED),
+                                                 reviewRequestedBy = Some(user.id))) }
     }
     else {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status))) }
@@ -694,7 +695,6 @@ class TaskDAL @Inject()(override val db: Database,
       else {
         reviewedBy = Some(user.id)
       }
-
       val updatedRows =
         SQL"""UPDATE task_review t SET review_status = $reviewStatus,
                                  #${fetchBy} = ${user.id},

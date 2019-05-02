@@ -596,7 +596,7 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #     in: query
 #     description: The search string used to match the name of the person requesting the review. (review_requested_by)
 ###
-GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, onlySaved: Boolean ?= false, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves reviewed tasks that have been reviewed either by this user or where the user requested
 #          the review.
@@ -671,7 +671,7 @@ GET     /tasks/reviewed                          @org.maproulette.controllers.ap
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(onlySaved:Boolean ?= false, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves tasks that need review
 # produces: [ application/json ]
@@ -695,7 +695,7 @@ GET     /tasks/review/next                       @org.maproulette.controllers.ap
 #     in: query
 #     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
 ###
-GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null)
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -2954,7 +2954,7 @@ GET     /taskCluster                                @org.maproulette.controllers
 #     in: query
 #     description: The end date to search within
 ###
-GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null)
+GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves tasks in a cluster
