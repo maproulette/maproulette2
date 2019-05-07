@@ -60,34 +60,71 @@ class UserController @Inject()(userDAL: UserDAL,
   }
 
   def getUser(userId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (userId == user.id || userId == user.osmProfile.id) {
-        Ok(Json.toJson(User.withDecryptedAPIKey(user)(crypto)))
-      } else if (user.isSuperUser) {
-        this.userDAL.retrieveByOSMID(userId, user) match {
-          case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
-          case None => this.userDAL.retrieveById(userId) match {
-            case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
-            case None => throw new NotFoundException(s"No user found with id '$userId'")
+    this.sessionManager.userAwareRequest { implicit user =>
+      var result : Option[Result] = None
+
+      user match {
+        case Some(requestUser) =>
+          // User can get itself
+          if (userId == requestUser.id || userId == requestUser.osmProfile.id) {
+            result = Option(Ok(Json.toJson(User.withDecryptedAPIKey(requestUser)(crypto))))
           }
-        }
-      } else {
-        throw new IllegalAccessException("Only super users have access to other user account information")
+          // Super User can get all users
+          else if (requestUser.isSuperUser) {
+            this.userDAL.retrieveByOSMID(userId, requestUser) match {
+              case Some(u) => result = Option(Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto))))
+              case None => this.userDAL.retrieveById(userId) match {
+                case Some(u) => result = Option(Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto))))
+                case None => throw new NotFoundException(s"No user found with id '$userId'")
+              }
+            }
+          }
+        case _ => None
+      }
+
+      result match {
+        case Some(result) => result
+        case _ =>
+          // User is not logged in or Not a super user or is Not requesting itself
+          // so we return a basic user object
+          val target = this.userDAL.retrieveByOSMID(userId, User.superUser) match {
+            case Some(u) => u
+            case None => this.userDAL.retrieveById(userId) match {
+              case Some(u) => u
+              case None => throw new NotFoundException(s"No user found with id '$userId'")
+            }
+          }
+
+          Ok(buildBasicUser(target))
       }
     }
   }
 
   def getUserByOSMUsername(username: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (user.name == username) {
-        Ok(Json.toJson(user))
-      } else {
-        // we don't need to check access here as the API only allows super users to make the call,
-        // so if not a super user, the correct IllegalAccessException will be thrown
-        this.userDAL.retrieveByOSMUsername(username, user) match {
-          case Some(u) => Ok(Json.toJson(u))
-          case None => throw new NotFoundException(s"No user found with OSM username '$username'")
-        }
+    this.sessionManager.userAwareRequest { implicit user =>
+      var result : Option[Result] = None
+
+      user match {
+        case Some(u) =>
+          if (u.name == username) {
+            result = Option(Ok(Json.toJson(u)))
+          }
+          else if (u.isSuperUser) {
+            this.userDAL.retrieveByOSMUsername(username, u) match {
+              case Some(u) => result = Option(Ok(Json.toJson(u)))
+              case None => throw new NotFoundException(s"No user found with OSM username '$username'")
+            }
+          }
+        case _ => None
+      }
+
+      result match {
+        case Some(r) => r
+        case _ =>
+          this.userDAL.retrieveByOSMUsername(username, User.superUser) match {
+            case Some(u) => Ok(buildBasicUser(u))
+            case None => throw new NotFoundException(s"No user found with OSM username '$username'")
+          }
       }
     }
   }
@@ -100,6 +137,19 @@ class UserController @Inject()(userDAL: UserDAL,
         Ok(Json.toJson(this.userDAL.searchByOSMUsername(username, limit)))
       }
     }
+  }
+
+  private def buildBasicUser(user: User): JsValue = {
+    val avatar = user.osmProfile.avatarURL
+    val displayName = user.osmProfile.displayName
+    val leaderOptOut = user.settings.leaderboardOptOut.getOrElse(false)
+
+    Json.obj("id" -> user.id,
+                      "osmProfile" -> Json.obj("id" -> user.osmProfile.id,
+                        "avatarURL" -> avatar, "displayName" -> displayName),
+                      "name" -> user.name,
+                      "created" -> user.created.toString,
+                      "settings" -> Json.obj("leaderboardOptOut" -> leaderOptOut))
   }
 
   def updateUser(id: Long): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
@@ -344,6 +394,12 @@ class UserController @Inject()(userDAL: UserDAL,
   def getUsersManagingProject(projectId: Long, osmIds: String): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(this.userDAL.getUsersManagingProject(projectId, Utils.toLongList(osmIds), user)))
+    }
+  }
+
+  def getMetricsForUser(userId: Long, monthDuration:Int = -1, reviewDuration:Int = -1): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      Ok(Json.toJson(this.userDAL.getMetricsForUser(userId, User.userOrMocked(user), monthDuration, reviewDuration)))
     }
   }
 }

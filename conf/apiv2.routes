@@ -3328,6 +3328,8 @@ GET     /data/user/:userId/leaderboard              @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/user/:userId/topChallenges            @org.maproulette.controllers.api.DataController.getUserTopChallenges(userId:Long, projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, limit:Int ?= 20, offset:Int ?= 0)
 ### NoDocs ###
+GET     /data/user/:userId/metrics                  @org.maproulette.controllers.api.UserController.getMetricsForUser(userId:Long, monthDuration:Int ?= -1, reviewDuration:Int ?= -1)
+### NoDocs ###
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
 ### NoDocs ###
 GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "")
