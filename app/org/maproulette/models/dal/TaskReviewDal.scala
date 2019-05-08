@@ -232,7 +232,6 @@ class TaskReviewDAL @Inject()(override val db: Database,
         s"""
           SELECT count(*) FROM tasks
           ${joinClause}
-          INNER JOIN projects p ON p.id = c.parent_id
           INNER JOIN groups g ON g.project_id = p.id
           INNER JOIN user_groups ug ON g.id = ug.group_id
           WHERE ((p.enabled AND c.enabled) OR
