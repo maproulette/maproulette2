@@ -295,6 +295,16 @@ class TaskDAL @Inject()(override val db: Database,
         NamedParameter("reviewedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewedBy)),
         NamedParameter("reviewedAt", ToParameterValue.apply[Option[DateTime]].apply(element.reviewedAt))
       ).as(long("create_update_task").*).head
+
+      // If we are updating the task review back to None then we need to delete its entry in the task_review table
+      cachedItem match {
+        case Some(item) =>
+          if (item.reviewRequestedBy != None && element.reviewRequestedBy == None) {
+            SQL("delete from task_review where task_id=" + element.id).execute()
+          }
+        case None => // ignore
+      }
+
       c.commit()
       // These updates were originally only done on insert or when the geometry actual was updated. However
       // a couple reasons why it is always performed. Firstly the location and geometry of a task is very
