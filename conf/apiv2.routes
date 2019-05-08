@@ -3434,6 +3434,67 @@ GET     /osmuser/:username                          @org.maproulette.controllers
 #     required: true
 #     type: string
 ###
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied ID
+# responses:
+#   '200':
+#     description: The retrieved User (with only basic info)
+#     schema:
+#       $ref: '#/definitions/org.maproulette.session.User'
+#   '404':
+#     description: If User with provided ID is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve
+###
+GET     /user/:userId/public                               @org.maproulette.controllers.api.UserController.getPublicUser(userId:Long)
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied OSM username
+# responses:
+#   '200':
+#     description: The retrieved User (with basic info)
+#     schema:
+#       $ref: '#/definitions/org.maproulette.session.User'
+#   '404':
+#     description: If User with provided OSM username is not found.
+# parameters:
+#   - name: username
+#     in: path
+#     description: The OSM username of the user to retrieve
+###
+GET     /osmuser/:username/public                          @org.maproulette.controllers.api.UserController.getPublicUserByOSMUsername(username:String)
+###
+# tags: [ User ]
+# summary: Deletes a user from the database
+# produces: [ application/json ]
+# description: This will delete a user completely from the database. It can also optionally anonymize the users data from actions taken in MapRoulette, like change in status for tasks, comments on tasks and answers to survey questions
+# responses:
+#   '200':
+#     description: An ok message stating the user was deleted
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request, only super users can make this request
+# parameters:
+#   - name: osmId
+#     in: path
+#     description: The OSM id of the user you want to delete
+#   - name: anonymize
+#     in: query
+#     description: Whether to anonymize the users data, false by default
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
 DELETE  /user/:osmId                                @org.maproulette.controllers.api.UserController.deleteUser(osmId:Long, anonymize:Boolean ?= false)
 ###
 # tags: [ User ]
