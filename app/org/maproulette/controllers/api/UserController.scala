@@ -92,6 +92,29 @@ class UserController @Inject()(userDAL: UserDAL,
     }
   }
 
+  def getPublicUser(userId: Long): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      val target = this.userDAL.retrieveByOSMID(userId, User.superUser) match {
+        case Some(u) => u
+        case None => this.userDAL.retrieveById(userId) match {
+          case Some(u) => u
+          case None => throw new NotFoundException(s"No user found with id '$userId'")
+        }
+      }
+
+      Ok(buildBasicUser(target))
+    }
+  }
+
+  def getPublicUserByOSMUsername(username: String): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      this.userDAL.retrieveByOSMUsername(username, User.superUser) match {
+        case Some(u) => Ok(buildBasicUser(u))
+        case None => throw new NotFoundException(s"No user found with OSM username '$username'")
+      }
+    }
+  }
+
   def searchUserByOSMUsername(username: String, limit: Int): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       if (StringUtils.isEmpty(username)) {
@@ -100,6 +123,19 @@ class UserController @Inject()(userDAL: UserDAL,
         Ok(Json.toJson(this.userDAL.searchByOSMUsername(username, limit)))
       }
     }
+  }
+
+  private def buildBasicUser(user: User): JsValue = {
+    val avatar = user.osmProfile.avatarURL
+    val displayName = user.osmProfile.displayName
+    val leaderOptOut = user.settings.leaderboardOptOut.getOrElse(false)
+
+    Json.obj("id" -> user.id,
+                      "osmProfile" -> Json.obj("id" -> user.osmProfile.id,
+                        "avatarURL" -> avatar, "displayName" -> displayName),
+                      "name" -> user.name,
+                      "created" -> user.created.toString,
+                      "settings" -> Json.obj("leaderboardOptOut" -> leaderOptOut))
   }
 
   def updateUser(id: Long): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
@@ -344,6 +380,12 @@ class UserController @Inject()(userDAL: UserDAL,
   def getUsersManagingProject(projectId: Long, osmIds: String): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       Ok(Json.toJson(this.userDAL.getUsersManagingProject(projectId, Utils.toLongList(osmIds), user)))
+    }
+  }
+
+  def getMetricsForUser(userId: Long, monthDuration:Int = -1, reviewDuration:Int = -1): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      Ok(Json.toJson(this.userDAL.getMetricsForUser(userId, User.userOrMocked(user), monthDuration, reviewDuration)))
     }
   }
 }

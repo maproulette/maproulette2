@@ -138,7 +138,7 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
     */
   def getLeaderboardForUser(userId: Long, projectIds: String, challengeIds: String, countryCodes: String,
                             monthDuration: String, start: String, end: String, onlyEnabled: Boolean, bracket: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
+    this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getLeaderboardForUser(
         userId, Utils.toLongList(projectIds), Utils.toLongList(challengeIds), Utils.toStringList(countryCodes),
         Try(monthDuration.toInt).toOption, Utils.getDate(start), Utils.getDate(end), onlyEnabled, bracket

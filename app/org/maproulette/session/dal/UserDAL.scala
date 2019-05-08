@@ -10,6 +10,8 @@ import anorm._
 import com.vividsolutions.jts.geom.{Coordinate, GeometryFactory, Point}
 import com.vividsolutions.jts.io.{WKTReader, WKTWriter}
 import javax.inject.{Inject, Singleton}
+import java.time.{LocalDate, Period}
+import java.time.format.DateTimeFormatter
 import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
 import org.maproulette.Config
@@ -1028,6 +1030,105 @@ class UserDAL @Inject()(override val db: Database,
     this.projectDAL.retrieveByName(homeName) match {
       case Some(project) => project
       case None => throw new NotFoundException("You should never get this exception, Home project should always exist for user.")
+    }
+  }
+
+  /**
+    * Gets metrics for a user
+    *
+    * @param userId       The id of the user you are requesting the saved challenges for
+    * @param user         The user making the request
+    * @param taskMonthDuration
+    * @param reviewMonthDuration
+    * @param c            The existing connection if any
+    */
+  def getMetricsForUser(userId: Long, user: User, taskMonthDuration: Int, reviewMonthDuration: Int)(
+    implicit c: Option[Connection] = None): Map[String,Map[String,Int]] = {
+
+    val targetUser = retrieveById(userId)
+    targetUser match {
+      case Some(u) =>
+        if (u.settings.leaderboardOptOut.getOrElse(false) && !user.isSuperUser && userId != user.id) {
+          throw new IllegalAccessException(s"User metrics are not public for this user.")
+        }
+      case _ =>
+        throw new NotFoundException(s"Could not find user with id: $userId")
+    }
+
+    this.withMRConnection { implicit c =>
+      // Fetch task metrics
+      val timeClause = taskMonthDuration match {
+          case -1 => "1=1"
+          case default =>
+            val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val startMonth = LocalDate.now.minus(Period.ofMonths(taskMonthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            s"""sa1.created::DATE BETWEEN '$startMonth' AND '$today'"""
+        }
+
+      val taskCountsParser: RowParser[Map[String,Int]] = {
+          get[Int]("total") ~
+          get[Int]("total_fixed") ~
+          get[Int]("total_false_positive") ~
+          get[Int]("total_already_fixed") ~
+          get[Int]("total_too_hard") ~
+          get[Int]("total_skipped") map {
+          case total ~ fixed ~ falsePositive ~ alreadyFixed ~ tooHard ~ skipped => {
+            Map("total" -> total, "fixed" -> fixed, "falsePositive" -> falsePositive,
+                "alreadyFixed" -> alreadyFixed, "tooHard" -> tooHard, "skipped" -> skipped)
+          }
+        }
+      }
+
+      val taskCountsQuery =
+       s"""SELECT COUNT(tasks.id) AS total,
+             COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_FIXED} then 1 else 0 end), 0) total_fixed,
+             COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_FALSE_POSITIVE} then 1 else 0 end), 0) total_false_positive,
+             COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_ALREADY_FIXED} then 1 else 0 end), 0) total_already_fixed,
+             COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_TOO_HARD} then 1 else 0 end), 0) total_too_hard,
+             COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_SKIPPED} then 1 else 0 end), 0) total_skipped
+           FROM tasks
+           INNER JOIN status_actions sa1 ON sa1.task_id = tasks.id AND sa1.status = tasks.status
+           INNER JOIN users ON users.osm_id = sa1.osm_user_id AND users.id=${userId}
+           WHERE $timeClause;"""
+
+       val taskCounts = SQL(taskCountsQuery).as(taskCountsParser.single)
+
+       // Now fetch Review Metrics
+       val reviewTimeClause = reviewMonthDuration match {
+           case -1 => "1=1"
+           case default =>
+             val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+             val startMonth = LocalDate.now.minus(Period.ofMonths(reviewMonthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+             s"""reviewed_at::DATE BETWEEN '$startMonth' AND '$today'"""
+         }
+
+       val reviewCountsParser: RowParser[Map[String,Int]] = {
+           get[Int]("total") ~
+           get[Int]("approvedCount") ~
+           get[Int]("rejectedCount") ~
+           get[Int]("assistedCount") ~
+           get[Int]("disputedCount") map {
+           case total ~ approvedCount ~ rejectedCount ~ assistedCount ~ disputedCount => {
+             Map("total" -> total, "approved" -> approvedCount, "rejected" -> rejectedCount,
+                 "assisted" -> assistedCount, "disputed" -> disputedCount)
+           }
+         }
+       }
+
+       val reviewCountsQuery =
+         s"""
+            |SELECT count(*) as total,
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_APPROVED} then 1 else 0 end), 0) approvedCount,
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REJECTED} then 1 else 0 end), 0) rejectedCount,
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_ASSISTED} then 1 else 0 end), 0) assistedCount,
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_DISPUTED} then 1 else 0 end), 0) disputedCount
+            |FROM task_review
+            |WHERE task_review.review_requested_by = $userId AND ${reviewTimeClause}
+        """.stripMargin
+        
+        val reviewCounts = SQL(reviewCountsQuery).as(reviewCountsParser.single)
+
+       Map("tasks" -> taskCounts, "reviewTasks" -> reviewCounts)
     }
   }
 }
