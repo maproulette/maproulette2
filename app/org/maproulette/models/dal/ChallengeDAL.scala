@@ -706,7 +706,12 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     }
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit item =>
       this.withMRTransaction { implicit c =>
-        SQL"UPDATE challenges SET parent_id = $newParent WHERE id = $challengeId RETURNING #${this.retrieveColumns}".as(this.parser.*).headOption
+        val movedChallenge = SQL"UPDATE challenges SET parent_id = $newParent WHERE id = $challengeId RETURNING #${this.retrieveColumns}".as(this.parser.*).headOption
+
+        // Also update status_actions so we don't lose our history
+        SQL"UPDATE status_actions SET project_id = $newParent WHERE challenge_id = $challengeId".execute()
+
+        movedChallenge
       }
     }
   }
