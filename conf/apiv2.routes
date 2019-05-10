@@ -3316,7 +3316,7 @@ GET     /data/challenge/:challengeId                @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###
-POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1)
+POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1, onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)
 ### NoDocs ###
@@ -3332,7 +3332,7 @@ GET     /data/user/:userId/metrics                  @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
 ### NoDocs ###
-GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "")
+GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/challenge/:challengeId/activity       @org.maproulette.controllers.api.DataController.getChallengeActivity(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###

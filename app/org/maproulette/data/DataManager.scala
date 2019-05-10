@@ -322,7 +322,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
     */
   def getChallengeSummary(projectList: Option[List[Long]] = None, challengeId: Option[Long] = None,
                           limit: Int = (-1), offset: Int = 0, orderColumn: Option[String] = None, orderDirection: String = "ASC",
-                          searchString: String = "", priority: Option[Int] = None): List[ChallengeSummary] = {
+                          searchString: String = "", priority: Option[Int] = None, onlyEnabled: Boolean = false): List[ChallengeSummary] = {
     this.db.withConnection { implicit c =>
       val parser = for {
         id <- int("tasks.parent_id")
@@ -374,7 +374,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
                               INNER JOIN challenges c ON c.id = t.parent_id
                               INNER JOIN projects p ON p.id = c.parent_id
                               WHERE ${
-        if (challengeId.isEmpty) {
+        if (onlyEnabled) {
           "c.enabled = true AND p.enabled = true AND"
         } else {
           ""
