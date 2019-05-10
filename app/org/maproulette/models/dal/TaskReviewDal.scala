@@ -127,9 +127,9 @@ class TaskReviewDAL @Inject()(override val db: Database,
     * @param user The user executing the request
     * @return task
     */
-  def nextTaskReview(user:User, searchParameters: SearchParameters,
+  def nextTaskReview(user:User, searchParameters: SearchParameters, onlySaved: Boolean=false,
                     sort:String, order:String) (implicit c:Connection=null) : Option[Task] = {
-    val (count, result) = this.getReviewRequestedTasks(user, searchParameters, null, null, 1, 0, sort, order, false)
+    val (count, result) = this.getReviewRequestedTasks(user, searchParameters, null, null, onlySaved, 1, 0, sort, order, false)
     if (count == 0) {
       return None
     }
@@ -152,7 +152,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
     * @return A list of tasks
     */
   def getReviewRequestedTasks(user:User, searchParameters: SearchParameters,
-                              startDate:String, endDate:String,
+                              startDate:String, endDate:String, onlySaved: Boolean=false,
                               limit:Int = -1, offset:Int=0, sort:String, order:String, includeDisputed: Boolean = true)
                     (implicit c:Connection=null) : (Int, List[Task]) = {
     var orderByClause = ""
@@ -165,6 +165,12 @@ class TaskReviewDAL @Inject()(override val db: Database,
 
     val joinClause = new StringBuilder("INNER JOIN challenges c ON c.id = tasks.parent_id ")
     joinClause ++= "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id "
+    joinClause ++= "INNER JOIN projects p ON p.id = c.parent_id "
+
+    if (onlySaved) {
+      joinClause ++= "INNER JOIN saved_challenges sc ON sc.challenge_id = c.id "
+      this.appendInWhereClause(whereClause, s"sc.user_id = ${user.id}")
+    }
 
     this.appendInWhereClause(whereClause,
       s"(task_review.review_claimed_at IS NULL OR task_review.review_claimed_by = ${user.id})")
@@ -199,7 +205,6 @@ class TaskReviewDAL @Inject()(override val db: Database,
           s"""
             SELECT tasks.${this.retrieveColumnsWithReview} FROM tasks
             ${joinClause}
-            INNER JOIN projects p ON p.id = c.parent_id
             INNER JOIN groups g ON g.project_id = p.id
             INNER JOIN user_groups ug ON g.id = ug.group_id
             WHERE ((p.enabled AND c.enabled) OR
@@ -227,7 +232,6 @@ class TaskReviewDAL @Inject()(override val db: Database,
         s"""
           SELECT count(*) FROM tasks
           ${joinClause}
-          INNER JOIN projects p ON p.id = c.parent_id
           INNER JOIN groups g ON g.project_id = p.id
           INNER JOIN user_groups ug ON g.id = ug.group_id
           WHERE ((p.enabled AND c.enabled) OR
@@ -273,6 +277,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
     val whereClause = new StringBuilder(s"${fetchBy}=${user.id}")
     val joinClause = new StringBuilder("INNER JOIN challenges c ON c.id = tasks.parent_id ")
     joinClause ++= "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id "
+    joinClause ++= "INNER JOIN projects p ON p.id = c.parent_id"
 
     val parameters = new ListBuffer[NamedParameter]()
     parameters ++= addSearchToQuery(searchParameters, whereClause)
@@ -328,7 +333,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
     * @return A list of tasks
     */
   def getReviewMetrics(user:User, reviewTasksType:Int, searchParameters: SearchParameters,
-                       startDate:String, endDate:String)
+                       startDate:String, endDate:String, onlySaved: Boolean=false)
                        (implicit c:Connection=null) : List[ReviewMetrics] = {
 
    // 1: REVIEW_TASKS_TO_BE_REVIEWED = 'tasksToBeReviewed'
@@ -338,15 +343,20 @@ class TaskReviewDAL @Inject()(override val db: Database,
     val fetchBy = if (reviewTasksType == 2) "task_review.reviewed_by" else "task_review.review_requested_by"
     val joinClause = new StringBuilder("INNER JOIN challenges c ON c.id = tasks.parent_id ")
     joinClause ++= "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id "
+    joinClause ++= "INNER JOIN projects p ON p.id = c.parent_id "
 
     var whereClause = new StringBuilder(s"${fetchBy}=${user.id}")
     if (reviewTasksType == 1) {
       whereClause = new StringBuilder(s"(task_review.review_status=${Task.REVIEW_STATUS_REQUESTED} OR task_review.review_status=${Task.REVIEW_STATUS_DISPUTED})")
 
+      if (onlySaved) {
+        joinClause ++= "INNER JOIN saved_challenges sc ON sc.challenge_id = c.id "
+        this.appendInWhereClause(whereClause, s"sc.user_id = ${user.id} ")
+      }
+
       if (!user.isSuperUser) {
         joinClause ++=
-          s""" INNER JOIN projects p ON p.id = c.parent_id
-               INNER JOIN groups g ON g.project_id = p.id
+          s""" INNER JOIN groups g ON g.project_id = p.id
                INNER JOIN user_groups ug ON g.id = ug.group_id """
 
         whereClause ++=
@@ -383,7 +393,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
      WHERE
      ${whereClause}
     """
-    
+
     val reviewMetricsParser: RowParser[ReviewMetrics] = {
         get[Int]("total") ~
         get[Int]("requested") ~
@@ -423,7 +433,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
     */
   def getReviewTaskClusters(user:User, reviewTasksType:Int, params: SearchParameters,
                             numberOfPoints: Int = TaskDAL.DEFAULT_NUMBER_OF_POINTS,
-                            startDate:String, endDate:String)
+                            startDate:String, endDate:String, onlySaved: Boolean=false)
                      (implicit c: Option[Connection] = None): List[TaskCluster] = {
     this.withMRConnection { implicit c =>
       val taskClusterParser = int("kmeans") ~ int("numberOfPoints") ~
@@ -438,15 +448,20 @@ class TaskReviewDAL @Inject()(override val db: Database,
       val fetchBy = if (reviewTasksType == 2) "task_review.reviewed_by" else "task_review.review_requested_by"
       val joinClause = new StringBuilder("INNER JOIN challenges c ON c.id = tasks.parent_id ")
       joinClause ++= "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id "
+      joinClause ++= "INNER JOIN projects p ON p.id = c.parent_id "
 
       var whereClause = new StringBuilder(s"${fetchBy}=${user.id}")
       if (reviewTasksType == 1) {
         whereClause = new StringBuilder(s"(task_review.review_status=${Task.REVIEW_STATUS_REQUESTED} OR task_review.review_status=${Task.REVIEW_STATUS_DISPUTED})")
 
+        if (onlySaved) {
+          joinClause ++= "INNER JOIN saved_challenges sc ON sc.challenge_id = c.id "
+          this.appendInWhereClause(whereClause, s"sc.user_id = ${user.id} ")
+        }
+
         if (!user.isSuperUser) {
           joinClause ++=
-            s""" INNER JOIN projects p ON p.id = c.parent_id
-                 INNER JOIN groups g ON g.project_id = p.id
+            s""" INNER JOIN groups g ON g.project_id = p.id
                  INNER JOIN user_groups ug ON g.id = ug.group_id """
 
           whereClause ++=
@@ -540,6 +555,14 @@ class TaskReviewDAL @Inject()(override val db: Database,
 
     searchParameters.location match {
       case Some(sl) => this.appendInWhereClause(whereClause, s"tasks.location @ ST_MakeEnvelope (${sl.left}, ${sl.bottom}, ${sl.right}, ${sl.top}, 4326)")
+      case None => // do nothing
+    }
+
+    searchParameters.projectSearch match {
+      case Some(ps) => {
+        val projectName = ps.replace("'","''")
+        this.appendInWhereClause(whereClause, s"""LOWER(p.display_name) LIKE LOWER('%${projectName}%')""")
+      }
       case None => // do nothing
     }
 

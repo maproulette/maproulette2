@@ -596,7 +596,7 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #     in: query
 #     description: The search string used to match the name of the person requesting the review. (review_requested_by)
 ###
-GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, onlySaved: Boolean ?= false, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves reviewed tasks that have been reviewed either by this user or where the user requested
 #          the review.
@@ -671,7 +671,7 @@ GET     /tasks/reviewed                          @org.maproulette.controllers.ap
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(onlySaved:Boolean ?= false, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves tasks that need review
 # produces: [ application/json ]
@@ -695,7 +695,7 @@ GET     /tasks/review/next                       @org.maproulette.controllers.ap
 #     in: query
 #     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
 ###
-GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null)
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -2569,6 +2569,42 @@ PUT     /tasks                                      @org.maproulette.controllers
 GET     /task/:id                                   @org.maproulette.controllers.api.TaskController.read(id:Long)
 ###
 # tags: [ Task ]
+# summary: Start working on a Task (locks it for the user)
+# produces: [ application/json ]
+# description: Locks a Task based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The locked Task
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+#   '404':
+#     description: ID field supplied but no Task found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Task to retrieve
+###
+GET     /task/:id/start                               @org.maproulette.controllers.api.TaskController.startOnTask(id:Long)
+###
+# tags: [ Task ]
+# summary: Release a Task (unlocks it)
+# produces: [ application/json ]
+# description: Unlocks a Task based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The unlocked Task
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+#   '404':
+#     description: ID field supplied but no Task found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Task to retrieve
+###
+GET     /task/:id/release                               @org.maproulette.controllers.api.TaskController.releaseTask(id:Long)
+###
+# tags: [ Task ]
 # summary: Retrieves an already existing Task
 # produces: [ application/json ]
 # description: Retrieves an already existing Task based on the name of the Task rather than an ID
@@ -2918,7 +2954,7 @@ GET     /taskCluster                                @org.maproulette.controllers
 #     in: query
 #     description: The end date to search within
 ###
-GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null)
+GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves tasks in a cluster
@@ -3280,7 +3316,7 @@ GET     /data/challenge/:challengeId                @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###
-POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1)
+POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1, onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)
 ### NoDocs ###
@@ -3292,9 +3328,11 @@ GET     /data/user/:userId/leaderboard              @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/user/:userId/topChallenges            @org.maproulette.controllers.api.DataController.getUserTopChallenges(userId:Long, projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, limit:Int ?= 20, offset:Int ?= 0)
 ### NoDocs ###
+GET     /data/user/:userId/metrics                  @org.maproulette.controllers.api.UserController.getMetricsForUser(userId:Long, monthDuration:Int ?= -1, reviewDuration:Int ?= -1)
+### NoDocs ###
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
 ### NoDocs ###
-GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "")
+GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/challenge/:challengeId/activity       @org.maproulette.controllers.api.DataController.getChallengeActivity(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###
@@ -3371,6 +3409,67 @@ GET     /user/:userId                               @org.maproulette.controllers
 #     type: string
 ###
 GET     /osmuser/:username                          @org.maproulette.controllers.api.UserController.getUserByOSMUsername(username:String)
+###
+# tags: [ User ]
+# summary: Deletes a user from the database
+# produces: [ application/json ]
+# description: This will delete a user completely from the database. It can also optionally anonymize the users data from actions taken in MapRoulette, like change in status for tasks, comments on tasks and answers to survey questions
+# responses:
+#   '200':
+#     description: An ok message stating the user was deleted
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request, only super users can make this request
+# parameters:
+#   - name: osmId
+#     in: path
+#     description: The OSM id of the user you want to delete
+#   - name: anonymize
+#     in: query
+#     description: Whether to anonymize the users data, false by default
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied ID
+# responses:
+#   '200':
+#     description: The retrieved User (with only basic info)
+#     schema:
+#       $ref: '#/definitions/org.maproulette.session.User'
+#   '404':
+#     description: If User with provided ID is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve
+###
+GET     /user/:userId/public                               @org.maproulette.controllers.api.UserController.getPublicUser(userId:Long)
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied OSM username
+# responses:
+#   '200':
+#     description: The retrieved User (with basic info)
+#     schema:
+#       $ref: '#/definitions/org.maproulette.session.User'
+#   '404':
+#     description: If User with provided OSM username is not found.
+# parameters:
+#   - name: username
+#     in: path
+#     description: The OSM username of the user to retrieve
+###
+GET     /osmuser/:username/public                          @org.maproulette.controllers.api.UserController.getPublicUserByOSMUsername(username:String)
 ###
 # tags: [ User ]
 # summary: Deletes a user from the database

@@ -295,6 +295,16 @@ class TaskDAL @Inject()(override val db: Database,
         NamedParameter("reviewedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewedBy)),
         NamedParameter("reviewedAt", ToParameterValue.apply[Option[DateTime]].apply(element.reviewedAt))
       ).as(long("create_update_task").*).head
+
+      // If we are updating the task review back to None then we need to delete its entry in the task_review table
+      cachedItem match {
+        case Some(item) =>
+          if (item.reviewRequestedBy != None && element.reviewRequestedBy == None) {
+            SQL("delete from task_review where task_id=" + element.id).execute()
+          }
+        case None => // ignore
+      }
+
       c.commit()
       // These updates were originally only done on insert or when the geometry actual was updated. However
       // a couple reasons why it is always performed. Firstly the location and geometry of a task is very
@@ -634,7 +644,8 @@ class TaskDAL @Inject()(override val db: Database,
     }
     if (user.settings.needsReview.get != User.REVIEW_NOT_NEEDED) {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
-                                                 reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED))) }
+                                                 reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED),
+                                                 reviewRequestedBy = Some(user.id))) }
     }
     else {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status))) }
@@ -694,7 +705,6 @@ class TaskDAL @Inject()(override val db: Database,
       else {
         reviewedBy = Some(user.id)
       }
-
       val updatedRows =
         SQL"""UPDATE task_review t SET review_status = $reviewStatus,
                                  #${fetchBy} = ${user.id},
@@ -930,6 +940,7 @@ class TaskDAL @Inject()(override val db: Database,
         case Nil => Task.statusMap.keys.toSeq
         case t => t
       }
+
       SQL(query).on('statusList -> slist).as(lp.*).headOption match {
         case Some(t) => Some(t)
         case None =>

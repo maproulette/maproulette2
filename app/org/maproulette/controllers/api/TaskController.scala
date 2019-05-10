@@ -146,6 +146,51 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
   }
 
   /**
+    * Start on task (lock it). An error will be returned if someone else has the lock.
+    *
+    * @param taskId     Id of task that you wish to start
+    * @return
+    */
+  def startOnTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      val task = this.dal.retrieveById(taskId) match {
+        case Some(t) => t
+        case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+      }
+
+      val success = this.dal.lockItem(user, task)
+      if (success == 0) {
+        throw new IllegalAccessException(s"Current task [${taskId}] is locked by another user.")
+      }
+
+      Ok(Json.toJson(task))
+    }
+  }
+
+  /**
+    * Releases the task (unlock it).
+    *
+    * @param taskId    Id of task that you wish to release
+    * @return
+    */
+  def releaseTask(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      val task = this.dal.retrieveById(taskId) match {
+        case Some(t) => t
+        case None => throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+      }
+
+      try {
+        this.dal.unlockItem(user, task)
+      } catch {
+        case e: Exception => logger.warn(e.getMessage)
+      }
+
+      Ok(Json.toJson(task))
+    }
+  }
+
+  /**
     * Gets a random task(s) given the provided tags.
     *
     * @param projectSearch   Filter on the name of the project

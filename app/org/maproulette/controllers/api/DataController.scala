@@ -138,7 +138,7 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
     */
   def getLeaderboardForUser(userId: Long, projectIds: String, challengeIds: String, countryCodes: String,
                             monthDuration: String, start: String, end: String, onlyEnabled: Boolean, bracket: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
+    this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(this.dataManager.getLeaderboardForUser(
         userId, Utils.toLongList(projectIds), Utils.toLongList(challengeIds), Utils.toStringList(countryCodes),
         Try(monthDuration.toInt).toOption, Utils.getDate(start), Utils.getDate(end), onlyEnabled, bracket
@@ -187,10 +187,10 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
     }
   }
 
-  def getProjectSummary(projects: String): Action[AnyContent] = Action.async { implicit request =>
+  def getProjectSummary(projects: String, onlyEnabled: Boolean = true): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       Ok(Json.toJson(
-        this.dataManager.getChallengeSummary(Utils.toLongList(projects))
+        this.dataManager.getChallengeSummary(Utils.toLongList(projects), onlyEnabled = onlyEnabled)
       ))
     }
   }
@@ -223,7 +223,7 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
     * @param projectIds A comma separated list of projects to filter by
     * @return
     */
-  def getChallengeSummaries(projectIds: String, priority: Int): Action[AnyContent] = Action.async { implicit request =>
+  def getChallengeSummaries(projectIds: String, priority: Int, onlyEnabled:Boolean = true): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       val postData = request.body.asInstanceOf[AnyContentAsFormUrlEncoded].data
       val draw = postData.get("draw").head.head.toInt
@@ -235,7 +235,7 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
       val orderColumnName = postData.get(s"columns[$orderColumnID][name]").head.headOption
       val projectList = Utils.toLongList(projectIds)
       val challengeSummaries =
-        this.dataManager.getChallengeSummary(projectList, None, length, start, orderColumnName, orderDirection, search, this.getPriority(priority))
+        this.dataManager.getChallengeSummary(projectList, None, length, start, orderColumnName, orderDirection, search, this.getPriority(priority), onlyEnabled)
 
       val summaryMap = challengeSummaries.map(summary => Map(
         "id" -> summary.id.toString,
