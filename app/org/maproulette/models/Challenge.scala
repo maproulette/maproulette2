@@ -74,7 +74,8 @@ case class ChallengeGeneral(owner: Long,
                             featured: Boolean = false,
                             popularity: Option[Int] = None,
                             checkinComment: String = "",
-                            checkinSource: String = "") extends DefaultWrites
+                            checkinSource: String = "",
+                            virtualParents: Option[Array[Long]] = None) extends DefaultWrites
 
 case class ChallengeCreation(overpassQL: Option[String] = None, remoteGeoJson: Option[String] = None) extends DefaultWrites
 
@@ -94,7 +95,8 @@ case class ChallengeExtra(defaultZoom: Int = Challenge.DEFAULT_ZOOM,
 case class ChallengeListing(id: Long,
                             parent: Long,
                             name: String,
-                            enabled: Boolean)
+                            enabled: Boolean,
+                            virtualParents: Option[Array[Long]] = None)
 
 /**
   * The ChallengeFormFix case class is built so that we can nest the form objects as there is a limit

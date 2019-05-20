@@ -14,6 +14,7 @@ import org.maproulette.models._
 import org.maproulette.permissions.Permission
 import org.maproulette.session.dal.UserGroupDAL
 import org.maproulette.session.{Group, SearchParameters, User}
+import org.maproulette.exception.NotFoundException
 import play.api.db.Database
 import play.api.libs.json.{JsValue, Json}
 
@@ -52,9 +53,11 @@ class ProjectDAL @Inject()(override val db: Database,
       get[Option[String]]("projects.description") ~
       get[Boolean]("projects.enabled") ~
       get[Option[String]]("projects.display_name") ~
-      get[Boolean]("projects.deleted") map {
-      case id ~ ownerId ~ name ~ created ~ modified ~ description ~ enabled ~ displayName ~ deleted =>
-        new Project(id, ownerId, name, created, modified, description, userGroupDAL.getProjectGroups(id, User.superUser), enabled, displayName, deleted)
+      get[Boolean]("projects.deleted") ~
+      get[Boolean]("projects.is_virtual") map {
+      case id ~ ownerId ~ name ~ created ~ modified ~ description ~ enabled ~ displayName ~ deleted ~ isVirtual =>
+        new Project(id, ownerId, name, created, modified, description,
+          userGroupDAL.getProjectGroups(id, User.superUser), enabled, displayName, deleted, Some(isVirtual))
     }
   }
 
@@ -98,9 +101,14 @@ class ProjectDAL @Inject()(override val db: Database,
       } else {
         project
       }
+      val isVirtual = setProject.isVirtual match {
+        case Some(v) => v
+        case _ => false
+      }
+
       val newProject = this.withMRTransaction { implicit c =>
-        SQL"""INSERT INTO projects (name, owner_id, display_name, description, enabled)
-              VALUES (${setProject.name}, ${user.osmProfile.id}, ${setProject.displayName}, ${setProject.description}, ${setProject.enabled})
+        SQL"""INSERT INTO projects (name, owner_id, display_name, description, enabled, is_virtual)
+              VALUES (${setProject.name}, ${user.osmProfile.id}, ${setProject.displayName}, ${setProject.description}, ${setProject.enabled}, ${isVirtual})
               RETURNING *""".as(parser.*).head
       }
       db.withTransaction { implicit c =>
@@ -225,6 +233,43 @@ class ProjectDAL @Inject()(override val db: Database,
       }
     }
   }
+
+  /**
+    * Lists the children of the parent
+    *
+    * @param limit  limits the number of children to be returned
+    * @param offset For paging, ie. the page number starting at 0
+    * @param id     The parent ID
+    * @return A list of children objects
+    */
+  override def listChildren(limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false, searchString: String = "",
+                   orderColumn: String = "challenges.id", orderDirection: String = "ASC")(implicit id: Long, c: Option[Connection] = None): List[Challenge] = {
+    this.retrieveById match {
+      case Some(project) =>
+        this.withMRConnection { implicit c =>
+          val query =
+            s"""SELECT challenges.${this.childColumns}, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids FROM challenges
+                          LEFT OUTER JOIN virtual_project_challenges vp ON challenges.id = vp.challenge_id
+                          WHERE
+                          (challenges.id IN (SELECT vp2.challenge_id FROM virtual_project_challenges vp2
+                                            WHERE vp2.project_id = {id})
+                            OR challenges.parent_id = {id})
+                          ${this.enabled(onlyEnabled)}
+                          ${this.searchField("name")}
+                          GROUP BY challenges.id
+                          ${this.order(Some(orderColumn), orderDirection)}
+                          LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
+
+          SQL(query).on('ss -> this.search(searchString),
+            'id -> ToParameterValue.apply[Long](p = keyToStatement).apply(id),
+            'offset -> offset)
+            .as(this.childDAL.withVirtualParentParser.*)
+        }
+      case _ =>
+        throw new NotFoundException("No project found with id $id")
+    }
+  }
+
 
   /**
     * Gets all the counts of challenges and surveys for each available project

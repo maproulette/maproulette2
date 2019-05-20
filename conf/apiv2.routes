@@ -489,6 +489,50 @@ PUT     /project/:id/challenges                     @org.maproulette.controllers
 GET     /project/:id/children                       @org.maproulette.controllers.api.ProjectController.expandedList(id:Long, limit:Int ?= 10, page:Int ?= 0)
 ###
 # tags: [ Project ]
+# summary: Add Challenge to a virtual Project
+# produces: [ application/json ]
+# description: Will add a challenge into a virtual project
+# responses:
+#   '200':
+#     description: Empty status body
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Project'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#   - name: projectId
+#     in: path
+#     description: The ID of the project you are adding the challenge to.
+###
+POST     /project/:projectId/challenge/:id/add           @org.maproulette.controllers.api.VirtualProjectController.addChallenge(projectId:Long, id:Long)
+###
+# tags: [ Project ]
+# summary: Remove Challenge from a virtual Project
+# produces: [ application/json ]
+# description: Will remove a challenge from a virtual project
+# responses:
+#   '200':
+#     description: Empty status body
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Project'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#   - name: projectId
+#     in: path
+#     description: The ID of the project you are removeing the challenge from.
+###
+POST     /project/:projectId/challenge/:id/remove           @org.maproulette.controllers.api.VirtualProjectController.removeChallenge(projectId:Long, id:Long)
+###
+# tags: [ Project ]
 # summary: Retrieves random Task
 # produces: [ application/json ]
 # description: Retrieves a random Task based on the search criteria and contained within the current project

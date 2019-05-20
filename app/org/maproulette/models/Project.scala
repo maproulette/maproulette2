@@ -25,7 +25,8 @@ case class Project(override val id: Long,
                    groups: List[Group] = List.empty,
                    enabled: Boolean = false,
                    displayName: Option[String] = None,
-                   deleted: Boolean = false) extends BaseObject[Long] {
+                   deleted: Boolean = false,
+                   isVirtual: Option[Boolean] = Some(false)) extends BaseObject[Long] {
 
   override val itemType: ItemType = ProjectType()
 }

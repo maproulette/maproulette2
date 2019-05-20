@@ -94,7 +94,8 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       case id ~ name ~ created ~ modified ~ description ~ infoLink ~ ownerId ~ parentId ~ instruction ~
         difficulty ~ blurb ~ enabled ~ challenge_type ~ featured ~ popularity ~ checkin_comment ~ checkin_source ~ overpassql ~ remoteGeoJson ~
         status ~ statusMessage ~ defaultPriority ~ highPriorityRule ~ mediumPriorityRule ~ lowPriorityRule ~
-        defaultZoom ~ minZoom ~ maxZoom ~ defaultBasemap ~ defaultBasemapId ~ customBasemap ~ updateTasks ~ lastTaskRefresh ~ location ~ bounding ~ deleted =>
+        defaultZoom ~ minZoom ~ maxZoom ~ defaultBasemap ~ defaultBasemapId ~ customBasemap ~ updateTasks ~ lastTaskRefresh ~ location ~
+        bounding ~ deleted =>
         val hpr = highPriorityRule match {
           case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
           case r => r
@@ -108,7 +109,76 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
           case r => r
         }
         new Challenge(id, name, created, modified, description, deleted, infoLink,
-          ChallengeGeneral(ownerId, parentId, instruction, difficulty, blurb, enabled, challenge_type, featured, popularity, checkin_comment.getOrElse(""), checkin_source.getOrElse("")),
+          ChallengeGeneral(ownerId, parentId, instruction, difficulty, blurb, enabled, challenge_type, featured, popularity, checkin_comment.getOrElse(""), checkin_source.getOrElse(""), None),
+          ChallengeCreation(overpassql, remoteGeoJson),
+          ChallengePriority(defaultPriority, hpr, mpr, lpr),
+          ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks),
+          status, statusMessage, lastTaskRefresh, location, bounding,
+        )
+    }
+  }
+
+  /**
+    * The row parser for Anorm to enable the object to be read from the retrieved row directly
+    * to the Challenge object.
+    */
+  val withVirtualParentParser: RowParser[Challenge] = {
+    get[Long]("challenges.id") ~
+      get[String]("challenges.name") ~
+      get[DateTime]("challenges.created") ~
+      get[DateTime]("challenges.modified") ~
+      get[Option[String]]("challenges.description") ~
+      get[Option[String]]("challenges.info_link") ~
+      get[Long]("challenges.owner_id") ~
+      get[Long]("challenges.parent_id") ~
+      get[String]("challenges.instruction") ~
+      get[Int]("challenges.difficulty") ~
+      get[Option[String]]("challenges.blurb") ~
+      get[Boolean]("challenges.enabled") ~
+      get[Int]("challenges.challenge_type") ~
+      get[Boolean]("challenges.featured") ~
+      get[Option[Int]]("challenges.popularity") ~
+      get[Option[String]]("challenges.checkin_comment") ~
+      get[Option[String]]("challenges.checkin_source") ~
+      get[Option[String]]("challenges.overpass_ql") ~
+      get[Option[String]]("challenges.remote_geo_json") ~
+      get[Option[Int]]("challenges.status") ~
+      get[Option[String]]("challenges.status_message") ~
+      get[Int]("challenges.default_priority") ~
+      get[Option[String]]("challenges.high_priority_rule") ~
+      get[Option[String]]("challenges.medium_priority_rule") ~
+      get[Option[String]]("challenges.low_priority_rule") ~
+      get[Int]("challenges.default_zoom") ~
+      get[Int]("challenges.min_zoom") ~
+      get[Int]("challenges.max_zoom") ~
+      get[Option[Int]]("challenges.default_basemap") ~
+      get[Option[String]]("challenges.default_basemap_id") ~
+      get[Option[String]]("challenges.custom_basemap") ~
+      get[Boolean]("challenges.updatetasks") ~
+      get[Option[DateTime]]("challenges.last_task_refresh") ~
+      get[Option[String]]("locationJSON") ~
+      get[Option[String]]("boundingJSON") ~
+      get[Boolean]("deleted") ~
+      get[Option[Array[Long]]]("virtual_parent_ids") map {
+      case id ~ name ~ created ~ modified ~ description ~ infoLink ~ ownerId ~ parentId ~ instruction ~
+        difficulty ~ blurb ~ enabled ~ challenge_type ~ featured ~ popularity ~ checkin_comment ~ checkin_source ~ overpassql ~ remoteGeoJson ~
+        status ~ statusMessage ~ defaultPriority ~ highPriorityRule ~ mediumPriorityRule ~ lowPriorityRule ~
+        defaultZoom ~ minZoom ~ maxZoom ~ defaultBasemap ~ defaultBasemapId ~ customBasemap ~ updateTasks ~ lastTaskRefresh ~ location ~
+        bounding ~ deleted ~ virtualParents =>
+        val hpr = highPriorityRule match {
+          case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
+          case r => r
+        }
+        val mpr = mediumPriorityRule match {
+          case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
+          case r => r
+        }
+        val lpr = lowPriorityRule match {
+          case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
+          case r => r
+        }
+        new Challenge(id, name, created, modified, description, deleted, infoLink,
+          ChallengeGeneral(ownerId, parentId, instruction, difficulty, blurb, enabled, challenge_type, featured, popularity, checkin_comment.getOrElse(""), checkin_source.getOrElse(""), virtualParents),
           ChallengeCreation(overpassql, remoteGeoJson),
           ChallengePriority(defaultPriority, hpr, mpr, lpr),
           ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks),
@@ -147,9 +217,35 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     get[Long]("challenges.id") ~
       get[Long]("challenges.parent_id") ~
       get[String]("challenges.name") ~
-      get[Boolean]("challenges.enabled") map {
-      case id ~ parent ~ name ~ enabled =>
-        ChallengeListing(id, parent, name, enabled)
+      get[Boolean]("challenges.enabled") ~
+      get[Option[Array[Long]]]("virtual_parent_ids") map {
+      case id ~ parent ~ name ~ enabled ~ virtualParents =>
+        ChallengeListing(id, parent, name, enabled, virtualParents)
+    }
+  }
+
+  /**
+    * A basic retrieval of the object based on the id. With caching, so if it finds
+    * the object in the cache it will return that object without checking the database, otherwise
+    * will hit the database directly.
+    *
+    * @param id The id of the object to be retrieved
+    * @return The object, None if not found
+    */
+  override def retrieveById(implicit id: Long, c: Option[Connection] = None): Option[Challenge] = {
+    this.cacheManager.withCaching { () =>
+      this.withMRConnection { implicit c =>
+        val query =
+          s"""
+            |SELECT c.$retrieveColumns, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids
+            |FROM challenges c
+            |LEFT OUTER JOIN virtual_project_challenges vp ON c.id = vp.challenge_id
+            |WHERE c.id = {id}
+            |GROUP BY c.id
+           """.stripMargin
+
+        SQL(query).on('id -> id).as(this.withVirtualParentParser.singleOpt)
+      }
     }
   }
 
@@ -191,6 +287,14 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     * @return The object that was inserted into the database. This will include the newly created id
     */
   override def insert(challenge: Challenge, user: User)(implicit c: Option[Connection] = None): Challenge = {
+    this.projectDAL.get().retrieveById(challenge.general.parent) match {
+      case Some(project) =>
+        if (project.isVirtual.getOrElse(false)) {
+          throw new InvalidException(s"Challenge cannot be created in a virtual project.")
+        }
+      case _ => throw new InvalidException(s"Cannot create challenge. Project is invalid.")
+    }
+
     this.permission.hasObjectWriteAccess(challenge, user)
     this.cacheManager.withOptionCaching { () =>
       this.withMRTransaction { implicit c =>
@@ -455,12 +559,15 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
               onlyEnabled: Boolean = false, challengeType: Int = Actions.ITEM_TYPE_CHALLENGE): List[ChallengeListing] = {
     this.withMRConnection { implicit c =>
       val query =
-        s"""SELECT c.id, c.parent_id, c.name, c.enabled FROM challenges c
+        s"""SELECT c.id, c.parent_id, c.name, c.enabled, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids FROM challenges c
                       INNER JOIN projects p ON p.id = c.parent_id
+                      LEFT OUTER JOIN virtual_project_challenges vp ON c.id = vp.challenge_id
                       WHERE challenge_type = $challengeType AND c.deleted = false AND p.deleted = false
                       ${this.enabled(onlyEnabled, "p")} ${this.enabled(onlyEnabled, "c")}
                       ${this.getLongListFilter(projectList, "p.id")}
+                      GROUP BY c.id
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
+
       SQL(query).on('offset -> offset).as(this.listingParser.*)
     }
   }
@@ -951,15 +1058,17 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
 
       val query =
         s"""
-           |SELECT ${this.retrieveColumns} FROM challenges c
+           |SELECT c.${this.retrieveColumns}, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids FROM challenges c
            |INNER JOIN projects p ON p.id = c.parent_id
+           |LEFT OUTER JOIN virtual_project_challenges vp ON c.id = vp.challenge_id
            |$joinClause
            |${s"WHERE $whereClause"}
+           |GROUP BY c.id
            |${orderByClause}
            |LIMIT ${this.sqlLimit(limit)} OFFSET $offset
          """.stripMargin
 
-      sqlWithParameters(query, parameters).as(this.parser.*)
+      sqlWithParameters(query, parameters).as(this.withVirtualParentParser.*)
     }
   }
 }
