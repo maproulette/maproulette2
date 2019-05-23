@@ -2962,6 +2962,942 @@
 			]
 		},
 		{
+			"name": "VirtualProject",
+			"item": [
+				{
+					"name": "Virtual Project Creation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "e8b33660-98cc-40fd-88a5-6a51bf8e541d",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setGlobalVariable(\"VPProjectID\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"VPProject\";",
+									"tests[\"description\"] = jsonData.description === \"Test virtual project for api testing.\";",
+									"tests[\"isVirtual\"] = jsonData.isVirtual === true;"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\":\"VPProject\",\n    \"description\":\"Test virtual project for api testing.\",\n    \"enabled\":true,\n    \"isVirtual\":true\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project"
+							]
+						},
+						"description": "Creates a base project for all the other Map Roulette API Testing"
+					},
+					"response": []
+				},
+				{
+					"name": "Challenge Project Creation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "e2e239b5-f0bb-4db2-9ff5-c35dcad3ac9a",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setGlobalVariable(\"SimpleProjectID1\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"SimpleProject1\";",
+									"tests[\"description\"] = jsonData.description === \"Test project containing all children used for api testing.\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\":\"SimpleProject1\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":false\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project"
+							]
+						},
+						"description": "Creates a base project for all the other Map Roulette API Testing"
+					},
+					"response": []
+				},
+				{
+					"name": "Challenge Creation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "8c9d2e3d-d15e-404e-b481-401d3784fa86",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setGlobalVariable(\"SimpleChallengeID1\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"SimpleChallenge1\";",
+									"tests[\"description\"] = jsonData.description === \"A simple challenge containing only the basic elements for a challenge\";",
+									"tests[\"instruction\"] = jsonData.instruction === \"Instruction for the simple challenge\";",
+									"tests[\"challengeType\"] = jsonData.challengeType === 1;"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\":\"SimpleChallenge1\",\n    \"description\":\"A simple challenge containing only the basic elements for a challenge\",\n    \"parent\":{{SimpleProjectID1}},\n    \"instruction\":\"Instruction for the simple challenge\",\n    \"enabled\":false\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/challenge",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"challenge"
+							]
+						},
+						"description": "Creates the most basic challenge with the least set of options in the body json"
+					},
+					"response": []
+				},
+				{
+					"name": "VP Challenge Add",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "6b0b445c-c19d-4118-be3c-df9246996105",
+								"exec": [
+									"tests[\"response code is 201\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{VPProjectID}}/challenge/{{SimpleChallengeID1}}/add",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{VPProjectID}}",
+								"challenge",
+								"{{SimpleChallengeID1}}",
+								"add"
+							]
+						},
+						"description": "Creates the most basic challenge with the least set of options in the body json"
+					},
+					"response": []
+				},
+				{
+					"name": "Project List",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "b990bc5d-5b6a-4f0b-ab1f-73ed847db742",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"tests[\"Body matches name\"] = responseBody.has(\"VPProject\");",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/projects?limit=-1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"projects"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "-1"
+								}
+							]
+						},
+						"description": "Lists all the projects in the system"
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Read",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"name\"] = jsonData.name === \"VPProject\";",
+									"tests[\"isVirtual\"] = jsonData.isVirtual === true;"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{VPProjectID}}"
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Children",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "6bc048ac-0af1-4d72-9b76-18cb706e8cda",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"jsonData.name === \"VPProject\";",
+									"tests[\"name\"] = jsonData.children[0].name === \"SimpleChallenge1\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{VPProjectID}}/children",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{VPProjectID}}",
+								"children"
+							]
+						},
+						"description": "Gets the children of the project"
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Summary",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/data/project/summary?projectList={{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"data",
+								"project",
+								"summary"
+							],
+							"query": [
+								{
+									"key": "projectList",
+									"value": "{{VPProjectID}}"
+								}
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": [
+						{
+							"name": "VP Project Summary",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "apiKey",
+										"value": "test"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": ""
+								},
+								"url": {
+									"raw": "http://localhost:9000/api/v2/data/project/summary?projectList={{VPProjectID}}",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "9000",
+									"path": [
+										"api",
+										"v2",
+										"data",
+										"project",
+										"summary"
+									],
+									"query": [
+										{
+											"key": "projectList",
+											"value": "{{VPProjectID}}"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Vary",
+									"value": "Accept-Encoding,Origin"
+								},
+								{
+									"key": "Content-Encoding",
+									"value": "gzip"
+								},
+								{
+									"key": "Date",
+									"value": "Thu, 23 May 2019 15:01:15 GMT"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								},
+								{
+									"key": "Content-Length",
+									"value": "28"
+								}
+							],
+							"cookie": [],
+							"body": "[]"
+						}
+					]
+				},
+				{
+					"name": "VP Project Leaderboard",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/data/user/leaderboard?projectIds={{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"data",
+								"user",
+								"leaderboard"
+							],
+							"query": [
+								{
+									"key": "projectIds",
+									"value": "{{VPProjectID}}"
+								}
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Activity",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/data/project/activity?projectList={{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"data",
+								"project",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "projectList",
+									"value": "{{VPProjectID}}"
+								}
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project User Summary",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/data/user/summary?projectList={{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"data",
+								"user",
+								"summary"
+							],
+							"query": [
+								{
+									"key": "projectList",
+									"value": "{{VPProjectID}}"
+								}
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Raw Activity",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5764c1b4-b2f2-410b-9bf1-fca395d7b00a",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"pm.test(\"Body is correct\", function () {",
+									"    pm.response.to.have.body(\"[]\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/data/raw/activity?projectIds={{VPProjectID}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"data",
+								"raw",
+								"activity"
+							],
+							"query": [
+								{
+									"key": "projectIds",
+									"value": "{{VPProjectID}}"
+								}
+							]
+						},
+						"description": "Gets the project from the supplied ID. Will need to modify the ID based on the ID returned from the creation API."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Challenge Remove",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "bb86b48d-e330-49e5-a4da-d098b2136260",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{VPProjectID}}/challenge/{{SimpleChallengeID1}}/remove",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{VPProjectID}}",
+								"challenge",
+								"{{SimpleChallengeID1}}",
+								"remove"
+							]
+						},
+						"description": "Creates the most basic challenge with the least set of options in the body json"
+					},
+					"response": []
+				},
+				{
+					"name": "Project Children",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "ded06c13-b45a-4536-9b8c-08232a15a1ca",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"name\"] = jsonData[0].name === \"SimpleChallenge1\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{SimpleProjectID1}}/challenges",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{SimpleProjectID1}}",
+								"challenges"
+							]
+						},
+						"description": "Gets the children of the project"
+					},
+					"response": []
+				},
+				{
+					"name": "Project Deletion",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "1257b0e9-25a3-4843-a7c2-1e366be2cf94",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"Status\"] = jsonData.status === \"OK\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{SimpleProjectID1}}?immediate=true",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{SimpleProjectID1}}"
+							],
+							"query": [
+								{
+									"key": "immediate",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Deletes the project created by the project creation. Would need to modify the supplied ID."
+					},
+					"response": []
+				},
+				{
+					"name": "VP Project Deletion",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "9dd6dd4b-9180-42aa-9d47-50b8eccc0771",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"Status\"] = jsonData.status === \"OK\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/project/{{VPProjectID}}?immediate=true",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"project",
+								"{{VPProjectID}}"
+							],
+							"query": [
+								{
+									"key": "immediate",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Deletes the project created by the project creation. Would need to modify the supplied ID."
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "tag",
 			"item": [
 				{

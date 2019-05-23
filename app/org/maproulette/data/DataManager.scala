@@ -208,12 +208,38 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       .as(get[Option[Int]]("count").single).getOrElse(0)
   }
 
+  private def buildProjectSearch(projectList: Option[List[Long]] = None, projectColumn: String, challengeColumn: String): String = {
+    projectList match {
+      case Some(idList) if idList.nonEmpty =>
+        s"""AND ($projectColumn IN (${idList.mkString(",")})
+                 OR 1 IN (SELECT 1 FROM unnest(ARRAY[${idList.mkString(",")}]) AS pIds
+                     WHERE pIds IN (SELECT vp.project_id FROM virtual_project_challenges vp
+                                    WHERE vp.challenge_id = ${challengeColumn})))"""
+      case _ => ""
+    }
+  }
+
+  private def findRelevantChallenges(projectList: Option[List[Long]]): Option[List[Long]] = {
+    this.db.withConnection { implicit c =>
+      // Let's determine all the challenges that are in these projects
+      // to make our query faster.
+      implicit val conjunction = Some(WHERE())
+      val projectChallengeQuery =
+        s"""SELECT id FROM challenges
+         ${getLongListFilter(projectList, "parent_id")} OR id IN
+          (SELECT challenge_id FROM virtual_project_challenges vp
+           ${getLongListFilter(projectList, "vp.project_id")})
+         """
+      Some(SQL(projectChallengeQuery).as(long("id").*))
+    }
+  }
+
   def getUserChallengeSummary(projectList: Option[List[Long]] = None, challengeId: Option[Long] = None,
                               start: Option[DateTime] = None, end: Option[DateTime] = None, priority: Option[Int]): UserSummary = {
     this.db.withConnection { implicit c =>
       val challengeProjectFilter = challengeId match {
         case Some(id) => s"AND sa.challenge_id = $id"
-        case None => getLongListFilter(projectList, "sa.project_id")
+        case None => buildProjectSearch(projectList, "sa.project_id", "sa.challenge_id")
       }
       val actionParser = for {
         available <- get[Option[Double]]("available")
@@ -400,12 +426,14 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
     * @param challengeId  The challenge used to filter the results, optional
     * @param searchString The search string that was applied to the query
     * @return A integer value which is the total challenges included in the results
+    *
+    * @deprecated("This method does not support virtual projects.", "05-23-2019")
     */
   def getTotalSummaryCount(projectList: Option[List[Long]] = None, challengeId: Option[Long] = None, searchString: String = ""): Int = {
     this.db.withConnection { implicit c =>
       val challengeFilter = challengeId match {
         case Some(id) if id != -1 => s"AND id = $id"
-        case _ => buildProjectSearch(projectList, "c.parent_id", "c.id")
+        case _ => getLongListFilter(projectList, "c.parent_id")
       }
       val query =
         s"""SELECT COUNT(*) AS total FROM challenges c
@@ -458,17 +486,6 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
     }
   }
 
-  private def buildProjectSearch(projectList: Option[List[Long]] = None, projectColumn: String, challengeColumn: String): String = {
-    val vpSearch = projectList match {
-      case Some(idList) if idList.nonEmpty =>
-        s"""OR 1 IN (SELECT 1 FROM unnest(ARRAY[${idList.mkString(",")}]) AS pIds
-                     WHERE pIds IN (SELECT vp.project_id FROM virtual_project_challenges vp
-                                    WHERE vp.challenge_id = ${challengeColumn}))"""
-      case _ => ""
-    }
-    getLongListFilter(projectList, projectColumn) + vpSearch
-  }
-
   /**
     * Gets the project activity (default will get data for all projects) grouped by timed action
     *
@@ -489,7 +506,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       } yield ChallengeActivity(seriesDate, status, Task.getStatusName(status).getOrElse("Unknown"), count)
       val challengeProjectFilter = challengeId match {
         case Some(id) => s"AND challenge_id = $id"
-        case None => buildProjectSearch(projectList, "project_id", "challenge_id")
+        case None => buildProjectSearch(projectList, "project_id", "c.id")
       }
       val dates = this.getDates(start, end)
       SQL"""
@@ -537,6 +554,12 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         status <- int("status_actions.status")
       } yield RawActivity(date, osmUserId, osmUsername, projectId, projectName, challengeId,
         challengeName, taskId, oldStatus, status)
+
+      var challengeList = challengeFilter
+      if (projectFilter != None) {
+        challengeList = findRelevantChallenges(projectFilter)
+      }
+
       SQL"""
          SELECT sa.created, sa.osm_user_id, u.name, sa.project_id, p.name, sa.challenge_id,
                  c.name, sa.task_id, sa.old_status, sa.status
@@ -545,8 +568,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
          INNER JOIN projects p ON p.id = sa.project_id
          INNER JOIN challenges c ON c.id = sa.challenge_id
          WHERE #${getDateClause("sa.created", start, end)}
-         #${getLongListFilter(projectFilter, "sa.project_id")}
-         #${getLongListFilter(challengeFilter, "sa.challenge_id")}
+         #${getLongListFilter(challengeList, "sa.challenge_id")}
          #${getLongListFilter(userFilter, "sa.osm_user_id")}
          """.as(parser.*)
     }
@@ -630,14 +652,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       // Let's determine all the challenges that are in these projects
       // to make our query faster.
       if (projectList != None) {
-        implicit val conjunction = Some(WHERE())
-        val projectChallengeQuery =
-          s"""SELECT id FROM challenges
-           ${getLongListFilter(projectFilter, "parent_id")} OR id IN
-            (SELECT challenge_id FROM virtual_project_challenges vp
-             ${getLongListFilter(projectFilter, "vp.project_id")})
-           """
-        challengeList = Some(SQL(projectChallengeQuery).as(long("id").*))
+        challengeList = findRelevantChallenges(projectList)
         projectList = None
       }
 
@@ -694,6 +709,14 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       case _ => ""
     }
 
+    var challengeList = challengeFilter
+
+    // Let's determine all the challenges that are in these projects
+    // to make our query faster.
+    if (projectFilter != None) {
+      challengeList = findRelevantChallenges(projectFilter)
+    }
+
     s"""
         SELECT users.id, users.name, users.avatar_url, ${this.scoreSumSQL()} AS score,
                ROW_NUMBER() OVER( ORDER BY ${this.scoreSumSQL()} DESC, sa.osm_user_id ASC)
@@ -705,8 +728,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
               $boundingSearch
               users.leaderboard_opt_out = FALSE
               ${getLongListFilter(userFilter, "users.id")}
-              ${getLongListFilter(projectFilter, "sa.project_id")}
-              ${getLongListFilter(challengeFilter, "sa.challenge_id")}
+              ${getLongListFilter(challengeList, "sa.challenge_id")}
         GROUP BY sa.osm_user_id, users.id
         ORDER BY score DESC, sa.osm_user_id ASC
       """
@@ -823,6 +845,14 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         case _ => ""
       }
 
+      var challengeList = challengeFilter
+
+      // Let's determine all the challenges that are in these projects
+      // to make our query faster.
+      if (projectFilter != None) {
+        challengeList = findRelevantChallenges(projectFilter)
+      }
+
       SQL"""SELECT sa.challenge_id, c.name, count(sa.challenge_id) as activity
             FROM status_actions sa, challenges c, projects p, users u
             #${taskTableIfNeeded}
@@ -831,8 +861,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
                   sa.osm_user_id = u.osm_id AND
                   #${boundingSearch}
                   sa.challenge_id = c.id
-                  #${getLongListFilter(projectFilter, "sa.project_id")}
-                  #${getLongListFilter(challengeFilter, "sa.challenge_id")}
+                  #${getLongListFilter(challengeList, "sa.challenge_id")}
                   #${enabledFilter}
             GROUP BY sa.challenge_id, c.name
             ORDER BY activity DESC, sa.challenge_id ASC
@@ -976,6 +1005,14 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       } yield RawActivity(date, osmUserId, osmUsername, projectId, projectName, challengeId,
         challengeName, taskId, oldStatus, status)
 
+      var challengeList = challengeFilter
+
+      // Let's determine all the challenges that are in these projects
+      // to make our query faster.
+      if (projectFilter != None) {
+        challengeList = findRelevantChallenges(projectFilter)
+      }
+
       SQL"""SELECT sa.*, challenges.name, projects.name, users.name FROM challenges, projects, users
             JOIN LATERAL (
               SELECT * FROM status_actions
@@ -986,8 +1023,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
             ) sa ON true
             WHERE challenges.parent_id = projects.id
             AND users.osm_id = sa.osm_user_id
-            #${getLongListFilter(projectFilter, "projects.id")}
-            #${getLongListFilter(challengeFilter, "challenges.id")}
+            #${getLongListFilter(challengeList, "challenges.id")}
       """.as(parser.*)
     }
   }
