@@ -1,13 +1,12 @@
 {
 	"info": {
-		"_postman_id": "fc293308-9da6-f4cc-0e4e-a634dc3111e8",
+		"_postman_id": "7fe91afa-9b71-444c-93d8-52e899aa5b99",
 		"name": "maproulette2",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
 		{
 			"name": "challenge",
-			"description": "",
 			"item": [
 				{
 					"name": "Challenge Project Creation",
@@ -1161,7 +1160,6 @@
 		},
 		{
 			"name": "VirtualChallenge",
-			"description": "",
 			"item": [
 				{
 					"name": "Challenge Project Creation",
@@ -1443,7 +1441,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeID}}",
 							"protocol": "http",
@@ -1485,7 +1486,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallengebyname/test",
 							"protocol": "http",
@@ -1576,7 +1580,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenges",
 							"protocol": "http",
@@ -1619,7 +1626,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeID}}/tasks",
 							"protocol": "http",
@@ -1661,7 +1671,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeID}}/task",
 							"protocol": "http",
@@ -1807,7 +1820,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/view/{{VirtualChallengeID}}",
 							"protocol": "http",
@@ -1849,7 +1865,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/clustered/{{VirtualChallengeID}}",
 							"protocol": "http",
@@ -1892,7 +1911,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeID}}",
 							"protocol": "http",
@@ -1983,7 +2005,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeIDList}}/tasks",
 							"protocol": "http",
@@ -2026,7 +2051,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeIDList}}",
 							"protocol": "http",
@@ -2115,7 +2143,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/virtualchallenge/11",
 							"protocol": "http",
@@ -2192,7 +2223,6 @@
 		},
 		{
 			"name": "data",
-			"description": "",
 			"item": [
 				{
 					"name": "ChallengeSummary",
@@ -2204,7 +2234,10 @@
 								"value": "test"
 							}
 						],
-						"body": {},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/data/challenge/8953?priority=1",
 							"protocol": "http",
@@ -2233,7 +2266,6 @@
 		},
 		{
 			"name": "project",
-			"description": "",
 			"item": [
 				{
 					"name": "Project Creation",
@@ -2241,14 +2273,16 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "e8b33660-98cc-40fd-88a5-6a51bf8e541d",
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
 									"postman.setGlobalVariable(\"SimpleProjectID\", jsonData.id);",
 									"tests[\"response code is 201\"] = responseCode.code === 201;",
 									"tests[\"name\"] = jsonData.name === \"SimpleProject\";",
-									"tests[\"description\"] = jsonData.description === \"Test project containing all children used for api testing.\";"
-								]
+									"tests[\"description\"] = jsonData.description === \"Test project containing all children used for api testing.\";",
+									"tests[\"isVirtual\"] = jsonData.isVirtual === false;"
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -2739,7 +2773,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"APITestProject\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":false\n}"
+							"raw": ""
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/projects?limit=-1",
@@ -2794,7 +2828,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"APITestProject\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":false\n}"
+							"raw": ""
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/projects/find?q=SimpleProject",
@@ -2850,7 +2884,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"APITestProject\",\n    \"description\":\"Test project containing all children used for api testing.\",\n    \"enabled\":false\n}"
+							"raw": ""
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/projectByName/SimpleProject",
@@ -2929,7 +2963,6 @@
 		},
 		{
 			"name": "tag",
-			"description": "",
 			"item": [
 				{
 					"name": "Tag Creation",
@@ -3134,7 +3167,6 @@
 		},
 		{
 			"name": "task",
-			"description": "",
 			"item": [
 				{
 					"name": "Setup Project",
@@ -3416,7 +3448,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"NewTask\",\n    \"description\":\"NewTask description\",\n    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]}\n}"
+							"raw": ""
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/task/{{NewTask}}",
@@ -3837,7 +3869,6 @@
 		},
 		{
 			"name": "user",
-			"description": "",
 			"item": [
 				{
 					"name": "Get Super User",

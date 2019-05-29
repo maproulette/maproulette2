@@ -340,7 +340,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         skipped, deleted, alreadyFixed, tooHard, answered))
       val challengeFilter = challengeId match {
         case Some(id) if id != -1 => s"AND t.parent_id = $id"
-        case _ => getLongListFilter(projectList, "c.parent_id")
+        case _ => buildProjectSearch(projectList, "c.parent_id", "c.id")
       }
       val priorityFilter = priority match {
         case Some(p) => s"AND t.priority = $p"
@@ -387,6 +387,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
                     ${this.order(orderColumn, orderDirection)}
                     LIMIT ${this.sqlLimit(limit)} OFFSET {offset}
         """
+
       SQL(query).on('ss -> this.search(searchString), 'offset -> offset).as(parser.*)
     }
   }
@@ -404,10 +405,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
     this.db.withConnection { implicit c =>
       val challengeFilter = challengeId match {
         case Some(id) if id != -1 => s"AND id = $id"
-        case _ => projectList match {
-          case Some(pl) => s"AND parent_id IN (${pl.mkString(",")})"
-          case None => ""
-        }
+        case _ => buildProjectSearch(projectList, "c.parent_id", "c.id")
       }
       val query =
         s"""SELECT COUNT(*) AS total FROM challenges c
@@ -460,6 +458,17 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
     }
   }
 
+  private def buildProjectSearch(projectList: Option[List[Long]] = None, projectColumn: String, challengeColumn: String): String = {
+    val vpSearch = projectList match {
+      case Some(idList) if idList.nonEmpty =>
+        s"""OR 1 IN (SELECT 1 FROM unnest(ARRAY[${idList.mkString(",")}]) AS pIds
+                     WHERE pIds IN (SELECT vp.project_id FROM virtual_project_challenges vp
+                                    WHERE vp.challenge_id = ${challengeColumn}))"""
+      case _ => ""
+    }
+    getLongListFilter(projectList, projectColumn) + vpSearch
+  }
+
   /**
     * Gets the project activity (default will get data for all projects) grouped by timed action
     *
@@ -480,7 +489,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       } yield ChallengeActivity(seriesDate, status, Task.getStatusName(status).getOrElse("Unknown"), count)
       val challengeProjectFilter = challengeId match {
         case Some(id) => s"AND challenge_id = $id"
-        case None => getLongListFilter(projectList, "project_id")
+        case None => buildProjectSearch(projectList, "project_id", "challenge_id")
       }
       val dates = this.getDates(start, end)
       SQL"""
@@ -615,6 +624,23 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         }
       }
 
+      var projectList = projectFilter
+      var challengeList = challengeFilter
+
+      // Let's determine all the challenges that are in these projects
+      // to make our query faster.
+      if (projectList != None) {
+        implicit val conjunction = Some(WHERE())
+        val projectChallengeQuery =
+          s"""SELECT id FROM challenges
+           ${getLongListFilter(projectFilter, "parent_id")} OR id IN
+            (SELECT challenge_id FROM virtual_project_challenges vp
+             ${getLongListFilter(projectFilter, "vp.project_id")})
+           """
+        challengeList = Some(SQL(projectChallengeQuery).as(long("id").*))
+        projectList = None
+      }
+
       val parser = for {
         userId <- long("users.id")
         name <- str("users.name")
@@ -622,8 +648,8 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         score <- int("score")
         rank <- int("row_number")
       } yield LeaderboardUser(userId, name, avatarURL, score, rank,
-        this.getUserTopChallenges(userId, projectFilter,
-          challengeFilter, countryCodeFilter,
+        this.getUserTopChallenges(userId, projectList,
+          challengeList, countryCodeFilter,
           monthDuration, start, end, onlyEnabled))
 
       var startDate = start
@@ -639,7 +665,7 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
       }
 
       SQL"""#${
-        this.leaderboardWithRankSQL(userFilter, projectFilter, challengeFilter,
+        this.leaderboardWithRankSQL(userFilter, projectList, challengeList,
           countryCodeFilter, startDate, endDate)
       }
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}

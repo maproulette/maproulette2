@@ -1335,7 +1335,12 @@ class TaskDAL @Inject()(override val db: Database,
     withMRConnection { implicit c =>
       val whereClause = new StringBuilder("")
       if (projectIdList.nonEmpty) {
-        this.appendInWhereClause(whereClause, s"project_id IN (${projectIdList.mkString(",")})")
+        var vpSearch =
+          s"""OR 1 IN (SELECT 1 FROM unnest(ARRAY[${projectIdList.mkString(",")}]) AS pIds
+                         WHERE pIds IN (SELECT vp.project_id FROM virtual_project_challenges vp
+                                        WHERE vp.challenge_id = tc.challenge_id))"""
+
+        this.appendInWhereClause(whereClause, s"project_id IN (${projectIdList.mkString(",")}) ${vpSearch}")
       }
       if (challengeIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"challenge_id IN (${challengeIdList.mkString(",")})")
@@ -1343,7 +1348,7 @@ class TaskDAL @Inject()(override val db: Database,
       if (taskIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
-
+            
       SQL(
         s"""
               SELECT * FROM task_comments tc
