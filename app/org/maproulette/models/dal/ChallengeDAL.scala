@@ -558,16 +558,24 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
   def listing(projectList: Option[List[Long]] = None, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0,
               onlyEnabled: Boolean = false, challengeType: Int = Actions.ITEM_TYPE_CHALLENGE): List[ChallengeListing] = {
     this.withMRConnection { implicit c =>
+      var projectFilter = ""
+      if (projectList != None) {
+        implicit val conjunction = None
+        projectFilter =
+          s"""AND (${this.getLongListFilter(projectList, "p.id")} OR c.id IN
+                 (SELECT challenge_id FROM virtual_project_challenges vp WHERE
+                  ${getLongListFilter(projectList, "vp.project_id")}))"""
+      }
+
       val query =
         s"""SELECT c.id, c.parent_id, c.name, c.enabled, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids FROM challenges c
                       INNER JOIN projects p ON p.id = c.parent_id
                       LEFT OUTER JOIN virtual_project_challenges vp ON c.id = vp.challenge_id
                       WHERE challenge_type = $challengeType AND c.deleted = false AND p.deleted = false
                       ${this.enabled(onlyEnabled, "p")} ${this.enabled(onlyEnabled, "c")}
-                      ${this.getLongListFilter(projectList, "p.id")}
+                      ${projectFilter}
                       GROUP BY c.id
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-
       SQL(query).on('offset -> offset).as(this.listingParser.*)
     }
   }
