@@ -679,7 +679,8 @@ class TaskDAL @Inject()(override val db: Database,
     * @return The number of rows updated, should only ever be 1
     */
   def setTaskReviewStatus(task: Task, reviewStatus: Int, user: User, actionId: Option[Long], commentContent: String="")(implicit c:Connection=null): Int = {
-    if (!user.settings.isReviewer.get && reviewStatus != Task.REVIEW_STATUS_REQUESTED) {
+    if (!user.settings.isReviewer.get && reviewStatus != Task.REVIEW_STATUS_REQUESTED &&
+         reviewStatus != Task.REVIEW_STATUS_DISPUTED) {
       throw new IllegalAccessException("User must be a reviewer to edit task review status.")
     }
 
@@ -1348,7 +1349,7 @@ class TaskDAL @Inject()(override val db: Database,
       if (taskIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
-            
+
       SQL(
         s"""
               SELECT * FROM task_comments tc
