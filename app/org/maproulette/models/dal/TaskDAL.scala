@@ -642,7 +642,7 @@ class TaskDAL @Inject()(override val db: Database,
 
       updatedRows
     }
-    if (user.settings.needsReview.get != User.REVIEW_NOT_NEEDED) {
+    if (reviewNeeded) {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
                                                  reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED),
                                                  reviewRequestedBy = Some(user.id))) }
@@ -1348,7 +1348,7 @@ class TaskDAL @Inject()(override val db: Database,
       if (taskIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
-            
+
       SQL(
         s"""
               SELECT * FROM task_comments tc
