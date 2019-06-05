@@ -69,7 +69,8 @@ case class RawActivity(date: DateTime, osmUserId: Long, osmUsername: String, pro
 case class LeaderboardChallenge(id: Long, name: String, activity: Int)
 
 case class LeaderboardUser(userId: Long, name: String, avatarURL: String,
-                           score: Int, rank: Int, topChallenges: List[LeaderboardChallenge])
+                           score: Int, rank: Int, created: DateTime,
+                           topChallenges: List[LeaderboardChallenge])
 
 /**
   * @author cuthbertm
@@ -591,7 +592,8 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
           avatarURL <- str("user_avatar_url")
           score <- int("user_score")
           rank <- int("user_ranking")
-        } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+          created <- get[DateTime]("created")
+        } yield LeaderboardUser(userId, name, avatarURL, score, rank, created,
           this.getUserTopChallenges(userId, projectFilter, challengeFilter,
             countryCodeFilter, monthDuration, start, end, onlyEnabled))
 
@@ -647,7 +649,8 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         avatarURL <- str("users.avatar_url")
         score <- int("score")
         rank <- int("row_number")
-      } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+        created <- get[DateTime]("created")
+      } yield LeaderboardUser(userId, name, avatarURL, score, rank, created,
         this.getUserTopChallenges(userId, projectList,
           challengeList, countryCodeFilter,
           monthDuration, start, end, onlyEnabled))
@@ -873,7 +876,8 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
           avatarURL <- str("user_avatar_url")
           score <- int("user_score")
           rank <- int("user_ranking")
-        } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+          created <- get[DateTime]("created")
+        } yield LeaderboardUser(userId, name, avatarURL, score, rank, created,
           this.getUserTopChallenges(userId, projectFilter, challengeFilter,
             countryCodeFilter, monthDuration, start, end, onlyEnabled))
 
@@ -922,7 +926,8 @@ class DataManager @Inject()(config: Config, db: Database, boundingBoxFinder: Bou
         avatarURL <- str("users.avatar_url")
         score <- int("score")
         rank <- int("row_number")
-      } yield LeaderboardUser(userId, name, avatarURL, score, rank,
+        created <- get[DateTime]("created")
+      } yield LeaderboardUser(userId, name, avatarURL, score, rank, created,
         this.getUserTopChallenges(userId, projectFilter, challengeFilter,
           countryCodeFilter, monthDuration, start, end, onlyEnabled))
 
