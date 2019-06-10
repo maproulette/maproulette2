@@ -135,14 +135,15 @@ class TaskReviewController @Inject()(override val sessionManager: SessionManager
     * @param order The order direction to sort
     * @return
     */
-  def getReviewedTasks(startDate: String=null, endDate: String=null,
-                       asReviewer: Boolean=false, allowReviewNeeded: Boolean=false,
+  def getReviewedTasks(mappers: String="", reviewers: String="",
+                       startDate: String=null, endDate: String=null, allowReviewNeeded: Boolean=false,
                        limit:Int, page:Int,
                        sort:String, order:String) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       SearchParameters.withSearch { implicit params =>
         val (count, result) = this.taskReviewDAL.getReviewedTasks(User.userOrMocked(user), params,
-             startDate, endDate, asReviewer, allowReviewNeeded, limit, page, sort, order)
+             Some(Utils.split(mappers)), Some(Utils.split(reviewers)),
+             startDate, endDate, allowReviewNeeded, limit, page, sort, order)
         Ok(Json.obj("total" -> count, "tasks" -> _insertExtraJSON(result)))
       }
     }
@@ -200,11 +201,14 @@ class TaskReviewController @Inject()(override val sessionManager: SessionManager
     * @param endDate Optional end date to filter by reviewedAt date
     * @return
     */
-  def getReviewMetrics(reviewTasksType: Int, startDate: String=null, endDate: String=null,
+  def getReviewMetrics(reviewTasksType: Int, mappers: String="", reviewers: String="",
+                       startDate: String=null, endDate: String=null,
                        onlySaved: Boolean=false) : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       SearchParameters.withSearch { implicit params =>
-        val result = this.taskReviewDAL.getReviewMetrics(User.userOrMocked(user), reviewTasksType, params, startDate, endDate, onlySaved)
+        val result = this.taskReviewDAL.getReviewMetrics(User.userOrMocked(user),
+                       reviewTasksType, params, Some(Utils.split(mappers)), Some(Utils.split(reviewers)),
+                       startDate, endDate, onlySaved)
         Ok(Json.toJson(result))
       }
     }
