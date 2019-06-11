@@ -418,7 +418,7 @@ class ChallengeController @Inject()(override val childController: TaskController
 
           s"""${task.taskId},$challengeId,"${task.name}","${Task.statusMap.get(task.status).get}",""" +
           s""""${Challenge.priorityMap.get(task.priority).get}",${task.mappedOn.getOrElse("")},""" +
-          s"""${task.reviewStatus.getOrElse("")},"${mapper}","${task.reviewRequestedBy.getOrElse("")}",""" +
+          s"""${task.reviewStatus.getOrElse("")},"${mapper}","${task.reviewedBy.getOrElse("")}",""" +
           s"""${task.reviewedAt.getOrElse("")},"${task.comments.getOrElse("")}"""".stripMargin
         }
       )
