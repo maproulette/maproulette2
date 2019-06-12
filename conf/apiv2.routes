@@ -1759,11 +1759,17 @@ GET     /challenge/:cid/previousTask/:id            @org.maproulette.controllers
 #   - name: id
 #     in: path
 #     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
-#   - name: filter
+#   - name: status
 #     in: query
 #     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
 ###
-GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, filter:String ?= "")
+GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
 ###
 # tags: [ Challenge ]
 # summary: Retrieves clustered Task points

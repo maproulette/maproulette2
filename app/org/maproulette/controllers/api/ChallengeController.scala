@@ -115,18 +115,32 @@ class ChallengeController @Inject()(override val childController: TaskController
     *
     * @param challengeId  The challenge with the geojson
     * @param statusFilter Filtering by status of the tasks
+    * @param reviewStatusFilter Filtering by review status of the tasks
+    * @param priorityFilter Filtering by priority of the tasks
     * @return
     */
-  def getChallengeGeoJSON(challengeId: Long, statusFilter: String): Action[AnyContent] = Action.async { implicit request =>
+  def getChallengeGeoJSON(challengeId: Long, statusFilter: String, reviewStatusFilter: String,
+                          priorityFilter: String): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       this.dal.retrieveById(challengeId) match {
         case Some(c) =>
-          val filter = if (StringUtils.isEmpty(statusFilter)) {
+          val status = if (StringUtils.isEmpty(statusFilter)) {
             None
           } else {
             Some(Utils.split(statusFilter).map(_.toInt))
           }
-          Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, filter)))
+          val reviewStatus = if (StringUtils.isEmpty(reviewStatusFilter)) {
+            None
+          } else {
+            Some(Utils.split(reviewStatusFilter).map(_.toInt))
+          }
+          val priority = if (StringUtils.isEmpty(priorityFilter)) {
+            None
+          } else {
+            Some(Utils.split(priorityFilter).map(_.toInt))
+          }
+
+          Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, status, reviewStatus, priority)))
         case None => throw new NotFoundException(s"No challenge with id $challengeId found.")
       }
     }

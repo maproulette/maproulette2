@@ -692,25 +692,64 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     *
     * @param challengeId  The id for the challenge
     * @param statusFilter To view the geojson for only challenges with a specific status
+    * @param reviewStatusFilter To view the geojson for only challenges with a specific review status
+    * @param priorityFilter To view the geojson for only challenges with a specific priority
     * @param c            The implicit connection for the function
     * @return
     */
-  def getChallengeGeometry(challengeId: Long, statusFilter: Option[List[Int]] = None)(implicit c: Option[Connection] = None): String = {
+  def getChallengeGeometry(challengeId: Long, statusFilter: Option[List[Int]] = None,
+                           reviewStatusFilter: Option[List[Int]] = None,
+                           priorityFilter: Option[List[Int]] = None)(implicit c: Option[Connection] = None): String = {
     this.withMRConnection { implicit c =>
-      val filter = statusFilter match {
-        case Some(s) => s"AND status IN (${s.mkString(",")}"
+      val status = statusFilter match {
+        case Some(s) => s"AND subT.status IN (${s.mkString(",")})"
         case None => ""
       }
+
+      val reviewStatus = reviewStatusFilter match {
+        case Some(s) => s" AND subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+        case None => ""
+      }
+
+      val priority = priorityFilter match {
+        case Some(p) => s" AND subT.priority IN (${p.mkString(",")})"
+        case None => ""
+      }
+
+      val query =
       SQL"""SELECT row_to_json(fc)::text as geometries
             FROM ( SELECT 'FeatureCollection' As type, array_to_json(array_agg(f)) As features
                    FROM ( SELECT 'Feature' As type,
                                   ST_AsGeoJSON(lg.geom)::json As geometry,
-                                  hstore_to_json(lg.properties) As properties
+                                  hstore_to_json(lg.properties)::jsonb ||
+                                  json_build_object('maproulette',
+                                      hstore_to_json(
+                                        hstore('taskId', t.id::text) ||
+                                        hstore('challengeId', t.parent_id::text) ||
+                                        hstore('taskName', t.name::text) ||
+                                        hstore('taskStatus', t.status::text) ||
+                                        hstore('taskPriority', t.priority::text) ||
+                                        hstore('mappedOn', t.mapped_on::text) ||
+                                        hstore('mapper',
+                                          (CASE WHEN tr.review_requested_by = NULL
+                                           THEN (select name from users where osm_id=sa.osm_user_id)::text
+                                           ELSE (select name from users where id=tr.review_requested_by)::text
+                                           END)) ||
+                                        hstore('reviewStatus', tr.review_status::text) ||
+                                        hstore('reviewer', (select name from users where id=tr.reviewed_by)::text) ||
+                                        hstore('reviewedAt', tr.reviewed_at::text)
+                                      )
+                                    )::jsonb
+                                  As properties
                           FROM task_geometries As lg
-                          WHERE task_id IN
-                          (SELECT DISTINCT id FROM tasks WHERE parent_id = $challengeId) #$filter
+                          INNER JOIN tasks t ON t.id = lg.task_id
+                          LEFT OUTER JOIN status_actions sa ON (sa.task_id = lg.task_id AND extract(epoch from age(sa.created, t.mapped_on)) < 0.1)
+                          LEFT OUTER JOIN task_review tr ON t.id = tr.task_id
+                          WHERE lg.task_id IN
+                          (SELECT DISTINCT id FROM tasks subT WHERE parent_id = $challengeId #$status #$priority #$reviewStatus)
                     ) As f
-            )  As fc""".as(str("geometries").single)
+            )  As fc"""
+            query.as(str("geometries").single)
     }
   }
 
