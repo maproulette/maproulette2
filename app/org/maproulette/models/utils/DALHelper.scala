@@ -195,10 +195,10 @@ trait DALHelper {
             case Some(ps) if ps.nonEmpty =>
               params.fuzzySearch match {
                 case Some(x) =>
-                  whereClause ++= this.fuzzySearch(s"$projectPrefix.name", "ps", x)(None)
+                  whereClause ++= this.fuzzySearch(s"$projectPrefix.display_name", "ps", x)(if (whereClause.isEmpty) None else Some(AND()))
                   parameters += ('ps -> ps)
                 case None =>
-                  whereClause ++= this.searchField(s"$projectPrefix.name", "ps")(None)
+                  whereClause ++= this.searchField(s"$projectPrefix.display_name", "ps")(if (whereClause.isEmpty) None else Some(AND()))
                   parameters += ('ps -> s"%$ps%")
               }
             case _ => // we can ignore this
@@ -283,7 +283,7 @@ trait DALHelper {
     */
   def searchField(column: String, key: String = "ss")
                  (implicit conjunction: Option[SQLKey] = Some(AND())): String =
-    s"${this.getSqlKey} LOWER($column) LIKE LOWER({$key})"
+    s" ${this.getSqlKey} LOWER($column) LIKE LOWER({$key})"
 
   /**
     * Adds fuzzy search to any query. This will include the Levenshtein, Metaphone and Soundex functions
@@ -305,7 +305,7 @@ trait DALHelper {
     } else {
       3
     }
-    s"""${this.getSqlKey} ($column <> '' AND
+    s""" ${this.getSqlKey} ($column <> '' AND
           (LEVENSHTEIN(LOWER($column), LOWER({$key})) < $score OR
             METAPHONE(LOWER($column), 4) = METAPHONE(LOWER({$key}), $metaphoneSize) OR
             SOUNDEX(LOWER($column)) = SOUNDEX(LOWER({$key})))

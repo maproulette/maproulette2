@@ -193,6 +193,7 @@ object Challenge {
   val STATUS_READY = 3
   val STATUS_PARTIALLY_LOADED = 4
   val STATUS_FINISHED = 5
+  val STATUS_DELETING_TASKS = 6
 
   /**
     * This will check to make sure that the json rule is fully valid. The simple check just makes sure

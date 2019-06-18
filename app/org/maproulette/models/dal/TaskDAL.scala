@@ -642,7 +642,7 @@ class TaskDAL @Inject()(override val db: Database,
 
       updatedRows
     }
-    if (user.settings.needsReview.get != User.REVIEW_NOT_NEEDED) {
+    if (reviewNeeded) {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
                                                  reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED),
                                                  reviewRequestedBy = Some(user.id))) }
@@ -679,7 +679,8 @@ class TaskDAL @Inject()(override val db: Database,
     * @return The number of rows updated, should only ever be 1
     */
   def setTaskReviewStatus(task: Task, reviewStatus: Int, user: User, actionId: Option[Long], commentContent: String="")(implicit c:Connection=null): Int = {
-    if (!user.settings.isReviewer.get && reviewStatus != Task.REVIEW_STATUS_REQUESTED) {
+    if (!user.settings.isReviewer.get && reviewStatus != Task.REVIEW_STATUS_REQUESTED &&
+         reviewStatus != Task.REVIEW_STATUS_DISPUTED) {
       throw new IllegalAccessException("User must be a reviewer to edit task review status.")
     }
 
@@ -1024,6 +1025,17 @@ class TaskDAL @Inject()(override val db: Database,
             """)
         parameters += ('statusList -> ToParameterValue.apply[List[Int]].apply(taskStatusList))
 
+        // Make sure that the user doesn't see the same task multiple times in
+        // the same hour. This prevents users from getting stuck at a priority
+        // boundary when there is only one task remaining that they're trying
+        // to skip, and also prevents the user from getting bounced between a
+        // small number of nearby skipped tasks when loading by proximity
+        appendInWhereClause(whereClause,
+          s"""NOT tasks.id IN (
+              |SELECT task_id FROM status_actions
+              |WHERE osm_user_id IN (${user.osmProfile.id})
+              |  AND created >= NOW() - '1 hour'::INTERVAL)""".stripMargin)
+
         priority match {
           case Some(p) => appendInWhereClause(whereClause, s"tasks.priority = $p")
           case None => //Ignore
@@ -1041,14 +1053,8 @@ class TaskDAL @Inject()(override val db: Database,
 
         val proximityOrdering = proximityId match {
           case Some(id) =>
-            // This where clause will make sure that the user doesn't see the same task multiple times in the same hour.
-            // It addresses a specific issue with proximity that can cause a user to get into an infinite loop
-            appendInWhereClause(whereClause,
-              s"""NOT tasks.id IN (
-                 |SELECT task_id FROM status_actions
-                 |WHERE osm_user_id IN (${user.osmProfile.id})
-                 |  AND created >= NOW() - '1 hour'::INTERVAL
-                 |UNION SELECT $id)""".stripMargin)
+            // Be sure not to serve the task the user just came from
+            appendInWhereClause(whereClause, s"tasks.id != $id")
             s"ST_Distance(tasks.location, (SELECT location FROM tasks WHERE id = $id)),"
           case None => ""
         }
@@ -1348,7 +1354,7 @@ class TaskDAL @Inject()(override val db: Database,
       if (taskIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
-            
+
       SQL(
         s"""
               SELECT * FROM task_comments tc

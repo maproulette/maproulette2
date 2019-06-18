@@ -662,10 +662,12 @@ GET     /tasks/review                          @org.maproulette.controllers.api.
 #   - name: endDate
 #     in: query
 #     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
-#   - name: asReviewer
+#   - name: mappers
 #     in: query
-#     description: Whether results should be tasks reviewed by this user or review requested by this user
-#   - name: allowReviewNeeded
+#     description: The mapper ids to search by. (review_requested_by)
+#   - name: reviewers
+#     in: query
+#     description: The reviewer ids to search by. (review_requested_by)
 #     in: query
 #     description: Whether results should be included tasks in tasks 'review requested'
 #   - name: limit
@@ -687,7 +689,7 @@ GET     /tasks/review                          @org.maproulette.controllers.api.
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskReviewController.getReviewedTasks(startDate: String ?= null, endDate: String ?= null, asReviewer:Boolean ?= false, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskReviewController.getReviewedTasks(mappers:String ?= "", reviewers:String ?= "", startDate: String ?= null, endDate: String ?= null, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
 # summary: Retrieves and claims a the next review needed Task
 # produces: [ application/json ]
@@ -732,6 +734,12 @@ GET     /tasks/review/next                       @org.maproulette.controllers.ap
 #   - name: reviewTasksType
 #     in: query
 #     description: integer value > 1 - To Be Reviewed 2 - User's reviewed Tasks 3 - All reviewed by users
+#   - name: mappers
+#     in: query
+#     description: the mapper ids to search by (review_requested_by)
+#   - name: reviewers
+#     in: query
+#     description: the reviewer ids to search by (reviewed_by)
 #   - name: startDate
 #     in: query
 #     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
@@ -739,7 +747,7 @@ GET     /tasks/review/next                       @org.maproulette.controllers.ap
 #     in: query
 #     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
 ###
-GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, mappers: String ?= "", reviewers: String ?= "", startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -1751,11 +1759,17 @@ GET     /challenge/:cid/previousTask/:id            @org.maproulette.controllers
 #   - name: id
 #     in: path
 #     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
-#   - name: filter
+#   - name: status
 #     in: query
 #     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
 ###
-GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, filter:String ?= "")
+GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
 ###
 # tags: [ Challenge ]
 # summary: Retrieves clustered Task points
@@ -3359,7 +3373,9 @@ GET     /tags                                       @org.maproulette.controllers
 GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, survey:Int ?= -1, priority:Int ?= -1)
 ### NoDocs ###
 GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
-### NoDocs ###
+###
+# deprecated: true
+###
 POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1, onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)

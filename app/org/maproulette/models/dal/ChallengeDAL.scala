@@ -558,16 +558,24 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
   def listing(projectList: Option[List[Long]] = None, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0,
               onlyEnabled: Boolean = false, challengeType: Int = Actions.ITEM_TYPE_CHALLENGE): List[ChallengeListing] = {
     this.withMRConnection { implicit c =>
+      var projectFilter = ""
+      if (projectList != None) {
+        implicit val conjunction = None
+        projectFilter =
+          s"""AND (${this.getLongListFilter(projectList, "p.id")} OR c.id IN
+                 (SELECT challenge_id FROM virtual_project_challenges vp WHERE
+                  ${getLongListFilter(projectList, "vp.project_id")}))"""
+      }
+
       val query =
         s"""SELECT c.id, c.parent_id, c.name, c.enabled, array_remove(array_agg(vp.project_id), NULL) AS virtual_parent_ids FROM challenges c
                       INNER JOIN projects p ON p.id = c.parent_id
                       LEFT OUTER JOIN virtual_project_challenges vp ON c.id = vp.challenge_id
                       WHERE challenge_type = $challengeType AND c.deleted = false AND p.deleted = false
                       ${this.enabled(onlyEnabled, "p")} ${this.enabled(onlyEnabled, "c")}
-                      ${this.getLongListFilter(projectList, "p.id")}
+                      ${projectFilter}
                       GROUP BY c.id
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-
       SQL(query).on('offset -> offset).as(this.listingParser.*)
     }
   }
@@ -619,6 +627,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                       WHERE featured = TRUE ${this.enabled(enabledOnly, "c")} ${this.enabled(enabledOnly, "p")}
                       AND c.deleted = false and p.deleted = false
                       AND (c.status <> ${Challenge.STATUS_BUILDING} AND
+                           c.status <> ${Challenge.STATUS_DELETING_TASKS} AND
                            c.status <> ${Challenge.STATUS_FAILED} AND
                            c.status <> ${Challenge.STATUS_FINISHED})
                       AND 0 < (SELECT COUNT(*) FROM tasks WHERE parent_id = c.id)
@@ -644,6 +653,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                       WHERE c.deleted = false and p.deleted = false
                       ${this.enabled(enabledOnly, "c")} ${this.enabled(enabledOnly, "p")}
                       AND (c.status <> ${Challenge.STATUS_BUILDING} AND
+                           c.status <> ${Challenge.STATUS_DELETING_TASKS} AND
                            c.status <> ${Challenge.STATUS_FAILED} AND
                            c.status <> ${Challenge.STATUS_FINISHED})
                       AND 0 < (SELECT COUNT(*) FROM tasks WHERE parent_id = c.id)
@@ -668,6 +678,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                       WHERE ${this.enabled(enabledOnly, "c")(None)} ${this.enabled(enabledOnly, "p")}
                       AND c.deleted = false and p.deleted = false
                       AND (c.status <> ${Challenge.STATUS_BUILDING} AND
+                           c.status <> ${Challenge.STATUS_DELETING_TASKS} AND
                            c.status <> ${Challenge.STATUS_FAILED} AND
                            c.status <> ${Challenge.STATUS_FINISHED})
                       ${this.order(Some("created"), "DESC", "c", true)}
@@ -681,25 +692,64 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     *
     * @param challengeId  The id for the challenge
     * @param statusFilter To view the geojson for only challenges with a specific status
+    * @param reviewStatusFilter To view the geojson for only challenges with a specific review status
+    * @param priorityFilter To view the geojson for only challenges with a specific priority
     * @param c            The implicit connection for the function
     * @return
     */
-  def getChallengeGeometry(challengeId: Long, statusFilter: Option[List[Int]] = None)(implicit c: Option[Connection] = None): String = {
+  def getChallengeGeometry(challengeId: Long, statusFilter: Option[List[Int]] = None,
+                           reviewStatusFilter: Option[List[Int]] = None,
+                           priorityFilter: Option[List[Int]] = None)(implicit c: Option[Connection] = None): String = {
     this.withMRConnection { implicit c =>
-      val filter = statusFilter match {
-        case Some(s) => s"AND status IN (${s.mkString(",")}"
+      val status = statusFilter match {
+        case Some(s) => s"AND subT.status IN (${s.mkString(",")})"
         case None => ""
       }
+
+      val reviewStatus = reviewStatusFilter match {
+        case Some(s) => s" AND subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+        case None => ""
+      }
+
+      val priority = priorityFilter match {
+        case Some(p) => s" AND subT.priority IN (${p.mkString(",")})"
+        case None => ""
+      }
+
+      val query =
       SQL"""SELECT row_to_json(fc)::text as geometries
             FROM ( SELECT 'FeatureCollection' As type, array_to_json(array_agg(f)) As features
                    FROM ( SELECT 'Feature' As type,
                                   ST_AsGeoJSON(lg.geom)::json As geometry,
-                                  hstore_to_json(lg.properties) As properties
+                                  hstore_to_json(lg.properties)::jsonb ||
+                                  json_build_object('maproulette',
+                                      hstore_to_json(
+                                        hstore('taskId', t.id::text) ||
+                                        hstore('challengeId', t.parent_id::text) ||
+                                        hstore('taskName', t.name::text) ||
+                                        hstore('taskStatus', t.status::text) ||
+                                        hstore('taskPriority', t.priority::text) ||
+                                        hstore('mappedOn', t.mapped_on::text) ||
+                                        hstore('mapper',
+                                          (CASE WHEN tr.review_requested_by = NULL
+                                           THEN (select name from users where osm_id=sa.osm_user_id)::text
+                                           ELSE (select name from users where id=tr.review_requested_by)::text
+                                           END)) ||
+                                        hstore('reviewStatus', tr.review_status::text) ||
+                                        hstore('reviewer', (select name from users where id=tr.reviewed_by)::text) ||
+                                        hstore('reviewedAt', tr.reviewed_at::text)
+                                      )
+                                    )::jsonb
+                                  As properties
                           FROM task_geometries As lg
-                          WHERE task_id IN
-                          (SELECT DISTINCT id FROM tasks WHERE parent_id = $challengeId) #$filter
+                          INNER JOIN tasks t ON t.id = lg.task_id
+                          LEFT OUTER JOIN status_actions sa ON (sa.task_id = lg.task_id AND extract(epoch from age(sa.created, t.mapped_on)) < 0.1)
+                          LEFT OUTER JOIN task_review tr ON t.id = tr.task_id
+                          WHERE lg.task_id IN
+                          (SELECT DISTINCT id FROM tasks subT WHERE parent_id = $challengeId #$status #$priority #$reviewStatus)
                     ) As f
-            )  As fc""".as(str("geometries").single)
+            )  As fc"""
+            query.as(str("geometries").single)
     }
   }
 
@@ -958,10 +1008,16 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       val filter = if (statusFilter.isEmpty) {
         ""
       } else {
-        s"AND status IN (${statusFilter.mkString(",")}"
+        s"AND status IN (${statusFilter.mkString(",")})"
       }
-      val query = s"""DELETE FROM tasks WHERE parent_id = {challengeId} $filter"""
-      SQL(query).on('challengeId -> challengeId).executeUpdate()
+
+      // Deleting tasks can be time consuming (~1 second per 15-20 tasks), so work in batches
+      val query = s"""DELETE FROM tasks WHERE id in (SELECT id from tasks WHERE parent_id = {challengeId} $filter LIMIT 50)"""
+      var deleteCount = 0
+      do {
+        deleteCount = SQL(query).on('challengeId -> challengeId).executeUpdate()
+      }
+      while(deleteCount > 0)
     }
   }
 
@@ -999,7 +1055,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       val joinClause = new StringBuilder()
       var orderByClause = ""
 
-      parameters ++= addSearchToQuery(searchParameters, whereClause)
+      parameters ++= addSearchToQuery(searchParameters, whereClause)(false)
 
       parameters ++= addChallengeTagMatchingToQuery(searchParameters, whereClause, joinClause)
 

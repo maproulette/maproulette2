@@ -222,6 +222,8 @@ class DataController @Inject()(sessionManager: SessionManager, challengeDAL: Cha
     *
     * @param projectIds A comma separated list of projects to filter by
     * @return
+    *
+    * @deprecated("This method does not support virtual projects.", "05-23-2019")
     */
   def getChallengeSummaries(projectIds: String, priority: Int, onlyEnabled:Boolean = true): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
