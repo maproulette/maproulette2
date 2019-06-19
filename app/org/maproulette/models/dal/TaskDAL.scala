@@ -1367,7 +1367,9 @@ class TaskDAL @Inject()(override val db: Database,
     }
   }
 
-  def retrieveTaskSummaries(challengeId: Long, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0): List[TaskSummary] =
+  def retrieveTaskSummaries(challengeId: Long, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0,
+                            statusFilter: Option[List[Int]] = None, reviewStatusFilter: Option[List[Int]] = None,
+                            priorityFilter: Option[List[Int]] = None): List[TaskSummary] =
     db.withConnection { implicit c =>
       val parser = for {
         taskId <- long("tasks.id")
@@ -1385,7 +1387,28 @@ class TaskDAL @Inject()(override val db: Database,
                           reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt,
                           comments)
 
-      SQL"""SELECT t.id, t.name, t.status, t.priority, sa_outer.username, t.mapped_on,
+      val status = statusFilter match {
+        case Some(s) => s"AND t.status IN (${s.mkString(",")})"
+        case None => ""
+      }
+
+      val reviewStatus = reviewStatusFilter match {
+        case Some(s) =>
+          var searchQuery = s"task_review.review_status IN (${s.mkString(",")})"
+          if (s.contains(-1)) {
+            // Return items that do not have a review status
+            searchQuery = searchQuery + " OR task_review.review_status IS NULL"
+          }
+          s" AND ($searchQuery)"
+        case None => ""
+      }
+
+      val priority = priorityFilter match {
+        case Some(p) => s" AND t.priority IN (${p.mkString(",")})"
+        case None => ""
+      }
+
+      val query = SQL"""SELECT t.id, t.name, t.status, t.priority, sa_outer.username, t.mapped_on,
                    task_review.review_status,
                    (SELECT name as reviewRequestedBy FROM users WHERE users.id = task_review.review_requested_by),
                    (SELECT name as reviewedBy FROM users WHERE users.id = task_review.reviewed_by),
@@ -1405,9 +1428,10 @@ class TaskDAL @Inject()(override val db: Database,
               WHERE sa.osm_user_id = u.osm_id
             ) AS sa_outer ON t.id = sa_outer.task_id AND t.status = sa_outer.status
             LEFT OUTER JOIN task_review ON task_review.task_id = t.id
-            WHERE t.parent_id = #${challengeId}
+            WHERE t.parent_id = #${challengeId} #${status} #${priority} #${reviewStatus}
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
-      """.as(parser.*)
+      """
+      query.as(parser.*)
     }
 
   /**

@@ -707,7 +707,13 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       }
 
       val reviewStatus = reviewStatusFilter match {
-        case Some(s) => s" AND subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+        case Some(s) =>
+          var searchQuery = s"subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+          if (s.contains(-1)) {
+            // Return items that do not have a review status
+            searchQuery = searchQuery + " OR subT.id NOT in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id)"
+          }
+          s" AND ($searchQuery)"
         case None => ""
       }
 

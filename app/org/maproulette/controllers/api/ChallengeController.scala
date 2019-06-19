@@ -140,7 +140,12 @@ class ChallengeController @Inject()(override val childController: TaskController
             Some(Utils.split(priorityFilter).map(_.toInt))
           }
 
-          Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, status, reviewStatus, priority)))
+          Result(
+            header = ResponseHeader(OK, Map(CONTENT_DISPOSITION -> s"attachment; filename=challenge_geojson.json")),
+            body = HttpEntity.Strict(
+              ByteString(this.dal.getChallengeGeometry(challengeId, status, reviewStatus, priority)),
+              Some("application/json;charset=utf-8;header=present"))
+          )
         case None => throw new NotFoundException(s"No challenge with id $challengeId found.")
       }
     }
@@ -442,9 +447,27 @@ class ChallengeController @Inject()(override val childController: TaskController
     * @param page        Used for paging
     * @return A csv list of tasks for the challenge
     */
-  def extractTaskSummaries(challengeId: Long, limit: Int, page: Int): Action[AnyContent] = Action.async { implicit request =>
+  def extractTaskSummaries(challengeId: Long, limit: Int, page: Int,
+                           statusFilter: String, reviewStatusFilter: String,
+                           priorityFilter: String): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      val tasks = this.dalManager.task.retrieveTaskSummaries(challengeId, limit, page)
+      val status = if (StringUtils.isEmpty(statusFilter)) {
+        None
+      } else {
+        Some(Utils.split(statusFilter).map(_.toInt))
+      }
+      val reviewStatus = if (StringUtils.isEmpty(reviewStatusFilter)) {
+        None
+      } else {
+        Some(Utils.split(reviewStatusFilter).map(_.toInt))
+      }
+      val priority = if (StringUtils.isEmpty(priorityFilter)) {
+        None
+      } else {
+        Some(Utils.split(priorityFilter).map(_.toInt))
+      }
+
+      val tasks = this.dalManager.task.retrieveTaskSummaries(challengeId, limit, page, status, reviewStatus, priority)
 
       val seqString = tasks.map(task => {
           var mapper = task.reviewRequestedBy.getOrElse("")

@@ -1905,8 +1905,17 @@ GET     /challenge/:id/comments/extract             @org.maproulette.controllers
 #   - name: page
 #     in: query
 #     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
 ###
-GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0)
+GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
 ###
 # tags: [ Challenge ]
 # summary: Match OSM Changesets
