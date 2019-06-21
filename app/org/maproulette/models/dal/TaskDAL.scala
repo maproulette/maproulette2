@@ -1012,15 +1012,14 @@ class TaskDAL @Inject()(override val db: Database,
         val parameters = new ListBuffer[NamedParameter]()
         val queryBuilder = new StringBuilder
         // The default where clause will check to see if the parents are enabled, that the task is
-        // not locked (or if it is, it is locked by the current user) and that the status of the task
-        // is either Created or Skipped
+        // not locked and that the status of the task is either Created or Skipped
         val taskStatusList = params.taskStatus match {
           case Some(l) if l.nonEmpty => l
           case _ => List(Task.STATUS_CREATED, Task.STATUS_SKIPPED, Task.STATUS_TOO_HARD)
         }
         val whereClause = new StringBuilder(
           s"""WHERE tasks.parent_id = $challengeId AND
-              (l.id IS NULL OR l.user_id = ${user.id}) AND
+              l.id IS NULL AND
               tasks.status IN ({statusList})
             """)
         parameters += ('statusList -> ToParameterValue.apply[List[Int]].apply(taskStatusList))
