@@ -2947,8 +2947,10 @@ PUT     /task/:id/changeset                         @org.maproulette.controllers
 #   - name: requestReview
 #     in: query
 #     description: Boolean indicating if a review is requested on this task. (Will override user settings if provided)
+#   - name: tags
+#     description: Optional tags to associate with this task
 ###
-PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "")
+PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
 # tags: [ Task ]
 # summary: Update Task Review Status
@@ -2976,8 +2978,10 @@ PUT     /task/:id/:status                           @org.maproulette.controllers
 #   - name: comment
 #     in: query
 #     description: Any comment that is provided by the user when setting the review status
+#   - name: tags
+#     description: Optional tags to associate with this task
 ###
-PUT     /task/:id/review/:status                           @org.maproulette.controllers.api.TaskController.setTaskReviewStatus(id:Long, status:Int, comment:String ?= "")
+PUT     /task/:id/review/:status                           @org.maproulette.controllers.api.TaskController.setTaskReviewStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
 # tags: [ Challenge ]
 # summary: Retrieves task clusters
@@ -3369,6 +3373,9 @@ DELETE  /tag/:id                                    @org.maproulette.controllers
 #   - name: prefix
 #     in: query
 #     description: The prefix for the Keywords you are looking for
+#   - name: tagType
+#     in: query
+#     description: Optional limit tags to a specific tagType ('challenges' or 'tasks')
 #   - name: limit
 #     in: query
 #     description: Limit the number of results returned in the response. Default value is 10.
@@ -3376,11 +3383,11 @@ DELETE  /tag/:id                                    @org.maproulette.controllers
 #     in: query
 #     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
 ###
-GET     /keywords                                   @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+GET     /keywords                                   @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 ###
 # tags: [ Tag (Deprecated) ]
 ###
-GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 ### NoDocs ###
 GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, survey:Int ?= -1, priority:Int ?= -1)
 ### NoDocs ###

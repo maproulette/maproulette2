@@ -43,7 +43,7 @@ trait TagsMixin[T <: BaseObject[Long]] {
   }
 
   /**
-    * Deletes tags from a given task.
+    * Deletes tags from a given item.
     * Must be authenticated to perform operation
     *
     * @param id   The id of the task
@@ -64,6 +64,24 @@ trait TagsMixin[T <: BaseObject[Long]] {
           NoContent
         }
       }
+    }
+  }
+
+  /**
+    * Add tags to a given item.
+    * Must be authenticated to perform operation
+    *
+    * @param id   The id of the item
+    * @param tags A comma separated list of tags to add
+    * @param user the user executing the request
+    */
+  def addTagstoItem(id:Long, tags:List[Tag], user:User): Unit = {
+    val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
+
+    if (tagIds.nonEmpty) {
+      // now we have the ids for the supplied tags, then lets map them to the item created
+      this.dalWithTags.updateItemTags(id, tagIds, user)
+      this.actionManager.setAction(Some(user), this.itemType.convertToItem(id), TagAdded(), tagIds.mkString(","))
     }
   }
 

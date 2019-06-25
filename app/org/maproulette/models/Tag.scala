@@ -19,7 +19,8 @@ case class Tag(override val id: Long,
                override val name: String,
                override val description: Option[String] = None,
                override val created: DateTime = DateTime.now(),
-               override val modified: DateTime = DateTime.now()) extends BaseObject[Long] {
+               override val modified: DateTime = DateTime.now(),
+               tagType: String = "challenges") extends BaseObject[Long] {
   override val itemType: ItemType = TagType()
 }
 

@@ -43,9 +43,9 @@ class TagController @Inject()(override val sessionManager: SessionManager,
     *               changing to offset 1 will return the next set of 10 tags.
     * @return
     */
-  def getTags(prefix: String, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
+  def getTags(prefix: String, tagType: String, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Json.toJson(this.dal.retrieveListByPrefix(prefix, limit, offset)))
+      Ok(Json.toJson(this.dal.findTags(prefix, tagType, limit, offset)))
     }
   }
 
