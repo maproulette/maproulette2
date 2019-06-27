@@ -480,14 +480,15 @@ class ChallengeController @Inject()(override val childController: TaskController
           s"""${task.taskId},$challengeId,"${task.name}","${Task.statusMap.get(task.status).get}",""" +
           s""""${Challenge.priorityMap.get(task.priority).get}",${task.mappedOn.getOrElse("")},""" +
           s"""${task.reviewStatus.getOrElse("")},"${mapper}","${task.reviewedBy.getOrElse("")}",""" +
-          s"""${task.reviewedAt.getOrElse("")},"${task.comments.getOrElse("")}"""".stripMargin
+          s"""${task.reviewedAt.getOrElse("")},"${task.comments.getOrElse("")}",""" +
+          s""""${task.tags.getOrElse("")}"""".stripMargin
         }
       )
       Result(
         header = ResponseHeader(OK, Map(CONTENT_DISPOSITION -> s"attachment; filename=challenge_${challengeId}_tasks.csv")),
         body = HttpEntity.Strict(
           ByteString(
-            "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,MappedOn,ReviewStatus,Mapper,Reviewer,ReviewedAt,Comments\n"
+            "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,MappedOn,ReviewStatus,Mapper,Reviewer,ReviewedAt,Comments,Tags\n"
           ).concat(ByteString(seqString.mkString("\n"))),
           Some("text/csv; header=present"))
       )

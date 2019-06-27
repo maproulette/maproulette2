@@ -744,7 +744,8 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                            END)) ||
                                         hstore('reviewStatus', tr.review_status::text) ||
                                         hstore('reviewer', (select name from users where id=tr.reviewed_by)::text) ||
-                                        hstore('reviewedAt', tr.reviewed_at::text)
+                                        hstore('reviewedAt', tr.reviewed_at::text) ||
+                                        hstore('tags', (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id))
                                       )
                                     )::jsonb
                                   As properties

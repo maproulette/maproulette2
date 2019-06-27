@@ -1354,7 +1354,7 @@ class TaskDAL @Inject()(override val db: Database,
       if (taskIdList.nonEmpty) {
         this.appendInWhereClause(whereClause, s"task_id IN (${taskIdList.mkString(",")})")
       }
-            
+
       SQL(
         s"""
               SELECT * FROM task_comments tc
@@ -1383,9 +1383,10 @@ class TaskDAL @Inject()(override val db: Database,
         reviewedBy <- get[Option[String]]("reviewedBy")
         reviewedAt <- get[Option[DateTime]]("task_review.reviewed_at")
         comments <- get[Option[String]]("comments")
+        tags <- get[Option[String]]("tags")
       } yield TaskSummary(taskId, name, status, priority, username, mappedOn,
                           reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt,
-                          comments)
+                          comments, tags)
 
       val status = statusFilter match {
         case Some(s) => s"AND t.status IN (${s.mkString(",")})"
@@ -1415,7 +1416,8 @@ class TaskDAL @Inject()(override val db: Database,
                    task_review.reviewed_at,
                    (SELECT string_agg(CONCAT((SELECT name from users where tc.osm_id = users.osm_id), ': ', comment),
                                       CONCAT(chr(10),'---',chr(10))) AS comments
-                    FROM task_comments tc WHERE tc.task_id = t.id)
+                    FROM task_comments tc WHERE tc.task_id = t.id),
+                   (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id)
             FROM tasks t LEFT OUTER JOIN (
               SELECT sa.task_id, sa.status, sa.osm_user_id, u.name AS username
               FROM users u, status_actions sa INNER JOIN (
@@ -1538,7 +1540,8 @@ class TaskDAL @Inject()(override val db: Database,
 
   case class TaskSummary(taskId: Long, name: String, status: Int, priority: Int, username: Option[String],
                          mappedOn: Option[DateTime], reviewStatus: Option[Int], reviewRequestedBy: Option[String],
-                         reviewedBy: Option[String], reviewedAt: Option[DateTime], comments: Option[String])
+                         reviewedBy: Option[String], reviewedAt: Option[DateTime], comments: Option[String],
+                         tags: Option[String])
 
 }
 
