@@ -97,7 +97,7 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param createdObject The Task that was created by the create function
     * @param user          the user executing the request
     */
-  def extractTags(body: JsValue, createdObject: T, user: User): Unit = {
+  def extractTags(body: JsValue, createdObject: T, user: User, completeList: Boolean = false): Unit = {
     val tags: List[Tag] = body \ "tags" match {
       case tags: JsDefined =>
         // this case is for a comma separated list, either of ints or strings
@@ -129,9 +129,9 @@ trait TagsMixin[T <: BaseObject[Long]] {
     }
     val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
 
-    if (tagIds.nonEmpty) {
+    if (tagIds.nonEmpty || completeList) {
       // now we have the ids for the supplied tags, then lets map them to the item created
-      this.dalWithTags.updateItemTags(createdObject.id, tagIds, user)
+      this.dalWithTags.updateItemTags(createdObject.id, tagIds, user, completeList)
       this.actionManager.setAction(Some(user), this.itemType.convertToItem(createdObject.id), TagAdded(), tagIds.mkString(","))
     }
   }
