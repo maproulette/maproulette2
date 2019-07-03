@@ -2841,6 +2841,32 @@ GET     /task/:id/tags                              @org.maproulette.controllers
 GET     /tasks/tags                                 @org.maproulette.controllers.api.TaskController.getItemsBasedOnTags(tags:String ?= "", limit:Int ?= 10, page:Int ?= 0)
 ###
 # tags: [ Task ]
+# summary: Updates Task Tags
+# description: Updates the tags on the Task
+# responses:
+#   '304':
+#     description: A basic 304 with NoContent will be returned on a successful delete
+#   '400':
+#     description: If no tags are supplied a BadRequest response will be returned
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the Task
+#   - name: tags
+#     in: query
+#     description: A complete comma separated list of tags. If empty, then all tags will be removed.
+#     required: true
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET  /task/:id/tags/update                              @org.maproulette.controllers.api.TaskController.updateItemTags(id:Long, tags:String ?= "")
+###
+# tags: [ Task ]
 # summary: Delete Task Tags
 # description: Deletes all the supplied tags from the Task
 # responses:

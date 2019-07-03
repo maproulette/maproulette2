@@ -67,6 +67,20 @@ trait TagsMixin[T <: BaseObject[Long]] {
     }
   }
 
+  def updateItemTags(id: Long, tags: String): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.authenticatedRequest { implicit user =>
+      val tagList = tags.split(",").toList
+      val tagObjects = tagList.map((tag) => new Tag(-1, tag.trim, tagType = this.dal.tableName))
+      val tagIds = this.tagDAL.updateTagList(tagObjects, user).map(_.id)
+
+      // now we have the ids for the supplied tags, then lets map them to the item created
+      this.dalWithTags.updateItemTags(id, tagIds, user, true)
+      this.actionManager.setAction(Some(user), this.itemType.convertToItem(id), TagAdded(), tagIds.mkString(","))
+
+      Ok(Json.toJson(this.getTags(id)))
+    }
+  }
+
   /**
     * Add tags to a given item.
     * Must be authenticated to perform operation

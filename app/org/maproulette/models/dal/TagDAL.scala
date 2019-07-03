@@ -194,7 +194,6 @@ class TagDAL @Inject()(override val db: Database,
     */
   def updateTagList(tags: List[Tag], user: User)(implicit c: Option[Connection] = None): List[Tag] = {
     if (tags.nonEmpty) {
-      this.permission.hasSuperAccess(user)
       implicit val names = tags.filter(_.name.nonEmpty).map(_.name)
       this.cacheManager.withCacheNameDeletion { () =>
         this.withMRTransaction { implicit c =>

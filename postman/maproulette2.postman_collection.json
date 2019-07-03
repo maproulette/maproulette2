@@ -5149,6 +5149,121 @@
 					"response": []
 				},
 				{
+					"name": "Task Tags Update",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "accfcc10-4c9d-432b-9798-e893f2cfd930",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"sometag1\");",
+									"    pm.expect(pm.response.text()).to.include(\"sometag2\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/task/{{NewTask1}}/tags/update?tags=sometag1,sometag2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"task",
+								"{{NewTask1}}",
+								"tags",
+								"update"
+							],
+							"query": [
+								{
+									"key": "tags",
+									"value": "sometag1,sometag2"
+								}
+							]
+						},
+						"description": "Gets the tag"
+					},
+					"response": []
+				},
+				{
+					"name": "Read Task Tags",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "accfcc10-4c9d-432b-9798-e893f2cfd930",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"sometag1\");",
+									"    pm.expect(pm.response.text()).to.include(\"sometag2\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/task/{{NewTask1}}/tags",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"task",
+								"{{NewTask1}}",
+								"tags"
+							]
+						},
+						"description": "Gets the tag"
+					},
+					"response": []
+				},
+				{
 					"name": "Teardown",
 					"event": [
 						{
