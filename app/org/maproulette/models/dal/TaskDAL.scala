@@ -305,13 +305,12 @@ class TaskDAL @Inject()(override val db: Database,
         case None => // ignore
       }
 
-      c.commit()
       // These updates were originally only done on insert or when the geometry actual was updated. However
       // a couple reasons why it is always performed. Firstly the location and geometry of a task is very
       // important and so it is vital that the database reflects the requirements from the user. And secondly
       // there were some issues where the database would not be updated and you may get null locations
       // or null geometries. So this always makes sure that the task data is correct
-      this.updateGeometries(updatedTaskId, Json.parse(element.geometries))
+      this.updateGeometries(updatedTaskId, Json.parse(element.geometries))(Some(c))
       element.suggestedFix match {
         case Some(value) => this.addSuggestedFix(updatedTaskId, Json.parse(value))
         case None => // just do nothing
@@ -645,10 +644,12 @@ class TaskDAL @Inject()(override val db: Database,
     if (reviewNeeded) {
       this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
                                                  reviewStatus = Some(Task.REVIEW_STATUS_REQUESTED),
-                                                 reviewRequestedBy = Some(user.id))) }
+                                                 reviewRequestedBy = Some(user.id),
+                                                 modified = new DateTime())) }
     }
     else {
-      this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status))) }
+      this.cacheManager.withOptionCaching { () => Some(task.copy(status = Some(status),
+                                                                 modified = new DateTime()))}
     }
     this.challengeDAL.get().updateFinishedStatus()(task.parent)
 
@@ -1075,6 +1076,31 @@ class TaskDAL @Inject()(override val db: Database,
   }
 
   /**
+    * Retrieve tasks geographically closest to the given task id within the
+    * given challenge. Ignores tasks that are complete, locked by other users,
+    * or that the current user has worked on in the last hour
+    */
+  def getNearbyTasks(user: User, challengeId: Long, proximityId: Long, limit: Int = 5)
+                    (implicit c: Option[Connection] = None): List[Task] = {
+    val query = s"""SELECT tasks.$retrieveColumnsWithReview FROM tasks
+      LEFT JOIN locked l ON l.item_id = tasks.id
+      LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
+      WHERE tasks.id <> $proximityId AND
+            tasks.parent_id = $challengeId AND
+            (l.id IS NULL OR l.user_id = ${user.id}) AND
+            tasks.status IN (0, 3, 6) AND
+            NOT tasks.id IN (
+                SELECT task_id FROM status_actions
+                WHERE osm_user_id = ${user.osmProfile.id} AND created >= NOW() - '1 hour'::INTERVAL)
+      ORDER BY ST_Distance(tasks.location, (SELECT location FROM tasks WHERE id = $proximityId)), tasks.status, RANDOM()
+      LIMIT ${this.sqlLimit(limit)}"""
+
+    this.withMRTransaction { implicit c =>
+      SQL(query).as(this.parser.*)
+    }
+  }
+
+  /**
     * Retrieves a random challenge from the list of possible challenges in the search list
     *
     * @param params The params to search for the random challenge
@@ -1367,7 +1393,9 @@ class TaskDAL @Inject()(override val db: Database,
     }
   }
 
-  def retrieveTaskSummaries(challengeId: Long, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0): List[TaskSummary] =
+  def retrieveTaskSummaries(challengeId: Long, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0,
+                            statusFilter: Option[List[Int]] = None, reviewStatusFilter: Option[List[Int]] = None,
+                            priorityFilter: Option[List[Int]] = None): List[TaskSummary] =
     db.withConnection { implicit c =>
       val parser = for {
         taskId <- long("tasks.id")
@@ -1381,18 +1409,41 @@ class TaskDAL @Inject()(override val db: Database,
         reviewedBy <- get[Option[String]]("reviewedBy")
         reviewedAt <- get[Option[DateTime]]("task_review.reviewed_at")
         comments <- get[Option[String]]("comments")
+        tags <- get[Option[String]]("tags")
       } yield TaskSummary(taskId, name, status, priority, username, mappedOn,
                           reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt,
-                          comments)
+                          comments, tags)
 
-      SQL"""SELECT t.id, t.name, t.status, t.priority, sa_outer.username, t.mapped_on,
+      val status = statusFilter match {
+        case Some(s) => s"AND t.status IN (${s.mkString(",")})"
+        case None => ""
+      }
+
+      val reviewStatus = reviewStatusFilter match {
+        case Some(s) =>
+          var searchQuery = s"task_review.review_status IN (${s.mkString(",")})"
+          if (s.contains(-1)) {
+            // Return items that do not have a review status
+            searchQuery = searchQuery + " OR task_review.review_status IS NULL"
+          }
+          s" AND ($searchQuery)"
+        case None => ""
+      }
+
+      val priority = priorityFilter match {
+        case Some(p) => s" AND t.priority IN (${p.mkString(",")})"
+        case None => ""
+      }
+
+      val query = SQL"""SELECT t.id, t.name, t.status, t.priority, sa_outer.username, t.mapped_on,
                    task_review.review_status,
                    (SELECT name as reviewRequestedBy FROM users WHERE users.id = task_review.review_requested_by),
                    (SELECT name as reviewedBy FROM users WHERE users.id = task_review.reviewed_by),
                    task_review.reviewed_at,
                    (SELECT string_agg(CONCAT((SELECT name from users where tc.osm_id = users.osm_id), ': ', comment),
                                       CONCAT(chr(10),'---',chr(10))) AS comments
-                    FROM task_comments tc WHERE tc.task_id = t.id)
+                    FROM task_comments tc WHERE tc.task_id = t.id),
+                   (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id)
             FROM tasks t LEFT OUTER JOIN (
               SELECT sa.task_id, sa.status, sa.osm_user_id, u.name AS username
               FROM users u, status_actions sa INNER JOIN (
@@ -1405,9 +1456,10 @@ class TaskDAL @Inject()(override val db: Database,
               WHERE sa.osm_user_id = u.osm_id
             ) AS sa_outer ON t.id = sa_outer.task_id AND t.status = sa_outer.status
             LEFT OUTER JOIN task_review ON task_review.task_id = t.id
-            WHERE t.parent_id = #${challengeId}
+            WHERE t.parent_id = #${challengeId} #${status} #${priority} #${reviewStatus}
             LIMIT #${this.sqlLimit(limit)} OFFSET #${offset}
-      """.as(parser.*)
+      """
+      query.as(parser.*)
     }
 
   /**
@@ -1514,7 +1566,8 @@ class TaskDAL @Inject()(override val db: Database,
 
   case class TaskSummary(taskId: Long, name: String, status: Int, priority: Int, username: Option[String],
                          mappedOn: Option[DateTime], reviewStatus: Option[Int], reviewRequestedBy: Option[String],
-                         reviewedBy: Option[String], reviewedAt: Option[DateTime], comments: Option[String])
+                         reviewedBy: Option[String], reviewedAt: Option[DateTime], comments: Option[String],
+                         tags: Option[String])
 
 }
 

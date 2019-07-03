@@ -576,6 +576,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                       ${projectFilter}
                       GROUP BY c.id
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
+
       SQL(query).on('offset -> offset).as(this.listingParser.*)
     }
   }
@@ -707,7 +708,13 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       }
 
       val reviewStatus = reviewStatusFilter match {
-        case Some(s) => s" AND subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+        case Some(s) =>
+          var searchQuery = s"subT.id in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id AND subTR.review_status IN (${s.mkString(",")}))"
+          if (s.contains(-1)) {
+            // Return items that do not have a review status
+            searchQuery = searchQuery + " OR subT.id NOT in (SELECT subTR.task_id from task_review subTR where subTR.task_id=subT.id)"
+          }
+          s" AND ($searchQuery)"
         case None => ""
       }
 
@@ -737,7 +744,8 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                            END)) ||
                                         hstore('reviewStatus', tr.review_status::text) ||
                                         hstore('reviewer', (select name from users where id=tr.reviewed_by)::text) ||
-                                        hstore('reviewedAt', tr.reviewed_at::text)
+                                        hstore('reviewedAt', tr.reviewed_at::text) ||
+                                        hstore('tags', (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id))
                                       )
                                     )::jsonb
                                   As properties

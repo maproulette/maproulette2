@@ -169,6 +169,21 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
   }
 
   /**
+    * Gets tasks near the given task id within the given virtual challenge
+    *
+    * @param challengeId  The current virtual challenge id
+    * @param proximityId  Id of task for which nearby tasks are desired
+    * @param limit        The maximum number of nearby tasks to return
+    * @return
+    */
+  def getNearbyTasks(challengeId: Long, proximityId: Long, limit: Int): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      val results = this.dal.getNearbyTasks(User.userOrMocked(user), challengeId, proximityId, limit)
+      Ok(Json.toJson(results))
+    }
+  }
+
+  /**
     * Gets the geo json for all the tasks associated with the challenge
     *
     * @param challengeId  The challenge with the geojson

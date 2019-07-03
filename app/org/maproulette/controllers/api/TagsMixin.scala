@@ -43,7 +43,7 @@ trait TagsMixin[T <: BaseObject[Long]] {
   }
 
   /**
-    * Deletes tags from a given task.
+    * Deletes tags from a given item.
     * Must be authenticated to perform operation
     *
     * @param id   The id of the task
@@ -68,6 +68,24 @@ trait TagsMixin[T <: BaseObject[Long]] {
   }
 
   /**
+    * Add tags to a given item.
+    * Must be authenticated to perform operation
+    *
+    * @param id   The id of the item
+    * @param tags A comma separated list of tags to add
+    * @param user the user executing the request
+    */
+  def addTagstoItem(id:Long, tags:List[Tag], user:User): Unit = {
+    val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
+
+    if (tagIds.nonEmpty) {
+      // now we have the ids for the supplied tags, then lets map them to the item created
+      this.dalWithTags.updateItemTags(id, tagIds, user)
+      this.actionManager.setAction(Some(user), this.itemType.convertToItem(id), TagAdded(), tagIds.mkString(","))
+    }
+  }
+
+  /**
     * In this function the task will extract any tags that are supplied with the create json, it will
     * then attempt to create or update the associated tags. The tags can be supplied in 3 different
     * formats:
@@ -79,7 +97,7 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param createdObject The Task that was created by the create function
     * @param user          the user executing the request
     */
-  def extractTags(body: JsValue, createdObject: T, user: User): Unit = {
+  def extractTags(body: JsValue, createdObject: T, user: User, completeList: Boolean = false): Unit = {
     val tags: List[Tag] = body \ "tags" match {
       case tags: JsDefined =>
         // this case is for a comma separated list, either of ints or strings
@@ -92,7 +110,8 @@ trait TagsMixin[T <: BaseObject[Long]] {
               // the same name or create a new tag with the current name
               this.tagDAL.retrieveByName(tag) match {
                 case Some(t) => t.asInstanceOf[Tag]
-                case None => Tag(-1, tag)
+                case None =>
+                  Tag(-1, tag, tagType = this.dal.tableName)
               }
           }
         })
@@ -111,9 +130,9 @@ trait TagsMixin[T <: BaseObject[Long]] {
     }
     val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
 
-    if (tagIds.nonEmpty) {
+    if (tagIds.nonEmpty || completeList) {
       // now we have the ids for the supplied tags, then lets map them to the item created
-      this.dalWithTags.updateItemTags(createdObject.id, tagIds, user)
+      this.dalWithTags.updateItemTags(createdObject.id, tagIds, user, completeList)
       this.actionManager.setAction(Some(user), this.itemType.convertToItem(createdObject.id), TagAdded(), tagIds.mkString(","))
     }
   }

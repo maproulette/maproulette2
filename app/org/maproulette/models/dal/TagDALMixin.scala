@@ -100,10 +100,10 @@ trait TagDALMixin[T <: BaseObject[Long]] {
     this.retrieveById(id) match {
       case Some(item) =>
         this.permission.hasObjectWriteAccess(item, user)
-        if (tags.nonEmpty) {
-          this.withMRTransaction { implicit c =>
+        this.withMRTransaction { implicit c =>
+          if (tags.nonEmpty) {
             if (completeList) {
-              SQL"""DELETE FROM tags_on_${this.tableName} WHERE ${name}_id = $id""".executeUpdate()
+              SQL"""DELETE FROM tags_on_#${this.tableName} WHERE #${name}_id = $id""".executeUpdate()
             }
 
             val indexedValues = tags.zipWithIndex
@@ -120,6 +120,9 @@ trait TagDALMixin[T <: BaseObject[Long]] {
             SQL(s"INSERT INTO tags_on_${this.tableName} (${name}_id, tag_id) VALUES " + rows + " ON CONFLICT DO NOTHING")
               .on(parameters: _*)
               .execute()
+          }
+          else if (completeList) {
+            SQL"""DELETE FROM tags_on_#${this.tableName} WHERE #${name}_id = $id""".executeUpdate()
           }
         }
       case None =>

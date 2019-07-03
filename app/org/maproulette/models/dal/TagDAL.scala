@@ -32,9 +32,10 @@ class TagDAL @Inject()(override val db: Database,
   val parser: RowParser[Tag] = {
     get[Long]("tags.id") ~
       get[String]("tags.name") ~
-      get[Option[String]]("tags.description") map {
-      case id ~ name ~ description =>
-        new Tag(id, name.toLowerCase, description)
+      get[Option[String]]("tags.description") ~
+      get[String]("tags.tag_type") map {
+      case id ~ name ~ description ~ tagType =>
+        new Tag(id, name.toLowerCase, description, tagType = tagType)
     }
   }
 
@@ -52,8 +53,8 @@ class TagDAL @Inject()(override val db: Database,
     this.permission.hasObjectWriteAccess(tag, user)
     this.cacheManager.withOptionCaching { () =>
       this.withMRTransaction { implicit c =>
-        SQL("INSERT INTO tags (name, description) VALUES ({name}, {description}) ON CONFLICT(LOWER(name)) DO NOTHING RETURNING *")
-          .on('name -> tag.name.toLowerCase, 'description -> tag.description).as(this.parser.*).headOption
+        SQL("INSERT INTO tags (name, description, tag_type) VALUES ({name}, {description}, {tagType}) ON CONFLICT(LOWER(name)) DO NOTHING RETURNING *")
+          .on('name -> tag.name.toLowerCase, 'description -> tag.description,'tagType -> tag.tagType).as(this.parser.*).headOption
       }
     } match {
       case Some(t) => t
@@ -84,6 +85,21 @@ class TagDAL @Inject()(override val db: Database,
         SQL"""UPDATE tags SET name = ${updatedTag.name.toLowerCase}, description = ${updatedTag.description}
               WHERE id = $id RETURNING *""".as(this.parser.*).headOption
       }
+    }
+  }
+
+  def findTags(prefix: String, tagType: String = "challenges", limit: Int, offset: Int)
+              (implicit c: Option[Connection] = None): List[Tag] = {
+    this.withMRConnection { implicit c =>
+      var tagTypeSearch = ""
+      if (tagType.trim.nonEmpty) {
+        tagTypeSearch = s"AND tag_type = {tagType}"
+      }
+      val query =
+        s"""SELECT * FROM tags
+                      WHERE ${this.searchField("name")(None)} ${tagTypeSearch}
+                      LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
+      SQL(query).on('ss -> s"$prefix%", 'offset -> offset, 'tagType -> tagType.trim).as(this.parser.*)
     }
   }
 
@@ -185,14 +201,15 @@ class TagDAL @Inject()(override val db: Database,
           val sqlQuery =
             s"""WITH upsert AS (UPDATE tags SET description = {description}
                                               WHERE id = {id} OR name = {name} RETURNING *)
-                              INSERT INTO tags (name, description) SELECT {name}, {description}
+                              INSERT INTO tags (name, description, tag_type) SELECT {name}, {description}, {tagType}
                               WHERE NOT EXISTS (SELECT * FROM upsert)"""
           val parameters = tags.map(tag => {
             val descriptionString = tag.description match {
               case Some(d) => d
               case None => ""
             }
-            Seq[NamedParameter]("name" -> tag.name.toLowerCase, "description" -> descriptionString, "id" -> tag.id)
+            Seq[NamedParameter]("name" -> tag.name.toLowerCase, "description" -> descriptionString,
+                                "id" -> tag.id, "tagType" -> tag.tagType)
           })
           BatchSql(sqlQuery, parameters.head, parameters.tail: _*).execute()
           this.retrieveListByName(names, -1, Some(c))

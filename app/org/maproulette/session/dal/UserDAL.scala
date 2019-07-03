@@ -1107,10 +1107,11 @@ class UserDAL @Inject()(override val db: Database,
            get[Int]("approvedCount") ~
            get[Int]("rejectedCount") ~
            get[Int]("assistedCount") ~
-           get[Int]("disputedCount") map {
-           case total ~ approvedCount ~ rejectedCount ~ assistedCount ~ disputedCount => {
+           get[Int]("disputedCount") ~
+           get[Int]("requestedCount") map {
+           case total ~ approvedCount ~ rejectedCount ~ assistedCount ~ disputedCount ~ requestedCount => {
              Map("total" -> total, "approved" -> approvedCount, "rejected" -> rejectedCount,
-                 "assisted" -> assistedCount, "disputed" -> disputedCount)
+                 "assisted" -> assistedCount, "disputed" -> disputedCount, "requested" -> requestedCount)
            }
          }
        }
@@ -1121,11 +1122,12 @@ class UserDAL @Inject()(override val db: Database,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_APPROVED} then 1 else 0 end), 0) approvedCount,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REJECTED} then 1 else 0 end), 0) rejectedCount,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_ASSISTED} then 1 else 0 end), 0) assistedCount,
-            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_DISPUTED} then 1 else 0 end), 0) disputedCount
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_DISPUTED} then 1 else 0 end), 0) disputedCount,
+            |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REQUESTED} then 1 else 0 end), 0) requestedCount
             |FROM task_review
             |WHERE task_review.review_requested_by = $userId AND ${reviewTimeClause}
         """.stripMargin
-        
+
         val reviewCounts = SQL(reviewCountsQuery).as(reviewCountsParser.single)
 
        Map("tasks" -> taskCounts, "reviewTasks" -> reviewCounts)

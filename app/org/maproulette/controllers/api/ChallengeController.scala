@@ -140,7 +140,12 @@ class ChallengeController @Inject()(override val childController: TaskController
             Some(Utils.split(priorityFilter).map(_.toInt))
           }
 
-          Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, status, reviewStatus, priority)))
+          Result(
+            header = ResponseHeader(OK, Map(CONTENT_DISPOSITION -> s"attachment; filename=challenge_geojson.json")),
+            body = HttpEntity.Strict(
+              ByteString(this.dal.getChallengeGeometry(challengeId, status, reviewStatus, priority)),
+              Some("application/json;charset=utf-8;header=present"))
+          )
         case None => throw new NotFoundException(s"No challenge with id $challengeId found.")
       }
     }
@@ -207,9 +212,11 @@ class ChallengeController @Inject()(override val childController: TaskController
     * @param taskSearch  Filter based on the name of the task
     * @param tags        A comma separated list of tags that optionally can be used to further filter the tasks
     * @param limit       Limit of how many tasks should be returned
+    * @param proximityId Id of task that you wish to find the next task based on the proximity of that task
     * @return A list of Tasks that match the supplied filters
     */
-  def getRandomTasksWithPriority(challengeId: Long, taskSearch: String, tags: String, limit: Int): Action[AnyContent] = Action.async { implicit request =>
+  def getRandomTasksWithPriority(challengeId: Long, taskSearch: String, tags: String, limit: Int,
+                                 proximityId: Long): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       SearchParameters.withSearch { p =>
         val params = p.copy(
@@ -217,7 +224,7 @@ class ChallengeController @Inject()(override val childController: TaskController
           taskSearch = Some(taskSearch),
           taskTags = Some(Utils.split(tags))
         )
-        val result = this.dalManager.task.getRandomTasksWithPriority(User.userOrMocked(user), params, limit)
+        val result = this.dalManager.task.getRandomTasksWithPriority(User.userOrMocked(user), params, limit, Utils.negativeToOption(proximityId))
         result.foreach(task => this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), ""))
         Ok(Json.toJson(result))
       }
@@ -247,6 +254,21 @@ class ChallengeController @Inject()(override val childController: TaskController
         result.foreach(task => this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), ""))
         Ok(Json.toJson(result))
       }
+    }
+  }
+
+  /**
+    * Gets tasks near the given task id within the given challenge
+    *
+    * @param challengeId  The challenge id that is the parent of the tasks that you would be searching for
+    * @param proximityId  Id of task for which nearby tasks are desired
+    * @param limit        The maximum number of nearby tasks to return
+    * @return
+    */
+  def getNearbyTasks(challengeId: Long, proximityId: Long, limit: Int): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      val results = this.dalManager.task.getNearbyTasks(User.userOrMocked(user), challengeId, proximityId, limit)
+      Ok(Json.toJson(results))
     }
   }
 
@@ -365,10 +387,10 @@ class ChallengeController @Inject()(override val childController: TaskController
       dalManager.challenge.retrieveById(challengeId) match {
         case Some(c) =>
           permission.hasWriteAccess(ProjectType(), user)(c.general.parent)
-          if (c.status.get == Challenge.STATUS_DELETING_TASKS) {
+          if (c.status.getOrElse(Challenge.STATUS_NA) == Challenge.STATUS_DELETING_TASKS) {
             throw new InvalidException("Task deletion already in-progress for this challenge")
           }
-          else if (c.status.get == Challenge.STATUS_BUILDING) {
+          else if (c.status.getOrElse(Challenge.STATUS_NA) == Challenge.STATUS_BUILDING) {
             throw new InvalidException("Tasks cannot be deleted while challenge is building")
           }
 
@@ -442,9 +464,27 @@ class ChallengeController @Inject()(override val childController: TaskController
     * @param page        Used for paging
     * @return A csv list of tasks for the challenge
     */
-  def extractTaskSummaries(challengeId: Long, limit: Int, page: Int): Action[AnyContent] = Action.async { implicit request =>
+  def extractTaskSummaries(challengeId: Long, limit: Int, page: Int,
+                           statusFilter: String, reviewStatusFilter: String,
+                           priorityFilter: String): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      val tasks = this.dalManager.task.retrieveTaskSummaries(challengeId, limit, page)
+      val status = if (StringUtils.isEmpty(statusFilter)) {
+        None
+      } else {
+        Some(Utils.split(statusFilter).map(_.toInt))
+      }
+      val reviewStatus = if (StringUtils.isEmpty(reviewStatusFilter)) {
+        None
+      } else {
+        Some(Utils.split(reviewStatusFilter).map(_.toInt))
+      }
+      val priority = if (StringUtils.isEmpty(priorityFilter)) {
+        None
+      } else {
+        Some(Utils.split(priorityFilter).map(_.toInt))
+      }
+
+      val tasks = this.dalManager.task.retrieveTaskSummaries(challengeId, limit, page, status, reviewStatus, priority)
 
       val seqString = tasks.map(task => {
           var mapper = task.reviewRequestedBy.getOrElse("")
@@ -455,14 +495,15 @@ class ChallengeController @Inject()(override val childController: TaskController
           s"""${task.taskId},$challengeId,"${task.name}","${Task.statusMap.get(task.status).get}",""" +
           s""""${Challenge.priorityMap.get(task.priority).get}",${task.mappedOn.getOrElse("")},""" +
           s"""${task.reviewStatus.getOrElse("")},"${mapper}","${task.reviewedBy.getOrElse("")}",""" +
-          s"""${task.reviewedAt.getOrElse("")},"${task.comments.getOrElse("")}"""".stripMargin
+          s"""${task.reviewedAt.getOrElse("")},"${task.comments.getOrElse("")}",""" +
+          s""""${task.tags.getOrElse("")}"""".stripMargin
         }
       )
       Result(
         header = ResponseHeader(OK, Map(CONTENT_DISPOSITION -> s"attachment; filename=challenge_${challengeId}_tasks.csv")),
         body = HttpEntity.Strict(
           ByteString(
-            "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,MappedOn,ReviewStatus,Mapper,Reviewer,ReviewedAt,Comments\n"
+            "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,MappedOn,ReviewStatus,Mapper,Reviewer,ReviewedAt,Comments,Tags\n"
           ).concat(ByteString(seqString.mkString("\n"))),
           Some("text/csv; header=present"))
       )

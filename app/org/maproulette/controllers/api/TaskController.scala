@@ -131,7 +131,7 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     */
   override def extractAndCreate(body: JsValue, createdObject: Task, user: User)
                                (implicit c: Option[Connection] = None): Unit =
-    this.extractTags(body, createdObject, User.superUser)
+    this.extractTags(body, createdObject, User.superUser, true)
 
   /**
     * Gets a json list of tags of the task
@@ -297,22 +297,26 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     *
     * @param id     The id of the task
     * @param status The status id to set the task's status to
+    * @param comment An optional comment to add to the task
+    * @param tags Optional tags to add to the task
     * @return 400 BadRequest if status id is invalid or task with supplied id not found.
     *         If successful then 200 NoContent
     */
-  def setTaskStatus(id: Long, status: Int, comment: String = ""): Action[AnyContent] = Action.async { implicit request =>
+  def setTaskStatus(id: Long, status: Int, comment: String = "", tags: String = ""): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       val requestReview = request.getQueryString("requestReview") match {
         case Some(v) => Some(v.toBoolean)
         case None => None
       }
 
-      this.customTaskStatus(id, TaskStatusSet(status), user, comment, requestReview)
+      this.customTaskStatus(id, TaskStatusSet(status), user, comment, tags, requestReview)
+
       NoContent
     }
   }
 
-  def customTaskStatus(taskId:Long, actionType: ActionType, user:User, comment:String="", requestReview:Option[Boolean] = None) = {
+  def customTaskStatus(taskId:Long, actionType: ActionType, user:User, comment:String="",
+                       tags: String= "",requestReview:Option[Boolean] = None) = {
     val status = actionType match {
       case t: TaskStatusSet => t.status
       case q: QuestionAnswered => Task.STATUS_ANSWERED
@@ -336,6 +340,11 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
       }
       this.dal.addComment(user, task, comment, actionId)
     }
+
+    val tagList = tags.split(",").toList
+    if (tagList.nonEmpty) {
+      this.addTagstoItem(taskId, tagList.map(new Tag(-1, _, tagType = this.dal.tableName)), user)
+    }
   }
 
   /**
@@ -344,10 +353,12 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     *
     * @param id The id of the task
     * @param reviewStatus The review status id to set the task's review status to
+    * @param comment An optional comment to add to the task
+    * @param tags Optional tags to add to the task
     * @return 400 BadRequest if task with supplied id not found.
     *         If successful then 200 NoContent
     */
-  def setTaskReviewStatus(id: Long, reviewStatus: Int, comment:String="") : Action[AnyContent] = Action.async { implicit request =>
+  def setTaskReviewStatus(id: Long, reviewStatus: Int, comment:String="", tags: String= "") : Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       val task = this.dal.retrieveById(id) match {
         case Some(t) => t
@@ -362,6 +373,11 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
       }
 
       this.dal.setTaskReviewStatus(task, reviewStatus, user, actionId, comment)
+
+      val tagList = tags.split(",").toList
+      if (tagList.nonEmpty) {
+        this.addTagstoItem(id, tagList.map(new Tag(-1, _, tagType = this.dal.tableName)), user)
+      }
 
       NoContent
     }

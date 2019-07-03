@@ -1674,6 +1674,28 @@ GET     /challenge/:cid/tasks/random                @org.maproulette.controllers
 GET     /challenge/:cid/tasks/randomTasks           @org.maproulette.controllers.api.ChallengeController.getRandomTasks(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
 ###
 # tags: [ Challenge ]
+# summary: Retrieves nearby Tasks
+# produces: [ application/json ]
+# description: Retrieves tasks geographically closest to the specified task within the same Challenge
+# responses:
+#   '200':
+#     description: The list of geographically closest tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 5.
+#   - name: proximity
+#     in: query
+#     description: Id of task around which geographically closest tasks are desired
+###
+GET     /challenge/:cid/tasksNearby/:proximityId           @org.maproulette.controllers.api.ChallengeController.getNearbyTasks(cid:Long, proximityId:Long, limit:Int ?= 5)
+###
+# tags: [ Challenge ]
 # summary: Retrieves prioritized random Task
 # produces: [ application/json ]
 # description: Retrieves a prioritized random Task contained within the current Challenge,
@@ -1699,8 +1721,11 @@ GET     /challenge/:cid/tasks/randomTasks           @org.maproulette.controllers
 #   - name: limit
 #     in: query
 #     description: Limit the number of results returned in the response. Default value is 1.
+#   - name: proximity
+#     in: query
+#     description: Id of task that you wish to find the next task based on the proximity of that task
 ###
-GET     /challenge/:cid/tasks/prioritizedTasks      @org.maproulette.controllers.api.ChallengeController.getRandomTasksWithPriority(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1)
+GET     /challenge/:cid/tasks/prioritizedTasks      @org.maproulette.controllers.api.ChallengeController.getRandomTasksWithPriority(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves next Task
@@ -1905,8 +1930,17 @@ GET     /challenge/:id/comments/extract             @org.maproulette.controllers
 #   - name: page
 #     in: query
 #     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
 ###
-GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0)
+GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
 ###
 # tags: [ Challenge ]
 # summary: Match OSM Changesets
@@ -2263,6 +2297,28 @@ GET     /virtualchallenge/view/:id                  @org.maproulette.controllers
 #     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
 ###
 GET     /virtualchallenge/clustered/:id             @org.maproulette.controllers.api.VirtualChallengeController.getClusteredPoints(id:Long, filter:String ?= "")
+###
+# tags: [ Virtual Challenge ]
+# summary: Retrieves nearby Tasks in Virtual Challenge
+# produces: [ application/json ]
+# description: Retrieves tasks geographically closest to the specified task within the same Virtual Challenge
+# responses:
+#   '200':
+#     description: The list of geographically closest tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 5.
+#   - name: proximity
+#     in: query
+#     description: Id of task around which geographically closest tasks are desired
+###
+GET     /virtualchallenge/:id/tasksNearby/:proximityId           @org.maproulette.controllers.api.VirtualChallengeController.getNearbyTasks(id:Long, proximityId:Long, limit:Int ?= 5)
 ###
 # tags: [ Survey ]
 # summary: Create a Survey
@@ -2935,8 +2991,10 @@ PUT     /task/:id/changeset                         @org.maproulette.controllers
 #   - name: requestReview
 #     in: query
 #     description: Boolean indicating if a review is requested on this task. (Will override user settings if provided)
+#   - name: tags
+#     description: Optional tags to associate with this task
 ###
-PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "")
+PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
 # tags: [ Task ]
 # summary: Update Task Review Status
@@ -2964,8 +3022,10 @@ PUT     /task/:id/:status                           @org.maproulette.controllers
 #   - name: comment
 #     in: query
 #     description: Any comment that is provided by the user when setting the review status
+#   - name: tags
+#     description: Optional tags to associate with this task
 ###
-PUT     /task/:id/review/:status                           @org.maproulette.controllers.api.TaskController.setTaskReviewStatus(id:Long, status:Int, comment:String ?= "")
+PUT     /task/:id/review/:status                           @org.maproulette.controllers.api.TaskController.setTaskReviewStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
 # tags: [ Challenge ]
 # summary: Retrieves task clusters
@@ -3357,6 +3417,9 @@ DELETE  /tag/:id                                    @org.maproulette.controllers
 #   - name: prefix
 #     in: query
 #     description: The prefix for the Keywords you are looking for
+#   - name: tagType
+#     in: query
+#     description: Optional limit tags to a specific tagType ('challenges' or 'tasks')
 #   - name: limit
 #     in: query
 #     description: Limit the number of results returned in the response. Default value is 10.
@@ -3364,11 +3427,11 @@ DELETE  /tag/:id                                    @org.maproulette.controllers
 #     in: query
 #     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
 ###
-GET     /keywords                                   @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+GET     /keywords                                   @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 ###
 # tags: [ Tag (Deprecated) ]
 ###
-GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 ### NoDocs ###
 GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, survey:Int ?= -1, priority:Int ?= -1)
 ### NoDocs ###

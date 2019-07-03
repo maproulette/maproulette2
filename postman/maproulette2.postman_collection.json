@@ -370,7 +370,7 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "03b0a82e-5f26-46f5-a28a-e3b1a7df8870",
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
 									"postman.setGlobalVariable(\"TagsChallengeID\", jsonData.id);",
@@ -379,7 +379,8 @@
 									"tests[\"description\"] = jsonData.description === \"A simple challenge containing only the basic elements for a challenge and two tags\";",
 									"tests[\"instruction\"] = jsonData.instruction === \"Instruction for the simple tag challenge\";",
 									"tests[\"challengeType\"] = jsonData.challengeType === 1;"
-								]
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -689,10 +690,11 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "b35c2674-41a0-4dea-b9e5-a46478edd678",
 								"exec": [
 									"tests[\"response code is 201\"] = responseCode.code === 201;"
-								]
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -710,7 +712,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "[\n    {\n        \"name\":\"Task 3\",\n        \"description\":\"Task 3 description\",\n        \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]}\n    },\n    {\n        \"name\":\"Task 4\",\n        \"description\":\"Task 4 description\",\n        \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103,1.5]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103.1,1.6]},\"properties\":{}}]}\n    }\n]"
+							"raw": "[\n    {\n        \"name\":\"Task 3\",\n        \"description\":\"Task 3 description\",\n        \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]}\n    },\n    {\n        \"name\":\"Task 4\",\n        \"description\":\"Task 4 description\",\n        \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[93,1.5]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[93.1,1.6]},\"properties\":{}}]}\n    }\n]"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/challenge/{{TagsChallengeID}}/tasks",
@@ -781,6 +783,68 @@
 							]
 						},
 						"description": "Gets the tasks of the challenge for the provided ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Challenge Nearby Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "040adc26-6e95-4944-b364-3aab59535897",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Task 2\");",
+									"    pm.expect(pm.response.text()).to.include(\"Task 3\");",
+									"    pm.expect(pm.response.text()).to.not.include(\"Task 4\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/challenge/{{TagsChallengeID}}/tasksNearby/{{TagsChallengeTask1ID}}?limit=2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"challenge",
+								"{{TagsChallengeID}}",
+								"tasksNearby",
+								"{{TagsChallengeTask1ID}}"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "2"
+								}
+							]
+						},
+						"description": "Gets the challenge for the provided ID"
 					},
 					"response": []
 				},
@@ -1034,6 +1098,172 @@
 								"v2",
 								"challenge",
 								"{{TagsChallengeID}}"
+							],
+							"query": [
+								{
+									"key": "immediate",
+									"value": "true"
+								}
+							]
+						},
+						"description": "Deletes the Tag challenge for the provided ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Challenge Task Tag Creation",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "e3afdd8b-3294-4a9a-ad99-11f3aac23b43",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setGlobalVariable(\"TagsTaskChallengeID\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"TaskTagsChallenge\";",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\":\"TaskTagsChallenge\",\n    \"description\":\"A simple challenge containing only the basic elements for a challenge and task tags\",\n    \"parent\":{{SimpleProjectID}},\n    \"instruction\":\"Instruction for the simple task tag challenge\",\n    \"enabled\":false,\n    \"children\": [\n        {\n            \"name\":\"Task 1\",\n            \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{}}]},\n            \"tags\":\"taskTag1,taskTag2\"\n        },\n        {\n            \"name\":\"Task 2\",\n            \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103,1.5]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[103.1,1.6]},\"properties\":{}}]},\n            \"tags\":\"taskTag3\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/challenge",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"challenge"
+							]
+						},
+						"description": "Creates the most basic challenge with the least set of options and a couple of tags in the body json"
+					},
+					"response": []
+				},
+				{
+					"name": "Task Get Tags",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "4a0d54a1-ab03-4b28-b86d-1f914e34f9d9",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"tasktag1\");",
+									"    pm.expect(pm.response.text()).to.include(\"tasktag2\");",
+									"    pm.expect(pm.response.text()).to.include(\"tasktag3\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/keywords?type='tasks'",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"keywords"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "'tasks'"
+								}
+							]
+						},
+						"description": "Gets the tags for a challenge for the provided ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Challenge Task Tag Deletion",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "fd8068af-6b11-4765-9798-9ca0e0e8acfa",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"tests[\"status\"] = jsonData.status === \"OK\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/challenge/{{TagsTaskChallengeID}}?immediate=true",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"challenge",
+								"{{TagsTaskChallengeID}}"
 							],
 							"query": [
 								{
@@ -1798,6 +2028,66 @@
 					"response": []
 				},
 				{
+					"name": "Virtual Challenge Nearby Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "040adc26-6e95-4944-b364-3aab59535897",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Task 1\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/virtualchallenge/{{VirtualChallengeID}}/tasksNearby/{{VChallengeTask2ID}}?limit=2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"virtualchallenge",
+								"{{VirtualChallengeID}}",
+								"tasksNearby",
+								"{{VChallengeTask2ID}}"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "2"
+								}
+							]
+						},
+						"description": "Gets the challenge for the provided ID"
+					},
+					"response": []
+				},
+				{
 					"name": "Virtual Challenge GeoJSON",
 					"event": [
 						{
@@ -2079,13 +2369,13 @@
 							"listen": "test",
 							"script": {
 								"id": "66484512-de78-42a6-9a03-ab5d7049c9d7",
-								"type": "text/javascript",
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
 									"pm.globals.set(\"VirtualChallengeID\", jsonData.id);",
 									"tests[\"response code is 201\"] = responseCode.code === 201;",
 									"tests[\"name\"] = jsonData.name === \"test\";"
-								]
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -3906,14 +4196,15 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "1d386575-6c95-4065-a746-3f39e5a793d0",
 								"exec": [
 									"tests[\"response code is 201\"] = responseCode.code === 201;",
 									"var jsonData = JSON.parse(responseBody);",
 									"postman.setGlobalVariable(\"TestTagID\", jsonData.id);",
 									"tests[\"name\"] = jsonData.name === \"testtag1\";",
 									"tests[\"description\"] = jsonData.description === \"TestTag1 description\";"
-								]
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -3931,10 +4222,10 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"name\":\"TestTag1\",\n    \"description\":\"TestTag1 description\"\n}"
+							"raw": "{\n\t\"tagType\":\"challenges\",\n    \"name\":\"TestTag1\",\n    \"description\":\"TestTag1 description\"\n}"
 						},
 						"url": {
-							"raw": "http://localhost:9000/api/v2/tag",
+							"raw": "http://localhost:9000/api/v2/keyword",
 							"protocol": "http",
 							"host": [
 								"localhost"
@@ -3943,7 +4234,7 @@
 							"path": [
 								"api",
 								"v2",
-								"tag"
+								"keyword"
 							]
 						},
 						"description": "Creates a basic tag"
@@ -4260,12 +4551,12 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "34086a73-0c30-41d9-9f3c-308e35e15579",
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
-									"tests[\"response code is 200\"] = responseCode.code === 200;",
-									"tests[\"No children found\"] = jsonData.length === 0"
-								]
+									"tests[\"response code is 200\"] = responseCode.code === 200;"
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -4410,13 +4701,14 @@
 						{
 							"listen": "test",
 							"script": {
-								"type": "text/javascript",
+								"id": "9f56731b-4f82-4f20-acc5-6d0878a787ee",
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
 									"tests[\"response code is 200\"] = responseCode.code === 200;",
 									"tests[\"name\"] = jsonData.name === \"NewTask\";",
 									"tests[\"instruction\"] = jsonData.instruction === \"NewTask instruction UPDATE\";"
-								]
+								],
+								"type": "text/javascript"
 							}
 						}
 					],
@@ -4434,7 +4726,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"instruction\":\"NewTask instruction UPDATE\"\n}"
+							"raw": "{\n    \"instruction\":\"NewTask instruction UPDATE\",\n    \"tags\":\"newUpdateTaskTag\"\n}"
 						},
 						"url": {
 							"raw": "http://localhost:9000/api/v2/task/{{NewTask}}",
@@ -4743,6 +5035,116 @@
 							]
 						},
 						"description": "Creates a project with two children within the same request."
+					},
+					"response": []
+				},
+				{
+					"name": "Create new Task withTags",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "705b2416-7628-4ad0-acbf-81bf9c0c477b",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"postman.setGlobalVariable(\"NewTask1\", jsonData.id);",
+									"tests[\"response code is 201\"] = responseCode.code === 201;",
+									"tests[\"name\"] = jsonData.name === \"NewTask With Tags\";",
+									"tests[\"instruction\"] = jsonData.instruction === \"NewTask instruction\";"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\":\"NewTask With Tags\",\n    \"parent\": {{TestChallenge}},\n    \"instruction\":\"NewTask instruction\",\n    \"geometries\":{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.1,0.6]},\"properties\":{\"id\": \"test2\"}},{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[102.2,0.7]},\"properties\":{ \"identifier\":{\"value\":1111} }}]},\n    \"tags\":\"newtaskTag1, newtaskTag2\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/task",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"task"
+							]
+						},
+						"description": "Creates a project with two children within the same request."
+					},
+					"response": []
+				},
+				{
+					"name": "Task Tags Read",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "accfcc10-4c9d-432b-9798-e893f2cfd930",
+								"exec": [
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"var jsonData = JSON.parse(responseBody);",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"newtasktag1\");",
+									"    pm.expect(pm.response.text()).to.include(\"newtasktag2\");",
+									"    pm.expect(pm.response.text()).to.include(\"newupdatetasktag\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/keywords?type='tasks'",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"keywords"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "'tasks'"
+								}
+							]
+						},
+						"description": "Gets the tag"
 					},
 					"response": []
 				},

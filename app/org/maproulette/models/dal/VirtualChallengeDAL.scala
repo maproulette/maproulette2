@@ -325,6 +325,32 @@ class VirtualChallengeDAL @Inject()(override val db: Database,
   }
 
   /**
+    * Retrieve tasks geographically closest to the given task id within the
+    * given virtual challenge. Ignores tasks that are complete, locked by other
+    * users, or that the current user has worked on in the last hour
+    */
+  def getNearbyTasks(user: User, challengeId: Long, proximityId: Long, limit: Int = 5)
+                    (implicit c: Option[Connection] = None): List[Task] = {
+    val query = s"""SELECT tasks.${taskDAL.retrieveColumnsWithReview} FROM tasks
+      LEFT JOIN locked l ON l.item_id = tasks.id
+      LEFT JOIN virtual_challenge_tasks vct on vct.task_id = tasks.id
+      LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
+      WHERE tasks.id <> $proximityId AND
+            vct.virtual_challenge_id = $challengeId AND
+            (l.id IS NULL OR l.user_id = ${user.id}) AND
+            tasks.status IN (0, 3, 6) AND
+            NOT tasks.id IN (
+                SELECT task_id FROM status_actions
+                WHERE osm_user_id = ${user.osmProfile.id} AND created >= NOW() - '1 hour'::INTERVAL)
+      ORDER BY ST_Distance(tasks.location, (SELECT location FROM tasks WHERE id = $proximityId)), tasks.status, RANDOM()
+      LIMIT ${this.sqlLimit(limit)}"""
+
+    this.withMRTransaction { implicit c =>
+      SQL(query).as(taskDAL.parser.*)
+    }
+  }
+
+  /**
     * Gets the combined geometry of all the tasks that are associated with the virtual challenge
     * NOTE* Due to the way this function finds the geometries, it could be quite slow.
     *
