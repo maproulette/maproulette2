@@ -729,25 +729,34 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                    FROM ( SELECT 'Feature' As type,
                                   ST_AsGeoJSON(lg.geom)::json As geometry,
                                   hstore_to_json(lg.properties)::jsonb ||
-                                  json_build_object('maproulette',
+
                                       hstore_to_json(
-                                        hstore('taskId', t.id::text) ||
-                                        hstore('challengeId', t.parent_id::text) ||
-                                        hstore('taskName', t.name::text) ||
-                                        hstore('taskStatus', t.status::text) ||
-                                        hstore('taskPriority', t.priority::text) ||
-                                        hstore('mappedOn', t.mapped_on::text) ||
-                                        hstore('mapper',
+                                        hstore('mr_taskId', t.id::text) ||
+                                        hstore('mr_challengeId', t.parent_id::text) ||
+                                        hstore('mr_taskName', t.name::text) ||
+                                        hstore('mr_taskStatus',
+                                          (CASE
+                                            WHEN t.status = #${Task.STATUS_CREATED} THEN ${Task.STATUS_CREATED_NAME}
+                                            WHEN t.status = #${Task.STATUS_FIXED} THEN ${Task.STATUS_FIXED_NAME}
+                                            WHEN t.status = #${Task.STATUS_SKIPPED} THEN ${Task.STATUS_SKIPPED_NAME}
+                                            WHEN t.status = #${Task.STATUS_DELETED} THEN ${Task.STATUS_DELETED_NAME}
+                                            WHEN t.status = #${Task.STATUS_ALREADY_FIXED} THEN ${Task.STATUS_ALREADY_FIXED_NAME}
+                                            WHEN t.status = #${Task.STATUS_TOO_HARD} THEN ${Task.STATUS_TOO_HARD_NAME}
+                                            WHEN t.status = #${Task.STATUS_ANSWERED} THEN ${Task.STATUS_ANSWERED_NAME}
+                                            WHEN t.status = #${Task.STATUS_VALIDATED} THEN ${Task.STATUS_VALIDATED_NAME}
+                                           END)) ||
+                                        hstore('mr_taskPriority', t.priority::text) ||
+                                        hstore('mr_mappedOn', t.mapped_on::text) ||
+                                        hstore('mr_mapper',
                                           (CASE WHEN tr.review_requested_by = NULL
                                            THEN (select name from users where osm_id=sa.osm_user_id)::text
                                            ELSE (select name from users where id=tr.review_requested_by)::text
                                            END)) ||
-                                        hstore('reviewStatus', tr.review_status::text) ||
-                                        hstore('reviewer', (select name from users where id=tr.reviewed_by)::text) ||
-                                        hstore('reviewedAt', tr.reviewed_at::text) ||
-                                        hstore('tags', (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id))
-                                      )
-                                    )::jsonb
+                                        hstore('mr_reviewStatus', tr.review_status::text) ||
+                                        hstore('mr_reviewer', (select name from users where id=tr.reviewed_by)::text) ||
+                                        hstore('mr_reviewedAt', tr.reviewed_at::text) ||
+                                        hstore('mr_tags', (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id))
+                                      )::jsonb
                                   As properties
                           FROM task_geometries As lg
                           INNER JOIN tasks t ON t.id = lg.task_id
