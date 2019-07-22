@@ -199,7 +199,7 @@ class TagDAL @Inject()(override val db: Database,
         this.withMRTransaction { implicit c =>
           val sqlQuery =
             s"""WITH upsert AS (UPDATE tags SET description = {description}
-                                              WHERE id = {id} OR name = {name} RETURNING *)
+                                              WHERE id = {id} OR (name = {name} AND tag_type = {tagType}) RETURNING *)
                               INSERT INTO tags (name, description, tag_type) SELECT {name}, {description}, {tagType}
                               WHERE NOT EXISTS (SELECT * FROM upsert)"""
           val parameters = tags.map(tag => {
