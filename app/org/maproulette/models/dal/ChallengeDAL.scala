@@ -738,6 +738,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                             WHEN t.status = #${Task.STATUS_SKIPPED} THEN ${Task.STATUS_SKIPPED_NAME}
                                             WHEN t.status = #${Task.STATUS_DELETED} THEN ${Task.STATUS_DELETED_NAME}
                                             WHEN t.status = #${Task.STATUS_ALREADY_FIXED} THEN ${Task.STATUS_ALREADY_FIXED_NAME}
+                                            WHEN t.status = #${Task.STATUS_FALSE_POSITIVE} THEN ${Task.STATUS_FALSE_POSITIVE_NAME}
                                             WHEN t.status = #${Task.STATUS_TOO_HARD} THEN ${Task.STATUS_TOO_HARD_NAME}
                                             WHEN t.status = #${Task.STATUS_ANSWERED} THEN ${Task.STATUS_ANSWERED_NAME}
                                             WHEN t.status = #${Task.STATUS_VALIDATED} THEN ${Task.STATUS_VALIDATED_NAME}
