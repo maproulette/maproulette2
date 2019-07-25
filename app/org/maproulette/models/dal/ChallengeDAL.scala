@@ -743,14 +743,26 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                             WHEN t.status = #${Task.STATUS_ANSWERED} THEN ${Task.STATUS_ANSWERED_NAME}
                                             WHEN t.status = #${Task.STATUS_VALIDATED} THEN ${Task.STATUS_VALIDATED_NAME}
                                            END)) ||
-                                        hstore('mr_taskPriority', t.priority::text) ||
+                                        hstore('mr_taskPriority',
+                                          (CASE
+                                            WHEN t.priority = #${Challenge.PRIORITY_HIGH} THEN ${Challenge.PRIORITY_HIGH_NAME}
+                                            WHEN t.priority = #${Challenge.PRIORITY_MEDIUM} THEN ${Challenge.PRIORITY_MEDIUM_NAME}
+                                            WHEN t.priority = #${Challenge.PRIORITY_LOW} THEN ${Challenge.PRIORITY_LOW_NAME}
+                                           END)) ||
                                         hstore('mr_mappedOn', t.mapped_on::text) ||
                                         hstore('mr_mapper',
                                           (CASE WHEN tr.review_requested_by = NULL
                                            THEN (select name from users where osm_id=sa.osm_user_id)::text
                                            ELSE (select name from users where id=tr.review_requested_by)::text
                                            END)) ||
-                                        hstore('mr_reviewStatus', tr.review_status::text) ||
+                                        hstore('mr_reviewStatus',
+                                          (CASE
+                                            WHEN tr.review_status = #${Task.REVIEW_STATUS_REQUESTED} THEN ${Task.REVIEW_STATUS_REQUESTED_NAME}
+                                            WHEN tr.review_status = #${Task.REVIEW_STATUS_APPROVED} THEN ${Task.REVIEW_STATUS_APPROVED_NAME}
+                                            WHEN tr.review_status = #${Task.REVIEW_STATUS_REJECTED} THEN ${Task.REVIEW_STATUS_REJECTED_NAME}
+                                            WHEN tr.review_status = #${Task.REVIEW_STATUS_ASSISTED} THEN ${Task.REVIEW_STATUS_ASSISTED_NAME}
+                                            WHEN tr.review_status = #${Task.REVIEW_STATUS_DISPUTED} THEN ${Task.REVIEW_STATUS_DISPUTED_NAME}
+                                           END)) ||
                                         hstore('mr_reviewer', (select name from users where id=tr.reviewed_by)::text) ||
                                         hstore('mr_reviewedAt', tr.reviewed_at::text) ||
                                         hstore('mr_tags', (SELECT STRING_AGG(tg.name, ',') AS tags FROM tags_on_tasks tot, tags tg where tot.task_id=t.id AND tg.id = tot.tag_id))
