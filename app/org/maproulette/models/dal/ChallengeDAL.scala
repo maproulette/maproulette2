@@ -89,12 +89,13 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       get[Option[DateTime]]("challenges.last_task_refresh") ~
       get[Option[String]]("locationJSON") ~
       get[Option[String]]("boundingJSON") ~
-      get[Boolean]("deleted") map {
+      get[Boolean]("deleted") ~
+      get[Boolean]("challenges.include_checkin_url") map {
       case id ~ name ~ created ~ modified ~ description ~ infoLink ~ ownerId ~ parentId ~ instruction ~
         difficulty ~ blurb ~ enabled ~ challenge_type ~ featured ~ popularity ~ checkin_comment ~ checkin_source ~ overpassql ~ remoteGeoJson ~
         status ~ statusMessage ~ defaultPriority ~ highPriorityRule ~ mediumPriorityRule ~ lowPriorityRule ~
         defaultZoom ~ minZoom ~ maxZoom ~ defaultBasemap ~ defaultBasemapId ~ customBasemap ~ updateTasks ~ lastTaskRefresh ~ location ~
-        bounding ~ deleted =>
+        bounding ~ deleted ~ includeCheckinURL =>
         val hpr = highPriorityRule match {
           case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
           case r => r
@@ -111,7 +112,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
           ChallengeGeneral(ownerId, parentId, instruction, difficulty, blurb, enabled, challenge_type, featured, popularity, checkin_comment.getOrElse(""), checkin_source.getOrElse(""), None),
           ChallengeCreation(overpassql, remoteGeoJson),
           ChallengePriority(defaultPriority, hpr, mpr, lpr),
-          ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks),
+          ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks, includeCheckinURL),
           status, statusMessage, lastTaskRefresh, location, bounding,
         )
     }
@@ -157,12 +158,13 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       get[Option[String]]("locationJSON") ~
       get[Option[String]]("boundingJSON") ~
       get[Boolean]("deleted") ~
+      get[Boolean]("challenges.include_checkin_url") ~
       get[Option[Array[Long]]]("virtual_parent_ids") map {
       case id ~ name ~ created ~ modified ~ description ~ infoLink ~ ownerId ~ parentId ~ instruction ~
         difficulty ~ blurb ~ enabled ~ challenge_type ~ featured ~ popularity ~ checkin_comment ~ checkin_source ~ overpassql ~ remoteGeoJson ~
         status ~ statusMessage ~ defaultPriority ~ highPriorityRule ~ mediumPriorityRule ~ lowPriorityRule ~
         defaultZoom ~ minZoom ~ maxZoom ~ defaultBasemap ~ defaultBasemapId ~ customBasemap ~ updateTasks ~ lastTaskRefresh ~ location ~
-        bounding ~ deleted ~ virtualParents =>
+        bounding ~ deleted ~ includeCheckinURL ~ virtualParents =>
         val hpr = highPriorityRule match {
           case Some(c) if StringUtils.isEmpty(c) || StringUtils.equals(c, "{}") => None
           case r => r
@@ -179,7 +181,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
           ChallengeGeneral(ownerId, parentId, instruction, difficulty, blurb, enabled, challenge_type, featured, popularity, checkin_comment.getOrElse(""), checkin_source.getOrElse(""), virtualParents),
           ChallengeCreation(overpassql, remoteGeoJson),
           ChallengePriority(defaultPriority, hpr, mpr, lpr),
-          ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks),
+          ChallengeExtra(defaultZoom, minZoom, maxZoom, defaultBasemap, defaultBasemapId, customBasemap, updateTasks, includeCheckinURL),
           status, statusMessage, lastTaskRefresh, location, bounding,
         )
     }
@@ -274,14 +276,16 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                       instruction, enabled, challenge_type, featured, checkin_comment, checkin_source,
                                       overpass_ql, remote_geo_json, status, status_message, default_priority, high_priority_rule,
                                       medium_priority_rule, low_priority_rule, default_zoom, min_zoom,
-                                      max_zoom, default_basemap, default_basemap_id, custom_basemap, updatetasks)
+                                      max_zoom, default_basemap, default_basemap_id, custom_basemap, updatetasks,
+                                      include_checkin_url)
               VALUES (${challenge.name}, ${challenge.general.owner}, ${challenge.general.parent}, ${challenge.general.difficulty},
                       ${challenge.description}, ${challenge.infoLink}, ${challenge.general.blurb}, ${challenge.general.instruction},
                       ${challenge.general.enabled}, ${challenge.general.challengeType}, ${challenge.general.featured},
                       ${challenge.general.checkinComment}, ${challenge.general.checkinSource}, ${challenge.creation.overpassQL}, ${challenge.creation.remoteGeoJson}, ${challenge.status},
                       ${challenge.statusMessage}, ${challenge.priority.defaultPriority}, ${challenge.priority.highPriorityRule},
                       ${challenge.priority.mediumPriorityRule}, ${challenge.priority.lowPriorityRule}, ${challenge.extra.defaultZoom}, ${challenge.extra.minZoom},
-                      ${challenge.extra.maxZoom}, ${challenge.extra.defaultBasemap}, ${challenge.extra.defaultBasemapId}, ${challenge.extra.customBasemap}, ${challenge.extra.updateTasks}
+                      ${challenge.extra.maxZoom}, ${challenge.extra.defaultBasemap}, ${challenge.extra.defaultBasemapId}, ${challenge.extra.customBasemap}, ${challenge.extra.updateTasks},
+                      ${challenge.extra.includeCheckinURL}
                       ) ON CONFLICT(parent_id, LOWER(name)) DO NOTHING RETURNING #${this.retrieveColumns}""".as(this.parser.*).headOption
       }
     } match {
@@ -347,6 +351,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
         val defaultBasemapId = (updates \ "defaultBasemapId").asOpt[String].getOrElse(cachedItem.extra.defaultBasemapId.getOrElse(""))
         val customBasemap = (updates \ "customBasemap").asOpt[String].getOrElse(cachedItem.extra.customBasemap.getOrElse(""))
         val updateTasks = (updates \ "updateTasks").asOpt[Boolean].getOrElse(cachedItem.extra.updateTasks)
+        val includeCheckinURL = (updates \ "includeCheckinURL").asOpt[Boolean].getOrElse(cachedItem.extra.includeCheckinURL)
 
         SQL"""UPDATE challenges SET name = $name, owner_id = $ownerId, parent_id = $parentId, difficulty = $difficulty,
                 description = $description, info_link = $infoLink, blurb = $blurb, instruction = $instruction,
@@ -374,7 +379,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
           }
         },
                 default_zoom = $defaultZoom, min_zoom = $minZoom, max_zoom = $maxZoom, default_basemap = $defaultBasemap, default_basemap_id = $defaultBasemapId,
-                custom_basemap = $customBasemap, updatetasks = $updateTasks, challenge_type = $challengeType
+                custom_basemap = $customBasemap, updatetasks = $updateTasks, challenge_type = $challengeType, include_checkin_url = $includeCheckinURL
               WHERE id = $id RETURNING #${this.retrieveColumns}""".as(parser.*).headOption
       }
     }

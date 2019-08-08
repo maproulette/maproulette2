@@ -68,6 +68,7 @@ As shown in the example there are 3 basic options that are required to create a 
 - **defaultBasemap** - 
 - **customBasemap** - URL for a custom basemap to be applied to the map for a specific challenge.
 - **updateTasks** - Whether to update the tasks on a periodic basis. This will also delete stale tasks.
+- **includeCheckinURL** - Whether to append the URL of the challenge to the changeset comment. Boolean, defaults to false.
 
 #### Manually Building a Task
 
