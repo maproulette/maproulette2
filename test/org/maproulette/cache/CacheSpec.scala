@@ -6,7 +6,7 @@ import org.maproulette.data.{ItemType, ProjectType}
 import org.maproulette.models.BaseObject
 import org.scalatestplus.play.PlaySpec
 import play.api.Configuration
-import play.api.libs.json.{Json, Reads, Writes}
+import play.api.libs.json.{DefaultWrites, JodaReads, JodaWrites, Json, Reads, Writes}
 
 /**
   * @author cuthbertm
@@ -18,7 +18,7 @@ case class TestBaseObject(override val id: Long,
   override val itemType: ItemType = ProjectType()
 }
 
-class CacheSpec extends PlaySpec {
+class CacheSpec extends PlaySpec with JodaWrites with JodaReads {
   implicit val groupWrites: Writes[TestBaseObject] = Json.writes[TestBaseObject]
   implicit val groupReads: Reads[TestBaseObject] = Json.reads[TestBaseObject]
   implicit val configuration = Configuration.from(Map(Config.KEY_CACHING_CACHE_LIMIT -> 6, Config.KEY_CACHING_CACHE_EXPIRY -> 5))

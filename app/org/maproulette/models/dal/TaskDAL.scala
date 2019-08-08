@@ -67,9 +67,9 @@ class TaskDAL @Inject()(override val db: Database,
     "ST_AsGeoJSON(tasks.location) AS geo_location "
 
   val retrieveColumnsWithReview: String = this.retrieveColumns +
-        ", task_review.review_status, task_review.review_requested_by, " +
-        "task_review.reviewed_by, task_review.reviewed_at, task_review.review_started_at, " +
-        "task_review.review_claimed_by "
+    ", task_review.review_status, task_review.review_requested_by, " +
+    "task_review.reviewed_by, task_review.reviewed_at, task_review.review_started_at, " +
+    "task_review.review_claimed_by "
 
   // The anorm row parser to convert records from the task table to task objects
   implicit val parser: RowParser[Task] = {
@@ -81,7 +81,7 @@ class TaskDAL @Inject()(override val db: Database,
       get[Option[String]]("tasks.instruction") ~
       get[Option[String]]("geo_location") ~
       get[Option[Int]]("tasks.status") ~
-      get[String]("geo_json") ~
+      get[Option[String]]("geo_json") ~
       get[Option[String]]("tasks.suggestedfix_geojson") ~
       get[Option[DateTime]]("tasks.mapped_on") ~
       get[Option[Int]]("task_review.review_status") ~
@@ -95,8 +95,10 @@ class TaskDAL @Inject()(override val db: Database,
       case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ status ~ geojson ~
         suggestedfix_geojson ~ mappedOn ~ reviewStatus ~ reviewRequestedBy ~ reviewedBy ~
         reviewedAt ~ reviewStartedAt ~ reviewClaimedBy ~ priority ~ changesetId =>
-        Task(id, name, created, modified, parent_id, instruction, location,
-          geojson, suggestedfix_geojson, status, mappedOn,
+
+        val values = this.updateAndRetrieve(id, geojson, location, suggestedfix_geojson)
+        Task(id, name, created, modified, parent_id, instruction, values._2,
+          values._1, values._3, status, mappedOn,
           reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt, reviewStartedAt,
           reviewClaimedBy, priority, changesetId)
     }
@@ -111,7 +113,7 @@ class TaskDAL @Inject()(override val db: Database,
       get[Option[String]]("tasks.instruction") ~
       get[Option[String]]("location") ~
       get[Option[Int]]("tasks.status") ~
-      get[String]("geojson") ~
+      get[Option[String]]("geojson") ~
       get[Option[String]]("suggestedfix_geojson") ~
       get[Option[DateTime]]("tasks.mapped_on") ~
       get[Option[Int]]("task_review.review_status") ~
@@ -128,9 +130,11 @@ class TaskDAL @Inject()(override val db: Database,
       case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ status ~ geojson ~
         suggestedfix_geojson ~ mappedOn ~ reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~
         reviewStartedAt ~ reviewClaimedBy ~ priority ~ changesetId ~ challengeName ~ reviewRequestedByUsername ~ reviewedByUsername =>
+
+        val values = this.updateAndRetrieve(id, geojson, location, suggestedfix_geojson)
         TaskWithReview(
-          Task(id, name, created, modified, parent_id, instruction, location,
-            geojson, suggestedfix_geojson, status, mappedOn,
+          Task(id, name, created, modified, parent_id, instruction, values._2,
+            values._1, values._3, status, mappedOn,
             reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt, reviewStartedAt,
             reviewClaimedBy, priority, changesetId),
           TaskReview(-1, id, reviewStatus, challengeName, reviewRequestedBy, reviewRequestedByUsername,
@@ -229,127 +233,6 @@ class TaskDAL @Inject()(override val db: Database,
   }
 
   /**
-    * This is a merge update function that will update the task if it exists otherwise it will
-    * insert a new item.
-    *
-    * @param element The element that needs to be inserted or updated. Although it could be updated,
-    *                it requires the element itself in case it needs to be inserted
-    * @param user    The user that is executing the function
-    * @param id      The id of the element that is being updated/inserted
-    * @param c       A connection to execute against
-    * @return
-    */
-  override def mergeUpdate(element: Task, user: User)(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
-    this.permission.hasObjectWriteAccess(element, user)
-    // before clearing the cache grab the cachedItem
-    // by setting the delete implicit to true we clear out the cache for the element
-    // The cachedItem could be
-    val cachedItem = this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
-      Some(cachedItem)
-    }(id, true, true)
-    val updatedTask: Option[Task] = this.withMRTransaction { implicit c =>
-      val query = """SELECT create_update_task({name}, {parentId}, {instruction},
-                    {status}, {geojson}::JSONB, {suggestedFixGeoJson}::JSONB, {id}, {priority}, {changesetId},
-                    {reset}, {mappedOn}, {reviewStatus}, CAST({reviewRequestedBy} AS INTEGER),
-                    CAST({reviewedBy} AS INTEGER), {reviewedAt})"""
-
-      val updatedTaskId = SQL(query).on(
-        NamedParameter("name", ToParameterValue.apply[String].apply(element.name)),
-        NamedParameter("parentId", ToParameterValue.apply[Long].apply(element.parent)),
-        NamedParameter("instruction", ToParameterValue.apply[String].apply(element.instruction.getOrElse(""))),
-        NamedParameter("status", ToParameterValue.apply[Int].apply(element.status.getOrElse(Task.STATUS_CREATED))),
-        NamedParameter("geojson", ToParameterValue.apply[String].apply(element.geometries)),
-        NamedParameter("suggestedFixGeoJson", ToParameterValue.apply[String].apply(element.suggestedFix.orNull)),
-        NamedParameter("id", ToParameterValue.apply[Long].apply(element.id)),
-        NamedParameter("priority", ToParameterValue.apply[Int].apply(element.priority)),
-        NamedParameter("changesetId", ToParameterValue.apply[Long].apply(element.changesetId.getOrElse(-1L))),
-        NamedParameter("reset", ToParameterValue.apply[String].apply(config.taskReset + " days")),
-        NamedParameter("mappedOn", ToParameterValue.apply[Option[DateTime]].apply(element.mappedOn)),
-        NamedParameter("reviewStatus", ToParameterValue.apply[Option[Int]].apply(element.reviewStatus)),
-        NamedParameter("reviewRequestedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewRequestedBy)),
-        NamedParameter("reviewedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewedBy)),
-        NamedParameter("reviewedAt", ToParameterValue.apply[Option[DateTime]].apply(element.reviewedAt))
-      ).as(long("create_update_task").*).head
-
-      // If we are updating the task review back to None then we need to delete its entry in the task_review table
-      cachedItem match {
-        case Some(item) =>
-          if (item.reviewRequestedBy != None && element.reviewRequestedBy == None) {
-            SQL("DELETE FROM task_review WHERE task_id=" + element.id).execute()
-          }
-        case None => // ignore
-      }
-
-      Some(element.copy(id = updatedTaskId))
-    }
-    updatedTask match {
-      case Some(t) => Future {
-        this.updateTaskPriority(t.id, user)
-      }
-      case None => //just ignore and do nothing
-    }
-    updatedTask
-  }
-
-  /**
-    * A basic retrieval of the object based on the id. With caching, so if it finds
-    * the object in the cache it will return that object without checking the database, otherwise
-    * will hit the database directly.
-    *
-    * @param id The id of the object to be retrieved
-    * @return The object, None if not found
-    */
-  override def retrieveById(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
-    this.cacheManager.withCaching { () =>
-      this.withMRConnection { implicit c =>
-        val query = s"SELECT $retrieveColumnsWithReview FROM ${this.tableName} " +
-          "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id " +
-          "WHERE tasks.id = {id}"
-        SQL(query).on('id -> ToParameterValue.apply[Long](p = keyToStatement).apply(id)).as(this.parser.singleOpt)
-      }
-    }
-  }
-
-  /**
-    * This function will update the tasks priority based on the parent challenge information. It will
-    * check first to see if it falls inside the HIGH priority bucket, then MEDIUM then LOW. If it doesn't
-    * fall into any priority bucket, it will then set the priority to the default priority defined
-    * in the parent challenge
-    *
-    * @param taskId The id for the task to update the priority for
-    * @param c      The database connection
-    */
-  def updateTaskPriority(taskId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
-    implicit val id = taskId
-    this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit task =>
-      this.withMRTransaction { implicit c =>
-        implicit val id = taskId
-        this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit task =>
-          this.permission.hasObjectWriteAccess(task, user)
-          // get the parent challenge, as we need the priority information
-          val parentChallenge = this.challengeDAL.get().retrieveById(task.parent) match {
-            case Some(c) => c
-            case None => throw new NotFoundException(s"No parent was found for task [$taskId], this should never happen.")
-          }
-          val newPriority = task.getTaskPriority(parentChallenge)
-          if (newPriority != task.priority) {
-            this.withMRTransaction { implicit c =>
-              // Update the location of the particular task
-              SQL"""UPDATE tasks
-              SET priority = $newPriority
-              WHERE id = $taskId
-            """.executeUpdate()
-              this.retrieveById(taskId)
-            }
-          } else {
-            Some(task)
-          }
-        }
-      }
-    }
-  }
-
-  /**
     * Updates a task object in the database.
     *
     * @param value A json object containing fields to be updated for the task
@@ -426,6 +309,128 @@ class TaskDAL @Inject()(override val db: Database,
       }
 
       task
+    }
+  }
+
+  /**
+    * This is a merge update function that will update the task if it exists otherwise it will
+    * insert a new item.
+    *
+    * @param element The element that needs to be inserted or updated. Although it could be updated,
+    *                it requires the element itself in case it needs to be inserted
+    * @param user    The user that is executing the function
+    * @param id      The id of the element that is being updated/inserted
+    * @param c       A connection to execute against
+    * @return
+    */
+  override def mergeUpdate(element: Task, user: User)(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
+    this.permission.hasObjectWriteAccess(element, user)
+    // before clearing the cache grab the cachedItem
+    // by setting the delete implicit to true we clear out the cache for the element
+    // The cachedItem could be
+    val cachedItem = this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
+      Some(cachedItem)
+    }(id, true, true)
+    val updatedTask: Option[Task] = this.withMRTransaction { implicit c =>
+      val query =
+        """SELECT create_update_task({name}, {parentId}, {instruction},
+                    {status}, {geojson}::JSONB, {suggestedFixGeoJson}::JSONB, {id}, {priority}, {changesetId},
+                    {reset}, {mappedOn}, {reviewStatus}, CAST({reviewRequestedBy} AS INTEGER),
+                    CAST({reviewedBy} AS INTEGER), {reviewedAt})"""
+
+      val updatedTaskId = SQL(query).on(
+        NamedParameter("name", ToParameterValue.apply[String].apply(element.name)),
+        NamedParameter("parentId", ToParameterValue.apply[Long].apply(element.parent)),
+        NamedParameter("instruction", ToParameterValue.apply[String].apply(element.instruction.getOrElse(""))),
+        NamedParameter("status", ToParameterValue.apply[Int].apply(element.status.getOrElse(Task.STATUS_CREATED))),
+        NamedParameter("geojson", ToParameterValue.apply[String].apply(element.geometries)),
+        NamedParameter("suggestedFixGeoJson", ToParameterValue.apply[String].apply(element.suggestedFix.orNull)),
+        NamedParameter("id", ToParameterValue.apply[Long].apply(element.id)),
+        NamedParameter("priority", ToParameterValue.apply[Int].apply(element.priority)),
+        NamedParameter("changesetId", ToParameterValue.apply[Long].apply(element.changesetId.getOrElse(-1L))),
+        NamedParameter("reset", ToParameterValue.apply[String].apply(config.taskReset + " days")),
+        NamedParameter("mappedOn", ToParameterValue.apply[Option[DateTime]].apply(element.mappedOn)),
+        NamedParameter("reviewStatus", ToParameterValue.apply[Option[Int]].apply(element.reviewStatus)),
+        NamedParameter("reviewRequestedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewRequestedBy)),
+        NamedParameter("reviewedBy", ToParameterValue.apply[Option[Long]].apply(element.reviewedBy)),
+        NamedParameter("reviewedAt", ToParameterValue.apply[Option[DateTime]].apply(element.reviewedAt))
+      ).as(long("create_update_task").*).head
+
+      // If we are updating the task review back to None then we need to delete its entry in the task_review table
+      cachedItem match {
+        case Some(item) =>
+          if (item.reviewRequestedBy != None && element.reviewRequestedBy == None) {
+            SQL("DELETE FROM task_review WHERE task_id=" + element.id).execute()
+          }
+        case None => // ignore
+      }
+
+      Some(element.copy(id = updatedTaskId))
+    }
+    updatedTask match {
+      case Some(t) => Future {
+        this.updateTaskPriority(t.id, user)
+      }
+      case None => //just ignore and do nothing
+    }
+    updatedTask
+  }
+
+  /**
+    * This function will update the tasks priority based on the parent challenge information. It will
+    * check first to see if it falls inside the HIGH priority bucket, then MEDIUM then LOW. If it doesn't
+    * fall into any priority bucket, it will then set the priority to the default priority defined
+    * in the parent challenge
+    *
+    * @param taskId The id for the task to update the priority for
+    * @param c      The database connection
+    */
+  def updateTaskPriority(taskId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+    implicit val id = taskId
+    this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit task =>
+      this.withMRTransaction { implicit c =>
+        implicit val id = taskId
+        this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit task =>
+          this.permission.hasObjectWriteAccess(task, user)
+          // get the parent challenge, as we need the priority information
+          val parentChallenge = this.challengeDAL.get().retrieveById(task.parent) match {
+            case Some(c) => c
+            case None => throw new NotFoundException(s"No parent was found for task [$taskId], this should never happen.")
+          }
+          val newPriority = task.getTaskPriority(parentChallenge)
+          if (newPriority != task.priority) {
+            this.withMRTransaction { implicit c =>
+              // Update the location of the particular task
+              SQL"""UPDATE tasks
+              SET priority = $newPriority
+              WHERE id = $taskId
+            """.executeUpdate()
+              this.retrieveById(taskId)
+            }
+          } else {
+            Some(task)
+          }
+        }
+      }
+    }
+  }
+
+  /**
+    * A basic retrieval of the object based on the id. With caching, so if it finds
+    * the object in the cache it will return that object without checking the database, otherwise
+    * will hit the database directly.
+    *
+    * @param id The id of the object to be retrieved
+    * @return The object, None if not found
+    */
+  override def retrieveById(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
+    this.cacheManager.withCaching { () =>
+      this.withMRConnection { implicit c =>
+        val query = s"SELECT $retrieveColumnsWithReview FROM ${this.tableName} " +
+          "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id " +
+          "WHERE tasks.id = {id}"
+        SQL(query).on('id -> ToParameterValue.apply[Long](p = keyToStatement).apply(id)).as(this.parser.singleOpt)
+      }
     }
   }
 
@@ -542,25 +547,6 @@ class TaskDAL @Inject()(override val db: Database,
     }
 
     updatedRows
-  }
-
-  def getTaskWithReview(taskId: Long): TaskWithReview = {
-    this.withMRConnection { implicit c =>
-      val query =
-        s"""
-        SELECT $retrieveColumnsWithReview,
-               challenges.name as challenge_name,
-               mappers.name as review_requested_by_username,
-               reviewers.name as reviewed_by_username
-        FROM ${this.tableName}
-        LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
-        LEFT OUTER JOIN users mappers ON task_review.review_requested_by = mappers.id
-        LEFT OUTER JOIN users reviewers ON task_review.reviewed_by = reviewers.id
-        INNER JOIN challenges ON challenges.id = tasks.parent_id
-        WHERE tasks.id = {taskId}
-      """
-      SQL(query).on('taskId -> taskId).as(this.taskWithReviewParser.single)
-    }
   }
 
   /**
@@ -771,6 +757,25 @@ class TaskDAL @Inject()(override val db: Database,
     }
 
     updatedRows
+  }
+
+  def getTaskWithReview(taskId: Long): TaskWithReview = {
+    this.withMRConnection { implicit c =>
+      val query =
+        s"""
+        SELECT $retrieveColumnsWithReview,
+               challenges.name as challenge_name,
+               mappers.name as review_requested_by_username,
+               reviewers.name as reviewed_by_username
+        FROM ${this.tableName}
+        LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
+        LEFT OUTER JOIN users mappers ON task_review.review_requested_by = mappers.id
+        LEFT OUTER JOIN users reviewers ON task_review.reviewed_by = reviewers.id
+        INNER JOIN challenges ON challenges.id = tasks.parent_id
+        WHERE tasks.id = {taskId}
+      """
+      SQL(query).on('taskId -> taskId).as(this.taskWithReviewParser.single)
+    }
   }
 
   /**
@@ -1138,30 +1143,6 @@ class TaskDAL @Inject()(override val db: Database,
     }
   }
 
-  def updateWhereClause(params: SearchParameters, whereClause: StringBuilder, joinClause: StringBuilder)
-                       (implicit projectSearch: Boolean = true): ListBuffer[NamedParameter] = {
-    val parameters = new ListBuffer[NamedParameter]()
-    params.location match {
-      case Some(sl) => this.appendInWhereClause(whereClause, s"t.location @ ST_MakeEnvelope (${sl.left}, ${sl.bottom}, ${sl.right}, ${sl.top}, 4326)")
-      case None => // do nothing
-    }
-
-    params.taskStatus match {
-      case Some(sl) if sl.nonEmpty => this.appendInWhereClause(whereClause, s"t.status IN (${sl.mkString(",")})")
-      case Some(sl) if sl.isEmpty => //ignore this scenario
-      case _ => this.appendInWhereClause(whereClause, "t.status IN (0,3,6)")
-    }
-
-    params.priority match {
-      case Some(p) if p == 0 || p == 1 || p == 2 => this.appendInWhereClause(whereClause, s"t.priority = $p")
-      case _ => // ignore
-    }
-
-    parameters ++= this.addSearchToQuery(params, whereClause)(projectSearch)
-    parameters ++= this.addChallengeTagMatchingToQuery(params, whereClause, joinClause)
-    parameters
-  }
-
   /**
     * Gets the specific tasks within a cluster
     *
@@ -1202,6 +1183,30 @@ class TaskDAL @Inject()(override val db: Database,
          """
       SQL(query).as(challengeDAL.get().pointParser.*)
     }
+  }
+
+  def updateWhereClause(params: SearchParameters, whereClause: StringBuilder, joinClause: StringBuilder)
+                       (implicit projectSearch: Boolean = true): ListBuffer[NamedParameter] = {
+    val parameters = new ListBuffer[NamedParameter]()
+    params.location match {
+      case Some(sl) => this.appendInWhereClause(whereClause, s"t.location @ ST_MakeEnvelope (${sl.left}, ${sl.bottom}, ${sl.right}, ${sl.top}, 4326)")
+      case None => // do nothing
+    }
+
+    params.taskStatus match {
+      case Some(sl) if sl.nonEmpty => this.appendInWhereClause(whereClause, s"t.status IN (${sl.mkString(",")})")
+      case Some(sl) if sl.isEmpty => //ignore this scenario
+      case _ => this.appendInWhereClause(whereClause, "t.status IN (0,3,6)")
+    }
+
+    params.priority match {
+      case Some(p) if p == 0 || p == 1 || p == 2 => this.appendInWhereClause(whereClause, s"t.priority = $p")
+      case _ => // ignore
+    }
+
+    parameters ++= this.addSearchToQuery(params, whereClause)(projectSearch)
+    parameters ++= this.addChallengeTagMatchingToQuery(params, whereClause, joinClause)
+    parameters
   }
 
   /**
@@ -1245,7 +1250,7 @@ class TaskDAL @Inject()(override val db: Database,
             get[Option[Int]]("task_review.reviewed_by") ~ get[Option[DateTime]]("task_review.reviewed_at") ~
             get[Option[DateTime]]("task_review.review_started_at") ~ int("tasks.priority") map {
             case id ~ name ~ parentId ~ parentName ~ instruction ~ location ~ status ~ mappedOn ~
-                 reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~ reviewStartedAt ~ priority =>
+              reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~ reviewStartedAt ~ priority =>
               val locationJSON = Json.parse(location)
               val coordinates = (locationJSON \ "coordinates").as[List[Double]]
               val point = Point(coordinates(1), coordinates.head)
@@ -1345,8 +1350,8 @@ class TaskDAL @Inject()(override val db: Database,
         comments <- get[Option[String]]("comments")
         tags <- get[Option[String]]("tags")
       } yield TaskSummary(taskId, name, status, priority, username, mappedOn,
-                          reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt,
-                          reviewStartedAt, comments, tags)
+        reviewStatus, reviewRequestedBy, reviewedBy, reviewedAt,
+        reviewStartedAt, comments, tags)
 
       val status = statusFilter match {
         case Some(s) => s"AND t.status IN (${s.mkString(",")})"
@@ -1459,6 +1464,26 @@ class TaskDAL @Inject()(override val db: Database,
         case None =>
           throw new NotFoundException("Task was not found.")
       }
+    }
+  }
+
+  /**
+    * A temporary solution that will allow us to lazy update the geojson data
+    *
+    * @param taskId The identifier of the task
+    */
+  def updateAndRetrieve(taskId: Long, geojson: Option[String], location: Option[String], suggestedfix: Option[String])
+                       (implicit c: Option[Connection] = None): (String, Option[String], Option[String]) = {
+    geojson match {
+      case Some(g) => (g, location, suggestedfix)
+      case None =>
+        this.withMRTransaction { implicit c =>
+          SQL("SELECT * FROM update_geometry({id})").on('id -> ToParameterValue.apply[Long](p = keyToStatement).apply(taskId))
+            .as((str("geo") ~ get[Option[String]]("loc") ~ get[Option[String]]("fix_geo")).*).headOption match {
+            case Some(values) => (values._1._1, values._1._2, values._2)
+            case None => throw new Exception("Failed to retrieve task data")
+          }
+        }
     }
   }
 
