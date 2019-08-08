@@ -129,27 +129,34 @@ case class Challenge(override val id: Long,
 
   private def matchesRule(rule: Option[String], properties: Map[String, String]): Boolean = {
     rule match {
-      case Some(r) =>
-        val ruleJSON = Json.parse(r)
-        val cnf = (ruleJSON \ "condition").asOpt[String] match {
-          case Some("OR") => false
-          case _ => true
-        }
-        implicit val reads = Writes
-        val rules = (ruleJSON \ "rules").as[List[JsValue]].map(jsValue => {
+      case Some(r) => matchesJSONRule(Json.parse(r), properties)
+      case None => false
+    }
+  }
+
+  private def matchesJSONRule(ruleJSON: JsValue, properties: Map[String, String]): Boolean = {
+    val cnf = (ruleJSON \ "condition").asOpt[String] match {
+      case Some("OR") => false
+      case _ => true
+    }
+    implicit val reads = Writes
+    val rules = (ruleJSON \ "rules").as[List[JsValue]]
+    val matched = rules.filter(jsValue => {
+      (jsValue \ "rules").asOpt[JsValue] match {
+        case Some(nestedRule) => matchesJSONRule(jsValue, properties)
+        case _ =>
           val keyValue = (jsValue \ "value").as[String].split("\\.", 2)
           val valueType = (jsValue \ "type").as[String]
-          PriorityRule((jsValue \ "operator").as[String], keyValue(0), keyValue(1), valueType)
-        })
-        val matched = rules.filter(_.doesMatch(properties))
-        if (cnf && matched.size == rules.size) {
-          true
-        } else if (!cnf && matched.nonEmpty) {
-          true
-        } else {
-          false
-        }
-      case None => false
+          val rule = PriorityRule((jsValue \ "operator").as[String], keyValue(0), keyValue(1), valueType)
+          rule.doesMatch(properties)
+      }
+    })
+    if (cnf && matched.size == rules.size) {
+      true
+    } else if (!cnf && matched.nonEmpty) {
+      true
+    } else {
+      false
     }
   }
 }
@@ -196,8 +203,7 @@ object Challenge {
   val STATUS_DELETING_TASKS = 6
 
   /**
-    * This will check to make sure that the json rule is fully valid. The simple check just makes sure
-    * that every rule value can be split by "." into two values.
+    * This will check to make sure that the rule string is fully valid.
     *
     * @param rule
     * @return
@@ -205,14 +211,28 @@ object Challenge {
   def isValidRule(rule: Option[String]): Boolean = {
     rule match {
       case Some(r) if StringUtils.isNotEmpty(r) && !StringUtils.equalsIgnoreCase(r, "{}") =>
-        val ruleJSON = Json.parse(r)
-        val rules = (ruleJSON \ "rules").as[List[JsValue]].map(jsValue => {
-          val keyValue = (jsValue \ "value").as[String].split("\\.", 2)
-          keyValue.size == 2
-        })
-        !rules.contains(false)
+        isValidRuleJSON(Json.parse(r))
       case _ => false
     }
+  }
+
+  /**
+    * This will check to make sure that the json rule is fully valid. The simple check just makes sure
+    * that every rule value can be split by "." into two values, with support for nested rules
+    *
+    * @param ruleJSON
+    * @return
+    */
+  def isValidRuleJSON(ruleJSON: JsValue): Boolean = {
+    val rules = (ruleJSON \ "rules").as[List[JsValue]].map(jsValue => {
+      (jsValue \ "rules").asOpt[JsValue] match {
+        case Some(nestedRule) => isValidRuleJSON(jsValue)
+        case _ =>
+          val keyValue = (jsValue \ "value").as[String].split("\\.", 2)
+          keyValue.size == 2
+      }
+    })
+    !rules.contains(false)
   }
 
   def emptyChallenge(ownerId: Long, parentId: Long): Challenge = Challenge(
