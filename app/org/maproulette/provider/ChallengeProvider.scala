@@ -353,6 +353,7 @@ class ChallengeProvider @Inject()(challengeDAL: ChallengeDAL, taskDAL: TaskDAL,
         "type" -> "FeatureCollection",
         "features" -> Json.arr(Json.obj(
           "id" -> name,
+          "type" -> "Feature",
           "geometry" -> geometry,
           "properties" -> properties
         ))

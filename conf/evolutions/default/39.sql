@@ -19,7 +19,7 @@ BEGIN
 END$$;;
 DO $$
 BEGIN
-  PERFORM column_name FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'geojson';;
+  PERFORM column_name FROM information_schema.columns WHERE table_name = 'tasks' AND column_name = 'suggestedfix_geojson';;
   IF NOT FOUND THEN
     ALTER TABLE tasks ADD COLUMN suggestedfix_geojson JSONB;;
   END IF;;

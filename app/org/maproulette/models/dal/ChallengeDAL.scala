@@ -750,7 +750,7 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
                                            END)) ||
                                         hstore('mr_reviewer', (select name from users where id=t.reviewed_by)::text) ||
                                         hstore('mr_reviewedAt', t.reviewed_at::text) ||
-                                        hstore('mr_reviewTimeSeconds', FLOOR(EXTRACT(EPOCH FROM (tr.reviewed_at - tr.review_started_at)))::text) ||
+                                        hstore('mr_reviewTimeSeconds', FLOOR(EXTRACT(EPOCH FROM (t.reviewed_at - t.review_started_at)))::text) ||
                                         hstore('mr_tags', (SELECT STRING_AGG(tg.name, ',') AS tags
                                                             FROM tags_on_tasks tot, tags tg
                                                             WHERE tot.task_id=t.tid AND tg.id = tot.tag_id))
