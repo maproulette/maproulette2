@@ -503,6 +503,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
       this.appendInWhereClause(whereClause, s"task_review.review_status <> ${Task.REVIEW_STATUS_REQUESTED} ")
     }
 
+    this.appendInWhereClause(whereClause, "(tasks.bundle_id is NULL OR tasks.is_bundle_primary = true)")
     setupReviewSearchClause(whereClause, joinClause, searchParameters, startDate, endDate)
 
     val query = s"""
@@ -599,6 +600,7 @@ class TaskReviewDAL @Inject()(override val db: Database,
                   task_review.review_requested_by != ${user.id} """
         }
       }
+      this.appendInWhereClause(whereClause, "(tasks.bundle_id is NULL OR tasks.is_bundle_primary = true)")
 
       val parameters = new ListBuffer[NamedParameter]()
       parameters ++= addSearchToQuery(params, whereClause)
