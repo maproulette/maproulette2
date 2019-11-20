@@ -403,8 +403,8 @@ class VirtualChallengeDAL @Inject()(override val db: Database,
       }
       val pointParser = long("id") ~ str("name") ~ str("instruction") ~ str("location") ~
                         int("status") ~ get[Option[String]]("suggested_fix") ~ get[Option[DateTime]]("mapped_on") ~
-                        get[Option[Int]]("review_status") ~ get[Option[Int]]("review_requested_by") ~
-                        get[Option[Int]]("reviewed_by") ~ get[Option[DateTime]]("reviewed_at") ~
+                        get[Option[Int]]("review_status") ~ get[Option[Long]]("review_requested_by") ~
+                        get[Option[Long]]("reviewed_by") ~ get[Option[DateTime]]("reviewed_at") ~
                         get[Option[DateTime]]("review_started_at") ~ int("priority") ~
                         get[Option[Long]]("bundle_id") ~ get[Option[Boolean]]("is_bundle_primary") map {
         case id ~ name ~ instruction ~ location ~ status ~ suggestedFix ~ mappedOn ~ reviewStatus ~ reviewRequestedBy ~

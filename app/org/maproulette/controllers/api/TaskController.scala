@@ -69,6 +69,8 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
 
   implicit val taskBundleWrites: Writes[TaskBundle] = TaskBundle.taskBundleWrites
 
+  implicit val pointReviewWrites = ClusteredPoint.pointReviewWrites
+
   override def dalWithTags: TagDALMixin[Task] = dal
 
   /**
@@ -317,11 +319,14 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
       SearchParameters.withSearch { p =>
         val params = p.copy(location = Some(SearchLocation(left, bottom, right, top)))
         val (count, result) = this.dal.getTasksInBoundingBox(User.userOrMocked(user), params, limit, offset, excludeLocked, sort, order)
+
+        val resultJson = _insertExtraJSON(result)
+
         if (includeTotal) {
-          Ok(Json.obj("total" -> count, "tasks" -> result))
+          Ok(Json.obj("total" -> count, "tasks" -> resultJson))
         }
         else {
-          Ok(Json.toJson(result))
+          Ok(resultJson)
         }
       }
     }
@@ -749,6 +754,44 @@ class TaskController @Inject()(override val sessionManager: SessionManager,
     this.sessionManager.authenticatedRequest { implicit user =>
       this.dal.deleteTaskBundle(user, id, primaryId)
       Ok
+    }
+  }
+
+  /**
+   * Fetches and inserts usernames for 'reviewRequestedBy' and 'reviewBy' into
+   * the ClusteredPoint.pointReview
+   */
+  private def _insertExtraJSON(tasks: List[ClusteredPoint]): JsValue = {
+    if (tasks.isEmpty) {
+      Json.toJson(List[JsValue]())
+    } else {
+      val mappers = Some(this.dalManager.user.retrieveListById(-1, 0)(tasks.map(
+        t => t.pointReview.reviewRequestedBy.getOrElse(0L))).map(u =>
+          u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
+
+      val reviewers = Some(this.dalManager.user.retrieveListById(-1, 0)(tasks.map(
+        t => t.pointReview.reviewedBy.getOrElse(0L))).map(u =>
+          u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
+
+      val jsonList = tasks.map { task =>
+        var updated = Json.toJson(task)
+        var reviewPointJson = Json.toJson(task.pointReview).as[JsObject]
+
+        if (task.pointReview.reviewRequestedBy.getOrElse(0) != 0) {
+          val mapperJson = Json.toJson(mappers.get(task.pointReview.reviewRequestedBy.get)).as[JsObject]
+          reviewPointJson = Utils.insertIntoJson(reviewPointJson, "reviewRequestedBy", mapperJson, true).as[JsObject]
+          updated = Utils.insertIntoJson(updated, "pointReview", reviewPointJson, true)
+        }
+
+        if (task.pointReview.reviewedBy.getOrElse(0) != 0) {
+          var reviewerJson = Json.toJson(reviewers.get(task.pointReview.reviewedBy.get)).as[JsObject]
+          reviewPointJson = Utils.insertIntoJson(reviewPointJson, "reviewedBy", reviewerJson, true).as[JsObject]
+          updated = Utils.insertIntoJson(updated, "pointReview", reviewPointJson, true)
+        }
+
+        updated
+      }
+      Json.toJson(jsonList)
     }
   }
 }

@@ -208,8 +208,8 @@ class ChallengeDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
       get[Option[Boolean]]("tasks.is_bundle_primary") ~
       get[Option[String]]("suggested_fix") ~
       get[Option[Int]]("task_review.review_status") ~
-      get[Option[Int]]("task_review.review_requested_by") ~
-      get[Option[Int]]("task_review.reviewed_by") ~
+      get[Option[Long]]("task_review.review_requested_by") ~
+      get[Option[Long]]("task_review.reviewed_by") ~
       get[Option[DateTime]]("task_review.reviewed_at") ~
       get[Option[DateTime]]("task_review.review_started_at") map {
       case id ~ name ~ parentId ~ parentName ~ instruction ~ location ~ status ~

@@ -12,7 +12,7 @@ import play.api.libs.json.JodaReads._
   */
 case class Point(lat: Double, lng: Double)
 
-case class PointReview(reviewStatus: Option[Int], reviewRequestedBy: Option[Int], reviewedBy: Option[Int],
+case class PointReview(reviewStatus: Option[Int], reviewRequestedBy: Option[Long], reviewedBy: Option[Long],
                        reviewedAt: Option[DateTime], reviewStartedAt: Option[DateTime])
 
 /**

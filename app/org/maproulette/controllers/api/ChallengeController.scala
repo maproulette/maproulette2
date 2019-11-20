@@ -187,11 +187,11 @@ class ChallengeController @Inject()(override val childController: TaskController
       Json.toJson(List[JsValue]())
     } else {
       val mappers = Some(this.dalManager.user.retrieveListById(-1, 0)(tasks.map(
-        t => t.pointReview.reviewRequestedBy.getOrElse(0).toLong)).map(u =>
+        t => t.pointReview.reviewRequestedBy.getOrElse(0L))).map(u =>
           u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
 
       val reviewers = Some(this.dalManager.user.retrieveListById(-1, 0)(tasks.map(
-        t => t.pointReview.reviewedBy.getOrElse(0).toLong)).map(u =>
+        t => t.pointReview.reviewedBy.getOrElse(0L))).map(u =>
           u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
 
       val jsonList = tasks.map { task =>
