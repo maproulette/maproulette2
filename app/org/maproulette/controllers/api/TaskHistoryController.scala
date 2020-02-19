@@ -10,6 +10,8 @@ import org.maproulette.models.{Answer, Challenge, TaskLogEntry}
 import org.maproulette.permissions.Permission
 import org.maproulette.session.{SessionManager, User}
 import org.maproulette.utils.Utils
+import org.maproulette.services.osm.ChangesetProvider
+import org.maproulette.provider.websockets.{WebSocketMessages, WebSocketProvider}
 import play.api.libs.json._
 import play.api.libs.ws.WSClient
 import play.api.mvc._
@@ -19,18 +21,32 @@ import play.api.mvc._
   *
   * @author krotstan
   */
-class TaskHistoryController @Inject()(override val sessionManager: SessionManager,
-                               override val actionManager: ActionManager,
-                               override val dal: TaskDAL,
-                               override val tagDAL: TagDAL,
-                               taskHistoryDAL: TaskHistoryDAL,
-                               dalManager: DALManager,
-                               wsClient: WSClient,
-                               config: Config,
-                               components: ControllerComponents,
-                               override val bodyParsers: PlayBodyParsers)
-  extends TaskController(sessionManager, actionManager, dal, tagDAL, dalManager,
-                         wsClient, config, components, bodyParsers) {
+class TaskHistoryController @Inject() (
+    override val sessionManager: SessionManager,
+    override val actionManager: ActionManager,
+    override val dal: TaskDAL,
+    override val tagDAL: TagDAL,
+    taskHistoryDAL: TaskHistoryDAL,
+    dalManager: DALManager,
+    wsClient: WSClient,
+    webSocketProvider: WebSocketProvider,
+    config: Config,
+    components: ControllerComponents,
+    changeService: ChangesetProvider,
+    override val bodyParsers: PlayBodyParsers
+) extends TaskController(
+      sessionManager,
+      actionManager,
+      dal,
+      tagDAL,
+      dalManager,
+      wsClient,
+      webSocketProvider,
+      config,
+      components,
+      changeService,
+      bodyParsers
+    ) {
 
   /**
     * Gets the history for a task. This includes commments, status_actions, and review_actions.
@@ -45,23 +61,32 @@ class TaskHistoryController @Inject()(override val sessionManager: SessionManage
   }
 
   /**
-   * Fetches and inserts usernames for 'osm_user_id', 'reviewRequestedBy' and 'reviewBy'
-   */
+    * Fetches and inserts usernames for 'osm_user_id', 'reviewRequestedBy' and 'reviewBy'
+    */
   private def _insertExtraJSON(entries: List[TaskLogEntry]): JsValue = {
     if (entries.isEmpty) {
       Json.toJson(List[JsValue]())
     } else {
-      val users = Some(this.dalManager.user.retrieveListById(-1, 0)(entries.map(
-        t => t.user.getOrElse(0).toLong)).map(u =>
-          u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
+      val users = Some(
+        this.dalManager.user
+          .retrieveListById(-1, 0)(entries.map(t => t.user.getOrElse(0).toLong))
+          .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
+          .toMap
+      )
 
-      val mappers = Some(this.dalManager.user.retrieveListById(-1, 0)(entries.map(
-        t => t.reviewRequestedBy.getOrElse(0).toLong)).map(u =>
-          u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
+      val mappers = Some(
+        this.dalManager.user
+          .retrieveListById(-1, 0)(entries.map(t => t.reviewRequestedBy.getOrElse(0).toLong))
+          .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
+          .toMap
+      )
 
-      val reviewers = Some(this.dalManager.user.retrieveListById(-1, 0)(entries.map(
-        t => t.reviewedBy.getOrElse(0).toLong)).map(u =>
-          u.id -> Json.obj("username" -> u.name, "id" -> u.id)).toMap)
+      val reviewers = Some(
+        this.dalManager.user
+          .retrieveListById(-1, 0)(entries.map(t => t.reviewedBy.getOrElse(0).toLong))
+          .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
+          .toMap
+      )
 
       val jsonList = entries.map { entry =>
         var updated = Json.toJson(entry)

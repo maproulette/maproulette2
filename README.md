@@ -1,106 +1,82 @@
-# MapRoulette API
-Welcome to New MapRoulette, the powerful & popular bug fixing tool (or is it a game?) for OpenStreetMap.
+# MapRoulette Back-end
+Welcome to the repository for the MapRoulette back-end server code. The MapRoulette back-end exposes the MapRoulette API, which the MapRoulette front-end web application depends on. The source code for the web application is in [a separate repository](https://github.com/osmlab/maproulette3).
 
-This README deals with development related topics only. If you are interested in contributing to OpenStreetMap by fixing some bugs through MapRoulette, just head over to [the MapRoulette web site](http://maproulette.org) and get started - it should be pretty self explanatory.
+**If you just want to deploy the MapRoulette back-end, [we have a 🚢 Docker image 🚢 for that](https://github.com/maproulette/maproulette2-docker)**. This is especially useful if you want to contribute to the MapRoulette front-end and don't intend to touch the back-end.
 
-That said, read on if you want to contribute to MapRoulette development and are ready to deploy your local instance.
-
-## Contributing
-
-Please fork the project and submit a pull request. See [Postman Docs](postman/README.md) for information on API Testing.
-
-### Frameworks used
-
-New MapRoulette is built upon the Play Framework using Scala. You can find more information about the Play Framework at https://www.playframework.com
-It uses the following core technologies:
+The MapRoulette back-end is built on these core technologies:
 
 * Postgres 9.5 with PostGIS 2.2.1
 * Play Framework 2.7.1 with Scala 2.12.8
 
-## Deploying MapRoulette
+## Requirements
 
-### Server
+* A Java 8 SDK 
+* PostgreSQL 9.5
+* PostGIS 2.2.1
+* [Scala Build Tool](https://www.scala-sbt.org/download.html) 1.2.8 
 
-### Local for test and development
+Newer versions may work but are untested.
 
-#### Register Dev App with OpenStreetMap
+## Setup
+
+### Requirements
+
+* A Java 8 SDK 
+* PostgreSQL 9.5
+* PostGIS 2.2.1
+* [Scala Build Tool](https://www.scala-sbt.org/download.html) 1.2.8 
+
+### Register an OAuth app with OSM
 
 Before beginning, you'll need to register an app with OpenStreetMap to get a consumer key and secret key. For development and testing, you may wish to do this on the [OSM dev server](http://master.apis.dev.openstreetmap.org) (you will need to setup a new user account if you have't used the dev server before).
 
-To register your app, login to your account, go to "My Settings", click on "oauth settings", and then click "Register your Application" near the bottom. Give your app a name and application URL (you can simply use http://localhost:9000 if desired) and leave the other URL fields blank. In the permissions section, check "read their user preferences" and then click the "Register" button at the bottom to get your consumer and secret keys. Be sure to take note of them.
+To register your app, login to your account, go to "My Settings", click on "oauth settings", and then click "Register your Application" near the bottom. Give your app a name and application URL (you can simply use http://localhost:9000 if desired) and leave the other URL fields blank. In the permissions section, check "read their user preferences" and "modify the map" and then click the "Register" button at the bottom to get your consumer and secret keys. Be sure to take note of them.
+
+Remember that you need to create the OAuth application on the OSM server that you will be testing against.
 
 For more details on the app registration process, see the [OSM OAuth wiki page](http://wiki.openstreetmap.org/wiki/OAuth).
 
+### PostgreSQL Database Setup
 
-#### Mac OSX
-
-> These instructions assume you have at least Mac OS 10.10 (Mavericks) and [Homebrew](http://brew.sh/) installed. We also assume that you have at least PostgreSQL 9.5 and PostGIS 2.2.1 installed. Homebrew provides packages for both (`brew install postgresql` and `brew install postgis`), which we recommend.
-
-* Make sure you have a Java 8 JDK. Check with `java -version` which should mention an 1.8.x version number. [Get](http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html) and install a Java 8 JDK if necessary.
-* Install the [Play Framework activator](https://www.playframework.com/documentation/2.5.x/Installing): `brew install typesafe-activator`.
 * Create a PostgreSQL superuser `osm`: `createuser -sW osm`. Use `osm` as the password.
 * Create a new PostgreSQL database `mp_dev` owned by `osm`: `createdb -O osm mp_dev`.
-* Setup your environment variables:
-    - Copy `conf/dev.conf.example` to `conf/dev.conf`
-    - Update database connection JDBC string as `MR_DATABASE_URL`: `export MR_DATABASE_URL='jdbc:postgresql://localhost:5432/mp_dev?user=osm&password=osm'`
-    - Consumer key from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_KEY`: `export MR_OAUTH_CONSUMER_KEY=<APPLICATION_CONSUMER_KEY>`
-    - Consumer secret from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_SECRET`: `export MR_OAUTH_CONSUMER_SECRET=<APPLICATION_CONSUMER_SECRET>`
-    - OSM server URL as `MR_OSM_SERVER` if you wish to use the dev server (defaults to production): `export MR_OSM_SERVER='http://master.dev.openstreetmap.org'`
-    - APIHost used for Swagger API documentation as `API_HOST`: `export API_HOST=localhost:9000`
-* Clone New MapRoulette: `git clone https://github.com/maproulette/maproulette2.git`.
-* Navigate into the newly created `maproulette2` directory and run the local development server: `activator run`. This will take some time the first run as dependencies are downloaded.
-* Head to [http://localhost:9000/](http://localhost:9000/) and confirm you can see the New MapRoulette front end. This also may take a while as artifacts are compiled.
 
-If you are having issues getting the activator to run, you can configure your instance with [dev.conf](#using-devconf)
+> On Linux you will need to execute these commands as the `postgres` user, `sudo -u postgres createuser -sP osm && sudo -u postgres createdb -O osm mp_dev`
 
-#### Linux
+### Server Configuration
 
-> These instructions were written for Ubuntu 16.04
+* Clone MapRoulette 2 `git clone https://github.com/maproulette/maproulette2.git`
+* `cd` into the newly created directory `cd maproulette2`
+* Create a configuration file by copying the template file `cp conf/dev.conf.example conf/dev.conf`
+* Open `dev.conf` in a text editor and change at least the following entries:
+    * `super.key`: a randomly chosen API key for superuser access
+    * `super.accounts`: a comma-separated list of OSM accound IDs whose corresponding MapRoulette users will have superuser access. Can be an empty string.
+    * `mapillary.clientId`: a [Mapillary Client ID](https://www.mapillary.com/dashboard/developers), needed if you want to use any of the Mapillary integrations.
+    * `osm.consumerKey` and `osm.consumerSecret`: the OAuth keys from your OSM OAuth app you created earlier.
+* Save `dev.conf`
+* Create an environment variable for the Swagger API documentation: `export API_HOST=localhost:9000`
 
-* Make sure you have a Java 8 JDK. Check with `java -version` which should mention a 1.8.x version number. 
-* If you don't have Java 8 JDK you can get it with the following command `sudo apt install openjdk-8-jdk`
-* Install the [Play Framework activator](https://www.playframework.com/documentation/2.5.x/Installing)
-    * After downloading unzip the archive to a directory that you have read and write access to
-    * Then add `activator` to your path: Add the following to your `.bashrc` or equivalent: `export PATH=$PATH:/path/to/unzipped-files/bin/`
-* Install PostgreSQL and PostGIS: `sudo apt install postgresql postgis`
-* Create a PostgreSQL superuser: `osm`: `sudo -u postgres createuser -sP osm`. Use `osm` as the password
-* Create a new PostgreSQL database `mp_dev` owned by `osm`: `sudo -u postgres createdb -O osm mp_dev`
-* Setup your environment variables:
-    - Database connection JDBC string as `MR_DATABASE_URL`: `export MR_DATABASE_URL='jdbc:postgresql://localhost:5432/mp_dev?user=osm&password=osm'`
-    - Consumer key from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_KEY`: `export MR_OAUTH_CONSUMER_KEY=<APPLICATION_CONSUMER_KEY>`
-    - Consumer secret from [app registration](#register-dev-app-with-openstreetmap) as `MR_OAUTH_CONSUMER_SECRET`: `export MR_OAUTH_CONSUMER_SECRET=<APPLICATION_CONSUMER_SECRET>`
-    - OSM server URL as `MR_OSM_SERVER` if you wish to use the dev server (defaults to production): `export MR_OSM_SERVER=http://master.dev.openstreetmap.org`
-    - APIHost used for Swagger API documentation as `API_HOST`: `export API_HOST=localhost:9000`
-* Clone New MapRoulette: `git clone https://github.com/maproulette/maproulette2.git`.
-* Navigate into the newly created `maproulette2` directory and run the local development server: `activator run`. This will take some time the first run as dependencies are downloaded.
-* Head to [http://localhost:9000/](http://localhost:9000/) and confirm you can see the New MapRoulette front end. This also may take a while as artifacts are compiled.
+Now you're ready to run the MapRoulette backend.
 
-#### Windows
+## Running
 
-A work-in-progress setup guide for Windows lives [here](https://gist.github.com/3710d7f15534ec747423a3117cd7cc9c). Please fork and improve!
+You run the MapRoulette backend in development mode like this:
 
-#### Using dev.conf
+`sbt run -Dconfig.resource=dev.conf`
 
-Another way to handle dev related configuration variables is to use the [dev.conf](conf/dev.conf) file which has a couple of prepopulated variables that would be beneficial for a test/development environment. To use this file you simply need to add the file as a jvm parameter, eg. -Dconfig.resource=dev.conf
+> This will take some time the first run as dependencies are downloaded.
 
-```
-activator run -Dconfig.resource=dev.conf
-```
+Confirm that it's all working by getting `http://localhost:9000/api/v2/challenges` which should return `[]` (since we don't have any challenges yet).
 
-Your conf/dev.conf file should have the following:
+> This will take some time on first run as artifacts are compiled.
 
-```
-include "application.conf"
+## Notes
 
-db.default.url="jdbc:postgresql://localhost:5432/mp_dev?user=osm&password=osm"
-maproulette.super.key="test"
-maproulette.super.accounts="*"
-osm.server="http://api06.dev.openstreetmap.org"
-osm.consumerKey=<APPLICATION_CONSUMER_KEY>
-osm.consumerSecret=<APPLICATION_CONSUMER_SECRET>
-```
+### Deploying on Windows
 
-#### SMTP (email) configuration
+Windows is not officially supported. However, there is an unofficial [setup guide](https://gist.github.com/3710d7f15534ec747423a3117cd7cc9c).
+
+### SMTP (email) configuration
 
 MapRoulette now supports transmission of emails, for example to inform users
 when they receive new in-app notifications. You will need access to an SMTP
@@ -150,7 +126,7 @@ notifications.digestEmail.startTime = "20:00:00"    # 8pm local server time
 notifications.digestEmail.interval = "24 hours"     # once daily
 ```
 
-#### SSL
+### SSL
 
 Openstreetmap.org recently moved to SSL only. This means that to authenticate against any SSL server you are now required to make sure that Java trusts the OSM SSL certificates. This is not very difficult to do, however they need to be completed for it to work. The steps below are for linux/Mac systems.
 
@@ -167,6 +143,10 @@ If you want to connect to the dev servers you can simply replace all instances o
 [Challenge API](docs/challenge_api.md) has further information about creating challenges through the API.
 
 See also the Swagger API documentation. You can view the documentation by going to the URL ```docs/swagger-ui/index.html?url=/assets/swagger.json``` on any MapRoulette instance.
+
+## Contributing
+
+Please fork the project and submit a pull request. See [Postman Docs](postman/README.md) for information on API Testing. The project is integrated with Travis-CI, so PR's will only be accepted once the build compiles successfully. MapRoulette also uses Scalafmt as it's code formatter. This is too keep the code style consistent across all developers. The check will be run first in Travis for the build, so if there are any code style issues it will fail the build immediately. IntelliJ should pick up the formatter and use Scalafmt automatically, however you can also use `sbt scalafmt` to format any and all code for you.
 
 ## Contact
 

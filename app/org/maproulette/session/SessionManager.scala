@@ -28,7 +28,13 @@ import scala.util.{Failure, Success, Try}
   * @author cuthbertm
   */
 @Singleton
-class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Config, db: Database, crypto: Crypto) {
+class SessionManager @Inject() (
+    ws: WSClient,
+    dalManager: DALManager,
+    config: Config,
+    db: Database,
+    crypto: Crypto
+) {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -38,8 +44,15 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
   private val osmOAuth = config.getOSMOauth
 
   // The OAuth object used to make the requests to the OpenStreetMap servers
-  private val oauth = OAuth(ServiceInfo(osmOAuth.requestTokenURL, osmOAuth.accessTokenURL,
-    osmOAuth.authorizationURL, osmOAuth.consumerKey), true)
+  private val oauth = OAuth(
+    ServiceInfo(
+      osmOAuth.requestTokenURL,
+      osmOAuth.accessTokenURL,
+      osmOAuth.authorizationURL,
+      osmOAuth.consumerKey
+    ),
+    true
+  )
 
   /**
     * Retrieves the user based on the verifier query string values from the authorization request to
@@ -58,7 +71,8 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
             this.sessionUser(Some(accessToken), true)(request) onComplete {
               case Success(user) =>
                 user match {
-                  case Some(u) => p success u.copy(osmProfile = u.osmProfile.copy(requestToken = accessToken))
+                  case Some(u) =>
+                    p success u.copy(osmProfile = u.osmProfile.copy(requestToken = accessToken))
                   case None => p failure new OAuthNotAuthorizedException()
                 }
 
@@ -76,7 +90,7 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
   }
 
   def retrieveUser(username: String, apiKey: String): Option[User] = {
-    val apiSplit = apiKey.split("\\|")
+    val apiSplit        = apiKey.split("\\|")
     val encryptedApiKey = crypto.encrypt(apiSplit(1))
     dalManager.user.retrieveByUsernameAndAPIKey(username, encryptedApiKey)
   }
@@ -87,7 +101,8 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @param callback The callback after the request is made to retrieve the request token
     * @return Either OAuthException (ie. NotAuthorized) or the request token
     */
-  def retrieveRequestToken(callback: String): Either[OAuthException, RequestToken] = this.oauth.retrieveRequestToken(callback)
+  def retrieveRequestToken(callback: String): Either[OAuthException, RequestToken] =
+    this.oauth.retrieveRequestToken(callback)
 
   /**
     * The URL where the user needs to be redirected to grant authorization to your application.
@@ -105,21 +120,24 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @param request The incoming http request
     * @return The result from the block of code
     */
-  def userAwareRequest(block: Option[User] => Result)
-                      (implicit request: Request[Any]): Future[Result] = {
+  def userAwareRequest(
+      block: Option[User] => Result
+  )(implicit request: Request[Any]): Future[Result] = {
     MPExceptionUtil.internalAsyncExceptionCatcher { () =>
       this.userAware(block)
     }
   }
 
-  protected def userAware(block: Option[User] => Result)
-                         (implicit request: Request[Any]): Future[Result] = {
+  protected def userAware(
+      block: Option[User] => Result
+  )(implicit request: Request[Any]): Future[Result] = {
     val p = Promise[Result]
     this.sessionUser(sessionTokenPair) onComplete {
-      case Success(result) => Try(block(result)) match {
-        case Success(res) => p success res
-        case Failure(f) => p failure f
-      }
+      case Success(result) =>
+        Try(block(result)) match {
+          case Success(res) => p success res
+          case Failure(f)   => p failure f
+        }
       case Failure(error) => p failure error
     }
     p.future
@@ -134,42 +152,49 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @param requireSuperUser Whether a super user is required for this request
     * @return The result from the block of code
     */
-  def authenticatedRequest(block: User => Result)
-                          (implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
+  def authenticatedRequest(
+      block: User => Result
+  )(implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
     MPExceptionUtil.internalAsyncExceptionCatcher { () =>
       this.authenticated(Left(block))
     }
   }
 
-  protected def authenticated(execute: Either[User => Result, User => Future[Result]])
-                             (implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
+  protected def authenticated(
+      execute: Either[User => Result, User => Future[Result]]
+  )(implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
     val p = Promise[Result]
     try {
       this.sessionUser(sessionTokenPair) onComplete {
-        case Success(result) => result match {
-          case Some(user) => try {
-            if (requireSuperUser && !user.isSuperUser) {
-              p failure new IllegalAccessException("Only a super user can make this request")
-            } else {
-              execute match {
-                case Left(block) => Try(block(user)) match {
-                  case Success(s) => p success s
-                  case Failure(f) => p failure f
-                }
-                case Right(block) => Try(block(user)) match {
-                  case Success(s) => s onComplete {
-                    case Success(s) => p success s
-                    case Failure(f) => p failure f
+        case Success(result) =>
+          result match {
+            case Some(user) =>
+              try {
+                if (requireSuperUser && !user.isSuperUser) {
+                  p failure new IllegalAccessException("Only a super user can make this request")
+                } else {
+                  execute match {
+                    case Left(block) =>
+                      Try(block(user)) match {
+                        case Success(s) => p success s
+                        case Failure(f) => p failure f
+                      }
+                    case Right(block) =>
+                      Try(block(user)) match {
+                        case Success(s) =>
+                          s onComplete {
+                            case Success(s) => p success s
+                            case Failure(f) => p failure f
+                          }
+                        case Failure(f) => p failure f
+                      }
                   }
-                  case Failure(f) => p failure f
                 }
+              } catch {
+                case e: Exception => p failure e
               }
-            }
-          } catch {
-            case e: Exception => p failure e
+            case None => p failure new OAuthNotAuthorizedException()
           }
-          case None => p failure new OAuthNotAuthorizedException()
-        }
         case Failure(e) => p failure e
       }
     } catch {
@@ -190,10 +215,12 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     */
   def sessionTokenPair(implicit request: RequestHeader): Option[RequestToken] = {
     for {
-      token <- request.session.get(SessionManager.KEY_TOKEN)
+      token  <- request.session.get(SessionManager.KEY_TOKEN)
       secret <- request.session.get(SessionManager.KEY_SECRET)
-      tick <- request.session.get(SessionManager.KEY_USER_TICK)
-      if tick.toLong >= DateTime.now().getMillis - config.sessionTimeout || config.ignoreSessionTimeout
+      tick   <- request.session.get(SessionManager.KEY_USER_TICK)
+      if tick.toLong >= DateTime
+        .now()
+        .getMillis - config.sessionTimeout || config.ignoreSessionTimeout
     } yield {
       RequestToken(token, secret)
     }
@@ -210,15 +237,24 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @return A Future for an optional user, if user not found, or could not be created will return
     *         None.
     */
-  def sessionUser(tokenPair: Option[RequestToken], create: Boolean = false)
-                 (implicit request: RequestHeader): Future[Option[User]] = {
-    val p = Promise[Option[User]]
+  def sessionUser(tokenPair: Option[RequestToken], create: Boolean = false)(
+      implicit request: RequestHeader
+  ): Future[Option[User]] = {
+    val p      = Promise[Option[User]]
     val userId = request.session.get(SessionManager.KEY_USER_ID)
-    val osmId = request.session.get(SessionManager.KEY_OSM_ID)
+    val osmId  = request.session.get(SessionManager.KEY_OSM_ID)
     // if in dev mode we just default every request to super user request
     config.isDevMode match {
       case true =>
-        p success Some(User.superUser)
+        val impersonateUserId = config.impersonateUserId
+        if (impersonateUserId < 0) {
+          p success Some(User.superUser)
+        } else {
+          this.dalManager.user.retrieveByOSMID(impersonateUserId, User.superUser) match {
+            case Some(user) => p success Some(user)
+            case None       => p success Some(User.superUser)
+          }
+        }
       case false =>
         val apiUser = request.headers.get(SessionManager.KEY_API) match {
           case Some(apiKey) =>
@@ -226,15 +262,19 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
             // enabled, but if it is anybody with that key can do anything in the system. This is
             // generally not a good idea to have it enabled, but useful for internal systems or
             // dev testing.
-            if (this.config.superKey.nonEmpty && StringUtils.equals(this.config.superKey.get, apiKey)) {
+            if (this.config.superKey.nonEmpty && StringUtils.equals(
+                  this.config.superKey.get,
+                  apiKey
+                )) {
               Some(User.superUser)
             } else {
               try {
-                val apiSplit = apiKey.split("\\|")
+                val apiSplit        = apiKey.split("\\|")
                 val encryptedApiKey = crypto.encrypt(apiSplit(1))
-                this.dalManager.user.retrieveByAPIKey(encryptedApiKey, User.superUser)(apiSplit(0).toLong) match {
+                this.dalManager.user
+                  .retrieveByAPIKey(encryptedApiKey, User.superUser)(apiSplit(0).toLong) match {
                   case Some(user) => Some(user)
-                  case None => None
+                  case None       => None
                 }
               } catch {
                 case ne: NumberFormatException =>
@@ -251,20 +291,21 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
           case Some(user) => p success Some(user)
           case None =>
             tokenPair match {
-              case Some(pair) => getUser(pair, userId, create) onComplete {
-                case Success(optionUser) =>
-                  // if user doesn't have an APIKey then automatically generate one for them
-                  optionUser match {
-                    case Some(u) =>
-                      u.apiKey match {
-                        case None | Some("") => dalManager.user.generateAPIKey(u, User.superUser)
-                        case _ => // ignore
-                      }
-                    case None => // just ignore, we don't need to do anything if no user was found
-                  }
-                  p success optionUser
-                case Failure(f) => p failure f
-              }
+              case Some(pair) =>
+                getUser(pair, userId, create) onComplete {
+                  case Success(optionUser) =>
+                    // if user doesn't have an APIKey then automatically generate one for them
+                    optionUser match {
+                      case Some(u) =>
+                        u.apiKey match {
+                          case None | Some("") => dalManager.user.generateAPIKey(u, User.superUser)
+                          case _               => // ignore
+                        }
+                      case None => // just ignore, we don't need to do anything if no user was found
+                    }
+                    p success optionUser
+                  case Failure(f) => p failure f
+                }
               case None => p success None
             }
         }
@@ -282,8 +323,11 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @return A Future for an optional user, if user not found, or could not be created will return
     *         None.
     */
-  private def getUser(accessToken: RequestToken, userId: Option[String],
-                      create: Boolean = false): Future[Option[User]] = {
+  private def getUser(
+      accessToken: RequestToken,
+      userId: Option[String],
+      create: Boolean = false
+  ): Future[Option[User]] = {
     // we use the userId for caching, so only if this is the first time the user is authorizing
     // in a particular session will it have to hit the database.
     val storedUser = userId match {
@@ -322,7 +366,9 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
   def refreshProfile(accessToken: RequestToken, user: User): Future[Option[User]] = {
     val p = Promise[Option[User]]
     // if no user is matched, then lets create a new user
-    val details = this.ws.url(this.osmOAuth.userDetailsURL).sign(OAuthCalculator(this.osmOAuth.consumerKey, accessToken))
+    val details = this.ws
+      .url(this.osmOAuth.userDetailsURL)
+      .sign(OAuthCalculator(this.osmOAuth.consumerKey, accessToken))
     details.get() onComplete {
       case Success(detailsResponse) if detailsResponse.status == HttpResponseStatus.OK.code() =>
         try {
@@ -351,8 +397,9 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
     * @param requireSuperUser Whether a super user is required for this request
     * @return The result from the block of code
     */
-  def authenticatedFutureRequest(block: User => Future[Result])
-                                (implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
+  def authenticatedFutureRequest(
+      block: User => Future[Result]
+  )(implicit request: Request[Any], requireSuperUser: Boolean = false): Future[Result] = {
     MPExceptionUtil.internalAsyncExceptionCatcher { () =>
       this.authenticated(Right(block))
     }
@@ -361,9 +408,9 @@ class SessionManager @Inject()(ws: WSClient, dalManager: DALManager, config: Con
 
 object SessionManager {
   val KEY_USER_TICK = "userTick"
-  val KEY_TOKEN = "token"
-  val KEY_SECRET = "secret"
-  val KEY_USER_ID = "userId"
-  val KEY_OSM_ID = "osmId"
-  val KEY_API = "apiKey"
+  val KEY_TOKEN     = "token"
+  val KEY_SECRET    = "secret"
+  val KEY_USER_ID   = "userId"
+  val KEY_OSM_ID    = "osmId"
+  val KEY_API       = "apiKey"
 }

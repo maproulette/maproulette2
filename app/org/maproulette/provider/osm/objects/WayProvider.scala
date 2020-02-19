@@ -5,7 +5,7 @@ package org.maproulette.services.osm.objects
 import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
-import org.maproulette.cache.CacheStorage
+import org.maproulette.cache.BasicCache
 import org.maproulette.services.osm.OSMType
 import play.api.libs.ws.WSClient
 
@@ -18,13 +18,23 @@ import scala.xml.Node
   * @author mcuthbert
   */
 @Singleton
-class WayProvider @Inject()(override val ws: WSClient, override val config: Config) extends ObjectProvider[VersionedWay] {
-  val cache = new CacheStorage[Long, VersionedObjects[VersionedWay]](cacheExpiry = ObjectProvider.DEFAULT_CACHE_EXPIRY)
+class WayProvider @Inject() (override val ws: WSClient, override val config: Config)
+    extends ObjectProvider[VersionedWay] {
+  val cache = new BasicCache[Long, VersionedObjects[VersionedWay]](config)
 
   def get(ids: List[Long]): Future[List[VersionedWay]] = getFromType(ids, OSMType.WAY)
 
-  override protected def createVersionedObjectFromXML(elem: Node, id: Long, visible: Boolean, version: Int, changeset: Int,
-                                                      timestamp: DateTime, user: String, uid: Long, tags: Map[String, String]): VersionedWay = {
+  override protected def createVersionedObjectFromXML(
+      elem: Node,
+      id: Long,
+      visible: Boolean,
+      version: Int,
+      changeset: Int,
+      timestamp: DateTime,
+      user: String,
+      uid: Long,
+      tags: Map[String, String]
+  ): VersionedWay = {
     VersionedWay(
       s"Node_$id",
       id,

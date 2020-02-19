@@ -18,16 +18,31 @@ import play.api.db.Database
 import play.api.http.Status
 import play.api.libs.ws.WSClient
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success}
 
 case class KeepRightError(id: Int, name: String, tags: List[String])
 
-case class KeepRightBox(country: String, iso: String, longMin: Double, latMin: Double, longMax: Double, latMax: Double, wrapped: Boolean)
+case class KeepRightBox(
+    country: String,
+    iso: String,
+    longMin: Double,
+    latMin: Double,
+    longMax: Double,
+    latMax: Double,
+    wrapped: Boolean
+)
 
-case class KeepRightTask(id: Long, errorType: Int, name: String, description: String, lat: Double, lon: Double)
+case class KeepRightTask(
+    id: Long,
+    errorType: Int,
+    name: String,
+    description: String,
+    lat: Double,
+    lon: Double
+)
 
 /**
   * This integrates KeepRight with MapRoulette. It will generate 1 Challenge per country per KeepRight Error Check
@@ -39,25 +54,38 @@ case class KeepRightTask(id: Long, errorType: Int, name: String, description: St
   * @author mcuthbert
   */
 @Singleton
-class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: ChallengeDAL, taskDAL: TaskDAL,
-                                  config: Config, wsClient: WSClient, override val db: Database) extends TransactionManager {
+class KeepRightProvider @Inject() (
+    projectDAL: ProjectDAL,
+    challengeDAL: ChallengeDAL,
+    taskDAL: TaskDAL,
+    config: Config,
+    wsClient: WSClient,
+    override val db: Database
+) extends TransactionManager {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
   lazy val rootProjectId = this.projectDAL.retrieveByName(KeepRightProvider.NAME) match {
     case Some(p) => p.id
-    case None => this.projectDAL.insert(Project(
-      id = -1,
-      owner = User.DEFAULT_SUPER_USER_ID,
-      name = KeepRightProvider.NAME,
-      created = DateTime.now(),
-      modified = DateTime.now(),
-      enabled = true,
-      displayName = Some(KeepRightProvider.DISPLAY_NAME)
-    ), User.superUser).id
+    case None =>
+      this.projectDAL
+        .insert(
+          Project(
+            id = -1,
+            owner = User.DEFAULT_SUPER_USER_ID,
+            name = KeepRightProvider.NAME,
+            created = DateTime.now(),
+            modified = DateTime.now(),
+            enabled = true,
+            displayName = Some(KeepRightProvider.DISPLAY_NAME)
+          ),
+          User.superUser
+        )
+        .id
   }
   val errorList: List[KeepRightError] = Utils.tryOptional(() =>
-      this.config.config.underlying.getConfigList(KeepRightProvider.KEY_ERRORS)) match {
+    this.config.config.underlying.getConfigList(KeepRightProvider.KEY_ERRORS)
+  ) match {
     case Some(cl) =>
       val errors = cl.asScala map { item =>
         KeepRightError(
@@ -70,7 +98,8 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
     case None => List[KeepRightError]()
   }
   val boundingBoxes: List[KeepRightBox] = Utils.tryOptional(() =>
-    config.config.underlying.getStringList(KeepRightProvider.KEY_BOUNDING)) match {
+    config.config.underlying.getStringList(KeepRightProvider.KEY_BOUNDING)
+  ) match {
     case Some(bb) =>
       val boxes = bb.asScala map { item =>
         val csv = item.split(",")
@@ -92,13 +121,26 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
   def getError(id: Int): Option[KeepRightError] = errorList.find(_.id == id)
 
   def getCountryBounding(country: String): Option[KeepRightBox] =
-    boundingBoxes.find(box => StringUtils.equalsIgnoreCase(box.country, country) || StringUtils.equalsIgnoreCase(box.iso, country))
+    boundingBoxes.find(box =>
+      StringUtils.equalsIgnoreCase(box.country, country) || StringUtils
+        .equalsIgnoreCase(box.iso, country)
+    )
 
   // This will create a challenge for each KeepRight Check and each country
   def integrate(checkIDs: List[Int] = List.empty, bounding: KeepRightBox): Future[Boolean] = {
     val p = Promise[Boolean]
-    val cidList = URLEncoder.encode(this.errorList.filter(cid => checkIDs.isEmpty || checkIDs.contains(cid.id)).map(_.id).mkString(","), "UTF-8")
-    val timeout = Duration(this.config.config.getOptional[String](KeepRightProvider.KEY_TIMEOUT).getOrElse(KeepRightProvider.DEFAULT_TIMEOUT))
+    val cidList = URLEncoder.encode(
+      this.errorList
+        .filter(cid => checkIDs.isEmpty || checkIDs.contains(cid.id))
+        .map(_.id)
+        .mkString(","),
+      "UTF-8"
+    )
+    val timeout = Duration(
+      this.config.config
+        .getOptional[String](KeepRightProvider.KEY_TIMEOUT)
+        .getOrElse(KeepRightProvider.DEFAULT_TIMEOUT)
+    )
     val url =
       s"""https://keepright.at/export.php?format=gpx&ch=$cidList&
          |left=${bounding.latMin}&bottom=${bounding.longMin}&
@@ -111,25 +153,30 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
             if (!StringUtils.equalsIgnoreCase(result.body, "no errors found")) {
               val wpts = result.xml \ KeepRightProvider.KEY_WPT
               if (wpts.nonEmpty) {
-                val wptItem = wpts.map(task => {
-                  KeepRightTask(
-                    (task \ KeepRightProvider.KEY_WPT_EXT \ KeepRightProvider.KEY_WPT_ID).text.toLong,
-                    (task \ KeepRightProvider.KEY_WPT_EXT \ KeepRightProvider.KEY_WPT_ERROR_TYPE).text.toInt,
-                    (task \ KeepRightProvider.KEY_WPT_NAME).text,
-                    (task \ KeepRightProvider.KEY_WPT_DESC).text,
-                    (task \ s"@${KeepRightProvider.KEY_WPT_LAT}").text.toDouble,
-                    (task \ s"@${KeepRightProvider.KEY_WPT_LON}").text.toDouble
-                  )
-                }).groupBy(_.errorType)
+                val wptItem = wpts
+                  .map(task => {
+                    KeepRightTask(
+                      (task \ KeepRightProvider.KEY_WPT_EXT \ KeepRightProvider.KEY_WPT_ID).text.toLong,
+                      (task \ KeepRightProvider.KEY_WPT_EXT \ KeepRightProvider.KEY_WPT_ERROR_TYPE).text.toInt,
+                      (task \ KeepRightProvider.KEY_WPT_NAME).text,
+                      (task \ KeepRightProvider.KEY_WPT_DESC).text,
+                      (task \ s"@${KeepRightProvider.KEY_WPT_LAT}").text.toDouble,
+                      (task \ s"@${KeepRightProvider.KEY_WPT_LON}").text.toDouble
+                    )
+                  })
+                  .groupBy(_.errorType)
                 // for each error type create a challenge
                 wptItem.map(errors => {
-                  logger.info(s"Creating KeepRight Challenge ${KeepRightProvider.challengeName(errors._1, bounding.iso)}")
+                  logger.info(
+                    s"Creating KeepRight Challenge ${KeepRightProvider.challengeName(errors._1, bounding.iso)}"
+                  )
                   val challenge = this.createChallenge(errors._1, bounding.iso)
                   // add all the tasks
-                  this.withMRTransaction { implicit c =>
-                    val totalTasks = errors._2.map(kpError => {
-                      val geometry =
-                        s"""
+                  this.withMRTransaction {
+                    implicit c =>
+                      val totalTasks = errors._2.map(kpError => {
+                        val geometry =
+                          s"""
                     {"type":"FeatureCollection",
                       "features":[{
                         "geometry":{"type":"Point","coordinates":[${kpError.lat}, ${kpError.lon}]},
@@ -138,19 +185,24 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
                       }]
                     }
                   """
-                      this.taskDAL.mergeUpdate(Task(
-                        -1,
-                        s"${kpError.id}",
-                        DateTime.now(),
-                        DateTime.now(),
-                        challenge.id,
-                        Some(kpError.description),
-                        Some(geometry),
-                        geometry
-                      ), User.superUser)(-1)
-                    })
-                    logger.info(s"$totalTasks created for KeepRight challenge ${challenge.name} [${challenge.id}]")
-                    totalTasks
+                        this.taskDAL.mergeUpdate(
+                          Task(
+                            -1,
+                            s"${kpError.id}",
+                            DateTime.now(),
+                            DateTime.now(),
+                            challenge.id,
+                            Some(kpError.description),
+                            Some(geometry),
+                            geometry
+                          ),
+                          User.superUser
+                        )(-1)
+                      })
+                      logger.info(
+                        s"$totalTasks created for KeepRight challenge ${challenge.name} [${challenge.id}]"
+                      )
+                      totalTasks
                   }
                 })
               }
@@ -162,7 +214,9 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
               p success false
           }
         } else {
-          logger.warn(s"Failed to parse KeepRight tasks for challenge, invalid response status ${result.status}")
+          logger.warn(
+            s"Failed to parse KeepRight tasks for challenge, invalid response status ${result.status}"
+          )
           p success false
         }
       case Failure(f) =>
@@ -176,52 +230,56 @@ class KeepRightProvider @Inject()(projectDAL: ProjectDAL, challengeDAL: Challeng
     val challengeName = KeepRightProvider.challengeName(errorId, country)
     this.challengeDAL.retrieveByName(challengeName) match {
       case Some(c) => c
-      case None => this.challengeDAL.insert(Challenge(
-        -1,
-        challengeName,
-        DateTime.now(),
-        DateTime.now(),
-        None,
-        false,
-        None,
-        ChallengeGeneral(User.superUser.id, rootProjectId, ""),
-        ChallengeCreation(),
-        ChallengePriority(),
-        ChallengeExtra()
-      ), User.superUser)
+      case None =>
+        this.challengeDAL.insert(
+          Challenge(
+            -1,
+            challengeName,
+            DateTime.now(),
+            DateTime.now(),
+            None,
+            false,
+            None,
+            ChallengeGeneral(User.superUser.id, rootProjectId, ""),
+            ChallengeCreation(),
+            ChallengePriority(),
+            ChallengeExtra()
+          ),
+          User.superUser
+        )
     }
   }
 }
 
 object KeepRightProvider {
-  val NAME = "KeepRight"
-  val DISPLAY_NAME = "Keep Right"
+  val NAME          = "KeepRight"
+  val DISPLAY_NAME  = "Keep Right"
   val KEY_KEEPRIGHT = "keepright"
-  val KEY_ENABLED = s"$KEY_KEEPRIGHT.enabled"
-  val KEY_SLIDING = s"$KEY_KEEPRIGHT.sliding"
-  val KEY_TIMEOUT = s"$KEY_KEEPRIGHT.timeout"
-  val KEY_ERRORS = s"$KEY_KEEPRIGHT.errors"
-  val KEY_BOUNDING = s"$KEY_KEEPRIGHT.bounding"
-  val KEY_ID = "id"
-  val KEY_NAME = "name"
-  val KEY_TAGS = "tags"
+  val KEY_ENABLED   = s"$KEY_KEEPRIGHT.enabled"
+  val KEY_SLIDING   = s"$KEY_KEEPRIGHT.sliding"
+  val KEY_TIMEOUT   = s"$KEY_KEEPRIGHT.timeout"
+  val KEY_ERRORS    = s"$KEY_KEEPRIGHT.errors"
+  val KEY_BOUNDING  = s"$KEY_KEEPRIGHT.bounding"
+  val KEY_ID        = "id"
+  val KEY_NAME      = "name"
+  val KEY_TAGS      = "tags"
   // WPT
-  val KEY_WPT = "wpt"
-  val KEY_WPT_NAME = "name"
-  val KEY_WPT_DESC = "desc"
-  val KEY_WPT_EXT = "extensions"
-  val KEY_WPT_ERROR_TYPE = "error_type"
-  val KEY_WPT_LAT = "lat"
-  val KEY_WPT_LON = "lon"
-  val KEY_WPT_ID = "id"
-  val DEFAULT_TIMEOUT = "120s"
-  val DEFAULT_SLIDING = 5
+  val KEY_WPT                = "wpt"
+  val KEY_WPT_NAME           = "name"
+  val KEY_WPT_DESC           = "desc"
+  val KEY_WPT_EXT            = "extensions"
+  val KEY_WPT_ERROR_TYPE     = "error_type"
+  val KEY_WPT_LAT            = "lat"
+  val KEY_WPT_LON            = "lon"
+  val KEY_WPT_ID             = "id"
+  val DEFAULT_TIMEOUT        = "120s"
+  val DEFAULT_SLIDING        = 5
   private val COLUMN_COUNTRY = 0
-  private val COLUMN_ISO = 1
+  private val COLUMN_ISO     = 1
   private val COLUMN_LONGMIN = 2
-  private val COLUMN_LATMIN = 3
+  private val COLUMN_LATMIN  = 3
   private val COLUMN_LONGMAX = 4
-  private val COLUMN_LATMAX = 5
+  private val COLUMN_LATMAX  = 5
   private val COLUMN_WRAPPED = 6
 
   def challengeName(errorId: Int, country: String): String = s"${country}_$errorId"

@@ -14,17 +14,19 @@ import play.api.libs.json.JodaReads._
   *
   * @author cuthbertm
   */
-case class Comment(id: Long,
-                   osm_id: Long,
-                   osm_username: String,
-                   taskId: Long,
-                   challengeId: Long,
-                   projectId: Long,
-                   created: DateTime,
-                   comment: String,
-                   actionId: Option[Long] = None)
+case class Comment(
+    id: Long,
+    osm_id: Long,
+    osm_username: String,
+    taskId: Long,
+    challengeId: Long,
+    projectId: Long,
+    created: DateTime,
+    comment: String,
+    actionId: Option[Long] = None
+)
 
 object Comment {
   implicit val commentWrites: Writes[Comment] = Json.writes[Comment]
-  implicit val commentReads: Reads[Comment] = Json.reads[Comment]
+  implicit val commentReads: Reads[Comment]   = Json.reads[Comment]
 }

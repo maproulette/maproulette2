@@ -39,20 +39,22 @@ import play.api.libs.oauth.RequestToken
   * @author cuthbertm
   */
 @Singleton
-class UserDAL @Inject()(override val db: Database,
-                        userGroupDAL: UserGroupDAL,
-                        projectDAL: ProjectDAL,
-                        challengeDAL: ChallengeDAL,
-                        taskDAL: TaskDAL,
-                        config: Config,
-                        crypto: Crypto,
-                        override val permission: Permission) extends BaseDAL[Long, User] {
+class UserDAL @Inject() (
+    override val db: Database,
+    userGroupDAL: UserGroupDAL,
+    projectDAL: ProjectDAL,
+    challengeDAL: ChallengeDAL,
+    taskDAL: TaskDAL,
+    config: Config,
+    crypto: Crypto,
+    override val permission: Permission
+) extends BaseDAL[Long, User] {
 
   import org.maproulette.utils.AnormExtension._
 
   // The cache manager for the users
-  override val cacheManager = new CacheManager[Long, User]
-  override val tableName = "users"
+  override val cacheManager            = new CacheManager[Long, User](config, Config.CACHE_ID_USERS)
+  override val tableName               = "users"
   override val retrieveColumns: String = "*, ST_AsText(users.home_location) AS home"
 
   // The anorm row parser to convert user records from the database to user objects
@@ -83,26 +85,48 @@ class UserDAL @Inject()(override val db: Database,
       get[Option[String]]("properties") ~
       get[Option[Int]]("score") map {
       case id ~ osmId ~ created ~ modified ~ osmCreated ~ displayName ~ description ~ avatarURL ~
-        homeLocation ~ apiKey ~ oauthToken ~ oauthSecret ~ defaultEditor ~ defaultBasemap ~ defaultBasemapId ~
-        customBasemap ~ email ~ emailOptIn ~ leaderboardOptOut ~ needsReview ~ isReviewer ~ locale ~ theme ~
-        properties ~ score =>
+            homeLocation ~ apiKey ~ oauthToken ~ oauthSecret ~ defaultEditor ~ defaultBasemap ~ defaultBasemapId ~
+            customBasemap ~ email ~ emailOptIn ~ leaderboardOptOut ~ needsReview ~ isReviewer ~ locale ~ theme ~
+            properties ~ score =>
         val locationWKT = homeLocation match {
           case Some(wkt) => new WKTReader().read(wkt).asInstanceOf[Point]
-          case None => new GeometryFactory().createPoint(new Coordinate(0, 0))
+          case None      => new GeometryFactory().createPoint(new Coordinate(0, 0))
         }
 
         val setNeedsReview = needsReview match {
           case Some(nr) => needsReview
-          case None => Option(config.defaultNeedsReview)
+          case None     => Option(config.defaultNeedsReview)
         }
 
-        new User(id, created, modified,
-          OSMProfile(osmId, displayName, description.getOrElse(""), avatarURL.getOrElse(""),
-            Location(locationWKT.getX, locationWKT.getY), osmCreated, RequestToken(oauthToken, oauthSecret)),
-          userGroupDAL.getUserGroups(osmId, User.superUser
+        new User(
+          id,
+          created,
+          modified,
+          OSMProfile(
+            osmId,
+            displayName,
+            description.getOrElse(""),
+            avatarURL.getOrElse(""),
+            Location(locationWKT.getX, locationWKT.getY),
+            osmCreated,
+            RequestToken(oauthToken, oauthSecret)
           ),
-          apiKey, false,
-          UserSettings(defaultEditor, defaultBasemap, defaultBasemapId, customBasemap, locale, email, emailOptIn, leaderboardOptOut, setNeedsReview, isReviewer, theme),
+          userGroupDAL.getUserGroups(osmId, User.superUser),
+          apiKey,
+          false,
+          UserSettings(
+            defaultEditor,
+            defaultBasemap,
+            defaultBasemapId,
+            customBasemap,
+            locale,
+            email,
+            emailOptIn,
+            leaderboardOptOut,
+            setNeedsReview,
+            isReviewer,
+            theme
+          ),
           properties,
           score
         )
@@ -121,12 +145,13 @@ class UserDAL @Inject()(override val db: Database,
   // The anorm row parser to convert user records to project manager
   val projectManagerParser: RowParser[ProjectManager] = {
     get[Long]("project_id") ~
+      get[Long]("users.id") ~
       get[Long]("users.osm_id") ~
       get[String]("users.name") ~
       get[Option[String]]("users.avatar_url") ~
       get[List[Int]]("group_types") map {
-      case projectId ~ osmId ~ displayName ~ avatarURL ~ groupTypes =>
-        ProjectManager(projectId, osmId, displayName, avatarURL.getOrElse(""), groupTypes)
+      case projectId ~ userId ~ osmId ~ displayName ~ avatarURL ~ groupTypes =>
+        ProjectManager(projectId, userId, osmId, displayName, avatarURL.getOrElse(""), groupTypes)
     }
   }
 
@@ -138,20 +163,21 @@ class UserDAL @Inject()(override val db: Database,
     * @param user The user making the request
     * @return The matched user, None if User not found
     */
-  def retrieveByOSMID(implicit id: Long, user: User): Option[User] = this.cacheManager.withOptionCaching { () =>
-    this.db.withConnection { implicit c =>
-      val query =
-        s"""SELECT ${this.retrieveColumns}, score FROM users
+  def retrieveByOSMID(implicit id: Long, user: User): Option[User] =
+    this.cacheManager.withOptionCaching { () =>
+      this.db.withConnection { implicit c =>
+        val query =
+          s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE osm_id = {id}"""
-      SQL(query).on('id -> id).as(this.parser.*).headOption match {
-        case Some(u) =>
-          this.permission.hasObjectReadAccess(u, user)
-          Some(u)
-        case None => None
+        SQL(query).on(Symbol("id") -> id).as(this.parser.*).headOption match {
+          case Some(u) =>
+            this.permission.hasObjectReadAccess(u, user)
+            Some(u)
+          case None => None
+        }
       }
     }
-  }
 
   /**
     * Find the User based on the id.
@@ -165,7 +191,7 @@ class UserDAL @Inject()(override val db: Database,
         val query = s"""SELECT $retrieveColumns, score FROM users
                         LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                         WHERE id = {id}"""
-        SQL(query).on('id -> id).as(this.parser.singleOpt)
+        SQL(query).on(Symbol("id") -> id).as(this.parser.singleOpt)
       }
     }
   }
@@ -177,30 +203,38 @@ class UserDAL @Inject()(override val db: Database,
     * @param id     The id of the user
     * @return The matched user, None if User not found
     */
-  def retrieveByAPIKey(apiKey: String, user: User)(implicit id: Long): Option[User] = this.cacheManager.withOptionCaching { () =>
-    this.db.withConnection { implicit c =>
-      val query =
-        s"""SELECT ${this.retrieveColumns}, score FROM users
+  def retrieveByAPIKey(apiKey: String, user: User)(implicit id: Long): Option[User] =
+    this.cacheManager.withOptionCaching { () =>
+      this.db.withConnection { implicit c =>
+        val query =
+          s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE (id = {id} OR osm_id = {id}) AND api_key = {apiKey}"""
-      SQL(query).on('id -> id, 'apiKey -> apiKey).as(this.parser.*).headOption match {
-        case Some(u) =>
-          this.permission.hasObjectReadAccess(u, user)
-          Some(u)
-        case None => None
+        SQL(query)
+          .on(Symbol("id") -> id, Symbol("apiKey") -> apiKey)
+          .as(this.parser.*)
+          .headOption match {
+          case Some(u) =>
+            this.permission.hasObjectReadAccess(u, user)
+            Some(u)
+          case None => None
+        }
       }
     }
-  }
 
-  def retrieveByUsernameAndAPIKey(username: String, apiKey: String): Option[User] = this.cacheManager.withOptionCaching { () =>
-    this.db.withConnection { implicit c =>
-      val query =
-        s"""SELECT ${this.retrieveColumns}, score FROM users
+  def retrieveByUsernameAndAPIKey(username: String, apiKey: String): Option[User] =
+    this.cacheManager.withOptionCaching { () =>
+      this.db.withConnection { implicit c =>
+        val query =
+          s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE name = {name} AND api_key = {apiKey}"""
-      SQL(query).on('name -> username, 'apiKey -> apiKey).as(this.parser.*).headOption
+        SQL(query)
+          .on(Symbol("name") -> username, Symbol("apiKey") -> apiKey)
+          .as(this.parser.*)
+          .headOption
+      }
     }
-  }
 
   /**
     * Helper function to allow users to be retrieve by just the OSM username, for security we only
@@ -210,20 +244,23 @@ class UserDAL @Inject()(override val db: Database,
     * @param user     The user making the request
     * @return An optional user object, if none then not found
     */
-  def retrieveByOSMUsername(username: String, user: User): Option[User] = this.cacheManager.withOptionCaching { () =>
-    // only only this kind of request if the user is a super user
-    if (user.isSuperUser) {
-      this.db.withConnection { implicit c =>
-        val query =
-          s"""SELECT ${this.retrieveColumns}, score FROM users
+  def retrieveByOSMUsername(username: String, user: User): Option[User] =
+    this.cacheManager.withOptionCaching { () =>
+      // only only this kind of request if the user is a super user
+      if (user.isSuperUser) {
+        this.db.withConnection { implicit c =>
+          val query =
+            s"""SELECT ${this.retrieveColumns}, score FROM users
                         LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                         WHERE LOWER(name) = LOWER({name})"""
-        SQL(query).on('name -> username).as(this.parser.*).headOption
+          SQL(query).on(Symbol("name") -> username).as(this.parser.*).headOption
+        }
+      } else {
+        throw new IllegalAccessException(
+          "Only Superuser allowed to look up users by just OSM username"
+        )
       }
-    } else {
-      throw new IllegalAccessException("Only Superuser allowed to look up users by just OSM username")
     }
-  }
 
   /**
     * Allow users to search for other users by OSM username.
@@ -232,7 +269,10 @@ class UserDAL @Inject()(override val db: Database,
     * @param limit    The maximum number of results to retrieve.
     * @return A (possibly empty) list of UserSearchResult objects.
     */
-  def searchByOSMUsername(username: String, limit: Int = Config.DEFAULT_LIST_SIZE): List[UserSearchResult] = {
+  def searchByOSMUsername(
+      username: String,
+      limit: Int = Config.DEFAULT_LIST_SIZE
+  ): List[UserSearchResult] = {
     this.db.withConnection { implicit c =>
       val query =
         s"""SELECT osm_id, name, avatar_url
@@ -240,7 +280,7 @@ class UserDAL @Inject()(override val db: Database,
             WHERE name ILIKE '${username}%'
             ORDER BY (users.name ILIKE '${username}') DESC, users.name
             LIMIT ${limit}"""
-      SQL(query).on('name -> username).as(this.searchResultParser.*)
+      SQL(query).on(Symbol("name") -> username).as(this.searchResultParser.*)
     }
   }
 
@@ -251,21 +291,30 @@ class UserDAL @Inject()(override val db: Database,
     * @param requestToken The request token containing the access token and secret
     * @return The matched user, None if User not found
     */
-  def matchByRequestTokenAndId(requestToken: RequestToken, user: User)(implicit id: Long): Option[User] = {
+  def matchByRequestTokenAndId(requestToken: RequestToken, user: User)(
+      implicit id: Long
+  ): Option[User] = {
     val requestedUser = this.cacheManager.withCaching { () =>
       this.db.withConnection { implicit c =>
         val query =
           s"""SELECT ${this.retrieveColumns}, score FROM users
                         LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                         WHERE id = {id} AND oauth_token = {token} AND oauth_secret = {secret}"""
-        SQL(query).on('id -> id, 'token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
+        SQL(query)
+          .on(
+            Symbol("id")     -> id,
+            Symbol("token")  -> requestToken.token,
+            Symbol("secret") -> requestToken.secret
+          )
+          .as(this.parser.*)
+          .headOption
       }
     }
     requestedUser match {
       case Some(u) =>
         // double check that the token and secret still match, in case it came from the cache
         if (StringUtils.equals(u.osmProfile.requestToken.token, requestToken.token) &&
-          StringUtils.equals(u.osmProfile.requestToken.secret, requestToken.secret)) {
+            StringUtils.equals(u.osmProfile.requestToken.secret, requestToken.secret)) {
           this.permission.hasObjectReadAccess(u, user)
           Some(u)
         } else {
@@ -287,7 +336,10 @@ class UserDAL @Inject()(override val db: Database,
         s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE oauth_token = {token} AND oauth_secret = {secret}"""
-      SQL(query).on('token -> requestToken.token, 'secret -> requestToken.secret).as(this.parser.*).headOption
+      SQL(query)
+        .on(Symbol("token") -> requestToken.token, Symbol("secret") -> requestToken.secret)
+        .as(this.parser.*)
+        .headOption
     }
   }
 
@@ -302,18 +354,22 @@ class UserDAL @Inject()(override val db: Database,
     * @param user The user to update
     * @return None if failed to update or create.
     */
-  override def insert(item: User, user: User)(implicit c: Option[Connection] = None): User = this.cacheManager.withOptionCaching { () =>
-    this.permission.hasObjectAdminAccess(item, user)
-    this.withMRTransaction { implicit c =>
-      val ewkt = new WKTWriter().write(
-        new GeometryFactory().createPoint(
-          new Coordinate(item.osmProfile.homeLocation.latitude, item.osmProfile.homeLocation.longitude)
+  override def insert(item: User, user: User)(implicit c: Option[Connection] = None): User =
+    this.cacheManager.withOptionCaching { () =>
+      this.permission.hasObjectAdminAccess(item, user)
+      this.withMRTransaction { implicit c =>
+        val ewkt = new WKTWriter().write(
+          new GeometryFactory().createPoint(
+            new Coordinate(
+              item.osmProfile.homeLocation.latitude,
+              item.osmProfile.homeLocation.longitude
+            )
+          )
         )
-      )
-      val newAPIKey = crypto.encrypt(this.generateAPIKey)
+        val newAPIKey = crypto.encrypt(this.generateAPIKey)
 
-      val query =
-        s"""WITH upsert AS (UPDATE users SET osm_id = {osmID}, osm_created = {osmCreated},
+        val query =
+          s"""WITH upsert AS (UPDATE users SET osm_id = {osmID}, osm_created = {osmCreated},
                               name = {name}, description = {description}, avatar_url = {avatarURL},
                               oauth_token = {token}, oauth_secret = {secret},  home_location = ST_GeomFromEWKT({wkt})
                             WHERE id = {id} OR osm_id = {osmID} RETURNING ${this.retrieveColumns})
@@ -321,40 +377,42 @@ class UserDAL @Inject()(override val db: Database,
                                avatar_url, oauth_token, oauth_secret, home_location)
             SELECT {apiKey}, {osmID}, {osmCreated}, {name}, {description}, {avatarURL}, {token}, {secret}, ST_GeomFromEWKT({wkt})
             WHERE NOT EXISTS (SELECT * FROM upsert)"""
-      SQL(query).on(
-        'apiKey -> newAPIKey,
-        'osmID -> item.osmProfile.id,
-        'osmCreated -> item.osmProfile.created,
-        'name -> item.osmProfile.displayName,
-        'description -> item.osmProfile.description,
-        'avatarURL -> item.osmProfile.avatarURL,
-        'token -> item.osmProfile.requestToken.token,
-        'secret -> item.osmProfile.requestToken.secret,
-        'wkt -> s"SRID=4326;$ewkt",
-        'id -> item.id
-      ).executeUpdate()
-    }
-    // just in case expire the osm ID
-    userGroupDAL.clearUserCache(item.osmProfile.id)
+        SQL(query)
+          .on(
+            Symbol("apiKey")      -> newAPIKey,
+            Symbol("osmID")       -> item.osmProfile.id,
+            Symbol("osmCreated")  -> item.osmProfile.created,
+            Symbol("name")        -> item.osmProfile.displayName,
+            Symbol("description") -> item.osmProfile.description,
+            Symbol("avatarURL")   -> item.osmProfile.avatarURL,
+            Symbol("token")       -> item.osmProfile.requestToken.token,
+            Symbol("secret")      -> item.osmProfile.requestToken.secret,
+            Symbol("wkt")         -> s"SRID=4326;$ewkt",
+            Symbol("id")          -> item.id
+          )
+          .executeUpdate()
+      }
+      // just in case expire the osm ID
+      userGroupDAL.clearUserCache(item.osmProfile.id)
 
-    // We do this separately from the transaction because if we don't the user_group mappings
-    // wont be accessible just yet.
-    val retUser = this.db.withConnection { implicit c =>
-      val query =
-        s"""SELECT ${this.retrieveColumns}, score FROM users
+      // We do this separately from the transaction because if we don't the user_group mappings
+      // wont be accessible just yet.
+      val retUser = this.db.withConnection { implicit c =>
+        val query =
+          s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE osm_id = {id}"""
-      SQL(query).on('id -> item.osmProfile.id).as(this.parser.*).head
-    }
+        SQL(query).on(Symbol("id") -> item.osmProfile.id).as(this.parser.*).head
+      }
 
-    // now update the groups by adding any new groups, from the supplied user
-    val nuGroups = this.db.withTransaction { implicit c =>
-      val newGroups = item.groups.filter(g => !retUser.groups.exists(_.id == g.id))
-      newGroups.foreach(g => this.addUserToGroup(item.osmProfile.id, g, User.superUser))
-      retUser.groups ++ newGroups
-    }
-    Some(retUser.copy(groups = nuGroups))
-  }.get
+      // now update the groups by adding any new groups, from the supplied user
+      val nuGroups = this.db.withTransaction { implicit c =>
+        val newGroups = item.groups.filter(g => !retUser.groups.exists(_.id == g.id))
+        newGroups.foreach(g => this.addUserToGroup(item.osmProfile.id, g, User.superUser))
+        retUser.groups ++ newGroups
+      }
+      Some(retUser.copy(groups = nuGroups))
+    }.get
 
   /**
     * Add a user to a group
@@ -363,11 +421,14 @@ class UserDAL @Inject()(override val db: Database,
     * @param group The group that user is being added too
     * @param user  The user that is adding the user to the project
     */
-  def addUserToGroup(osmID: Long, group: Group, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def addUserToGroup(osmID: Long, group: Group, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasSuperAccess(user)
     userGroupDAL.clearUserCache(osmID)
     this.withMRTransaction { implicit c =>
-      SQL"""INSERT INTO user_groups (osm_user_id, group_id) VALUES ($osmID, ${group.id})""".executeUpdate()
+      SQL"""INSERT INTO user_groups (osm_user_id, group_id) VALUES ($osmID, ${group.id})"""
+        .executeUpdate()
     }
   }
 
@@ -382,7 +443,10 @@ class UserDAL @Inject()(override val db: Database,
     * @param ids The list of ids to be retrieved
     * @return A list of objects, empty list if none found
     */
-  override def retrieveListById(limit: Int = -1, offset: Int = 0)(implicit ids:List[Long], c: Option[Connection] = None): List[User] = {
+  override def retrieveListById(
+      limit: Int = -1,
+      offset: Int = 0
+  )(implicit ids: List[Long], c: Option[Connection] = None): List[User] = {
     if (ids.isEmpty) {
       List.empty
     } else {
@@ -393,8 +457,14 @@ class UserDAL @Inject()(override val db: Database,
                           LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                           WHERE id IN ({inString})
                           LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-          SQL(query).on('inString -> ToParameterValue.apply[List[Long]](s = keyToSQL, p = keyToStatement).apply(uncachedIDs),
-            'offset -> offset).as(this.parser.*)
+          SQL(query)
+            .on(
+              Symbol("inString") -> ToParameterValue
+                .apply[List[Long]](s = keyToSQL, p = keyToStatement)
+                .apply(uncachedIDs),
+              Symbol("offset") -> offset
+            )
+            .as(this.parser.*)
         }
       }
     }
@@ -415,12 +485,14 @@ class UserDAL @Inject()(override val db: Database,
     * @param c          an optional connection, if not provided a new connection from the pool will be retrieved
     * @return An optional user, if user with supplied ID not found, then will return empty optional
     */
-  def managedUpdate(settings: UserSettings, properties: Option[JsValue], user: User)(implicit id: Long, c: Option[Connection] = None): Option[User] = {
-    implicit val settingsWrite = User.settingsWrites
+  def managedUpdate(settings: UserSettings, properties: Option[JsValue], user: User)(
+      implicit id: Long,
+      c: Option[Connection] = None
+  ): Option[User] = {
     val updateBody = Utils.insertIntoJson(Json.parse("{}"), "settings", Json.toJson(settings))
     this.update(properties match {
       case Some(p) => Utils.insertIntoJson(updateBody, "properties", JsString(p.toString()))
-      case None => updateBody
+      case None    => updateBody
     }, user)
   }
 
@@ -432,31 +504,72 @@ class UserDAL @Inject()(override val db: Database,
     * @param id    The id of the user to update
     * @return The user that was updated, None if no user was found with the id
     */
-  override def update(value: JsValue, user: User)(implicit id: Long, c: Option[Connection] = None): Option[User] = {
+  override def update(
+      value: JsValue,
+      user: User
+  )(implicit id: Long, c: Option[Connection] = None): Option[User] = {
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
       this.permission.hasObjectAdminAccess(cachedItem, user)
       this.withMRTransaction { implicit c =>
-        val displayName = (value \ "osmProfile" \ "displayName").asOpt[String].getOrElse(cachedItem.osmProfile.displayName)
-        val description = (value \ "osmProfile" \ "description").asOpt[String].getOrElse(cachedItem.osmProfile.description)
-        val avatarURL = (value \ "osmProfile" \ "avatarURL").asOpt[String].getOrElse(cachedItem.osmProfile.avatarURL)
-        val token = (value \ "osmProfile" \ "token").asOpt[String].getOrElse(cachedItem.osmProfile.requestToken.token)
-        val secret = (value \ "osmProfile" \ "secret").asOpt[String].getOrElse(cachedItem.osmProfile.requestToken.secret)
+        val displayName = (value \ "osmProfile" \ "displayName")
+          .asOpt[String]
+          .getOrElse(cachedItem.osmProfile.displayName)
+        val description = (value \ "osmProfile" \ "description")
+          .asOpt[String]
+          .getOrElse(cachedItem.osmProfile.description)
+        val avatarURL = (value \ "osmProfile" \ "avatarURL")
+          .asOpt[String]
+          .getOrElse(cachedItem.osmProfile.avatarURL)
+        val token = (value \ "osmProfile" \ "token")
+          .asOpt[String]
+          .getOrElse(cachedItem.osmProfile.requestToken.token)
+        val secret = (value \ "osmProfile" \ "secret")
+          .asOpt[String]
+          .getOrElse(cachedItem.osmProfile.requestToken.secret)
         // todo: allow to insert in WKT, WKB or latitude/longitude
-        val latitude = (value \ "osmProfile" \ "homeLocation" \ "latitude").asOpt[Double].getOrElse(cachedItem.osmProfile.homeLocation.latitude)
-        val longitude = (value \ "osmProfile" \ "homeLocation" \ "longitude").asOpt[Double].getOrElse(cachedItem.osmProfile.homeLocation.longitude)
-        val ewkt = new WKTWriter().write(new GeometryFactory().createPoint(new Coordinate(latitude, longitude)))
-        val defaultEditor = (value \ "settings" \ "defaultEditor").asOpt[Int].getOrElse(cachedItem.settings.defaultEditor.getOrElse(-1))
-        val defaultBasemap = (value \ "settings" \ "defaultBasemap").asOpt[Int].getOrElse(cachedItem.settings.defaultBasemap.getOrElse(-1))
-        val defaultBasemapId = (value \ "settings" \ "defaultBasemapId").asOpt[String].getOrElse(cachedItem.settings.defaultBasemapId.getOrElse(""))
-        val customBasemap = (value \ "settings" \ "customBasemap").asOpt[String].getOrElse(cachedItem.settings.customBasemap.getOrElse(""))
-        val locale = (value \ "settings" \ "locale").asOpt[String].getOrElse(cachedItem.settings.locale.getOrElse("en"))
-        val email = (value \ "settings" \ "email").asOpt[String].getOrElse(cachedItem.settings.email.getOrElse(""))
-        val emailOptIn = (value \ "settings" \ "emailOptIn").asOpt[Boolean].getOrElse(cachedItem.settings.emailOptIn.getOrElse(false))
-        val leaderboardOptOut = (value \ "settings" \ "leaderboardOptOut").asOpt[Boolean].getOrElse(cachedItem.settings.leaderboardOptOut.getOrElse(false))
-        var needsReview = (value \ "settings" \ "needsReview").asOpt[Int].getOrElse(cachedItem.settings.needsReview.getOrElse(config.defaultNeedsReview))
-        val isReviewer = (value \ "settings" \ "isReviewer").asOpt[Boolean].getOrElse(cachedItem.settings.isReviewer.getOrElse(false))
-        val theme = (value \ "settings" \ "theme").asOpt[Int].getOrElse(cachedItem.settings.theme.getOrElse(-1))
-        val properties = (value \ "properties").asOpt[String].getOrElse(cachedItem.properties.getOrElse("{}"))
+        val latitude = (value \ "osmProfile" \ "homeLocation" \ "latitude")
+          .asOpt[Double]
+          .getOrElse(cachedItem.osmProfile.homeLocation.latitude)
+        val longitude = (value \ "osmProfile" \ "homeLocation" \ "longitude")
+          .asOpt[Double]
+          .getOrElse(cachedItem.osmProfile.homeLocation.longitude)
+        val ewkt = new WKTWriter()
+          .write(new GeometryFactory().createPoint(new Coordinate(latitude, longitude)))
+        val defaultEditor = (value \ "settings" \ "defaultEditor")
+          .asOpt[Int]
+          .getOrElse(cachedItem.settings.defaultEditor.getOrElse(-1))
+        val defaultBasemap = (value \ "settings" \ "defaultBasemap")
+          .asOpt[Int]
+          .getOrElse(cachedItem.settings.defaultBasemap.getOrElse(-1))
+        val defaultBasemapId = (value \ "settings" \ "defaultBasemapId")
+          .asOpt[String]
+          .getOrElse(cachedItem.settings.defaultBasemapId.getOrElse(""))
+        val customBasemap = (value \ "settings" \ "customBasemap")
+          .asOpt[String]
+          .getOrElse(cachedItem.settings.customBasemap.getOrElse(""))
+        val locale = (value \ "settings" \ "locale")
+          .asOpt[String]
+          .getOrElse(cachedItem.settings.locale.getOrElse("en"))
+        val email = (value \ "settings" \ "email")
+          .asOpt[String]
+          .getOrElse(cachedItem.settings.email.getOrElse(""))
+        val emailOptIn = (value \ "settings" \ "emailOptIn")
+          .asOpt[Boolean]
+          .getOrElse(cachedItem.settings.emailOptIn.getOrElse(false))
+        val leaderboardOptOut = (value \ "settings" \ "leaderboardOptOut")
+          .asOpt[Boolean]
+          .getOrElse(cachedItem.settings.leaderboardOptOut.getOrElse(false))
+        var needsReview = (value \ "settings" \ "needsReview")
+          .asOpt[Int]
+          .getOrElse(cachedItem.settings.needsReview.getOrElse(config.defaultNeedsReview))
+        val isReviewer = (value \ "settings" \ "isReviewer")
+          .asOpt[Boolean]
+          .getOrElse(cachedItem.settings.isReviewer.getOrElse(false))
+        val theme = (value \ "settings" \ "theme")
+          .asOpt[Int]
+          .getOrElse(cachedItem.settings.theme.getOrElse(-1))
+        val properties =
+          (value \ "properties").asOpt[String].getOrElse(cachedItem.properties.getOrElse("{}"))
 
         // If this user always requires a review, then they are not allowed to change it (except super users)
         if (user.settings.needsReview.getOrElse(0) == User.REVIEW_MANDATORY) {
@@ -477,32 +590,38 @@ class UserDAL @Inject()(override val db: Database,
                                           needs_review = {needsReview}, is_reviewer = {isReviewer}, theme = {theme}, properties = {properties}
                         WHERE id = {id} RETURNING ${this.retrieveColumns},
                         (SELECT score FROM user_metrics um WHERE um.user_id = ${user.id}) as score"""
-        SQL(query).on(
-          'name -> displayName,
-          'description -> description,
-          'avatarURL -> avatarURL,
-          'token -> token,
-          'secret -> secret,
-          'wkt -> s"SRID=4326;$ewkt",
-          'id -> id,
-          'defaultEditor -> defaultEditor,
-          'defaultBasemap -> defaultBasemap,
-          'defaultBasemapId -> defaultBasemapId,
-          'customBasemap -> customBasemap,
-          'locale -> locale,
-          'email -> email,
-          'emailOptIn -> emailOptIn,
-          'leaderboardOptOut -> leaderboardOptOut,
-          'needsReview -> needsReview,
-          'isReviewer -> isReviewer,
-          'theme -> theme,
-          'properties -> properties
-        ).as(this.parser.*).headOption
+        SQL(query)
+          .on(
+            Symbol("name")              -> displayName,
+            Symbol("description")       -> description,
+            Symbol("avatarURL")         -> avatarURL,
+            Symbol("token")             -> token,
+            Symbol("secret")            -> secret,
+            Symbol("wkt")               -> s"SRID=4326;$ewkt",
+            Symbol("id")                -> id,
+            Symbol("defaultEditor")     -> defaultEditor,
+            Symbol("defaultBasemap")    -> defaultBasemap,
+            Symbol("defaultBasemapId")  -> defaultBasemapId,
+            Symbol("customBasemap")     -> customBasemap,
+            Symbol("locale")            -> locale,
+            Symbol("email")             -> email,
+            Symbol("emailOptIn")        -> emailOptIn,
+            Symbol("leaderboardOptOut") -> leaderboardOptOut,
+            Symbol("needsReview")       -> needsReview,
+            Symbol("isReviewer")        -> isReviewer,
+            Symbol("theme")             -> theme,
+            Symbol("properties")        -> properties
+          )
+          .as(this.parser.*)
+          .headOption
       }
     }
   }
 
-  def updateGroups(value: JsValue, user: User)(implicit id: Long, c: Option[Connection] = None): Unit = {
+  def updateGroups(
+      value: JsValue,
+      user: User
+  )(implicit id: Long, c: Option[Connection] = None): Unit = {
     this.permission.hasAdminAccess(UserType(), user)
     this.withMRTransaction { implicit c =>
       // list of groups to delete
@@ -531,11 +650,13 @@ class UserDAL @Inject()(override val db: Database,
     * @param id The user to delete
     * @return The rows that were deleted
     */
-  override def delete(id: Long, user: User, immediate: Boolean = false)(implicit c: Option[Connection] = None): User = {
+  override def delete(id: Long, user: User, immediate: Boolean = false)(
+      implicit c: Option[Connection] = None
+  ): User = {
     this.permission.hasSuperAccess(user)
     retrieveById(id) match {
       case Some(u) => userGroupDAL.clearUserCache(u.osmProfile.id)
-      case None => //no user, so can just ignore
+      case None    => //no user, so can just ignore
     }
     super.delete(id, user)
   }
@@ -572,7 +693,8 @@ class UserDAL @Inject()(override val db: Database,
       // anonymize all status actions set
       SQL"""UPDATE status_actions SET osm_user_id = -1 WHERE osm_user_id = $osmId""".executeUpdate()
       // set all comments made to "COMMENT_DELETED"
-      SQL"""UPDATE task_comments SET comment = '*COMMENT DELETED*', osm_id = -1 WHERE osm_id = $osmId""".executeUpdate()
+      SQL"""UPDATE task_comments SET comment = '*COMMENT DELETED*', osm_id = -1 WHERE osm_id = $osmId"""
+        .executeUpdate()
       // anonymize all survey_answers answered
       SQL"""UPDATE survey_answers SET osm_user_id = -1 WHERE osm_user_id = $osmId""".executeUpdate()
     }
@@ -587,28 +709,32 @@ class UserDAL @Inject()(override val db: Database,
     * @param user      The user making the request
     * @param c
     */
-  def removeUserFromProject(osmID: Long, projectId: Long, groupType: Int, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def removeUserFromProject(osmID: Long, projectId: Long, groupType: Int, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user)
-    implicit val osmKey = osmID
+    implicit val osmKey         = osmID
     implicit val requestingUser = User.superUser
 
     userGroupDAL.clearUserCache(osmID)
-    this.cacheManager.withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
-      this.withMRTransaction { implicit c =>
-        if (groupType == -1) {
-          SQL"""DELETE FROM user_groups
+    this.cacheManager
+      .withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
+        this.withMRTransaction { implicit c =>
+          if (groupType == -1) {
+            SQL"""DELETE FROM user_groups
                 WHERE osm_user_id = $osmKey AND group_id IN
                   (SELECT id FROM groups WHERE project_id = $projectId)
             """.executeUpdate()
-        } else {
-          SQL"""DELETE FROM user_groups
+          } else {
+            SQL"""DELETE FROM user_groups
                 WHERE osm_user_id = $osmKey AND group_id =
                   (SELECT id FROM groups WHERE group_type = $groupType AND project_id = $projectId)
             """.executeUpdate()
+          }
         }
+        Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
       }
-      Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
-    }.get
+      .get
   }
 
   /**
@@ -621,25 +747,29 @@ class UserDAL @Inject()(override val db: Database,
     * @param user      The user making the request
     * @param c
     */
-  def setUserProjectGroup(osmID: Long, projectId: Long, groupType: Int, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def setUserProjectGroup(osmID: Long, projectId: Long, groupType: Int, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user)
-    implicit val osmKey = osmID
+    implicit val osmKey         = osmID
     implicit val requestingUser = User.superUser
     userGroupDAL.clearUserCache(osmID)
     this.verifyProjectGroups(projectId)
-    this.cacheManager.withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
-      this.withMRTransaction { implicit c =>
-        // Remove all groups types for project from user and then add desired group type
-        SQL"""DELETE FROM user_groups
+    this.cacheManager
+      .withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
+        this.withMRTransaction { implicit c =>
+          // Remove all groups types for project from user and then add desired group type
+          SQL"""DELETE FROM user_groups
               WHERE osm_user_id = $osmKey AND group_id IN (SELECT id FROM groups WHERE project_id = $projectId)
            """.executeUpdate()
-        SQL"""INSERT INTO user_groups (osm_user_id, group_id)
+          SQL"""INSERT INTO user_groups (osm_user_id, group_id)
               SELECT $osmID, id FROM groups
               WHERE group_type = $groupType AND project_id = $projectId
            """.executeUpdate()
+        }
+        Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
       }
-      Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
-    }.get
+      .get
   }
 
   /**
@@ -676,8 +806,13 @@ class UserDAL @Inject()(override val db: Database,
     * @param user        The user making the request
     * @return A list of ProjectManager objects.
     */
-  def getUsersManagingProject(projectId: Long, osmIdFilter: Option[List[Long]] = None, user: User): List[ProjectManager] = {
-    this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user, Group.TYPE_READ_ONLY)
+  def getUsersManagingProject(
+      projectId: Long,
+      osmIdFilter: Option[List[Long]] = None,
+      user: User
+  ): List[ProjectManager] = {
+    this.permission
+      .hasProjectAccess(this.projectDAL.retrieveById(projectId), user, Group.TYPE_READ_ONLY)
 
     this.db.withConnection { implicit c =>
       SQL"""SELECT ${projectId} AS project_id, u.*, array_agg(g.group_type) AS group_types
@@ -697,11 +832,14 @@ class UserDAL @Inject()(override val db: Database,
     * @param user  The user executing the request
     * @param c     An implicit connection if applicable
     */
-  def removeUserFromGroup(osmID: Long, group: Group, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def removeUserFromGroup(osmID: Long, group: Group, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasSuperAccess(user)
     userGroupDAL.clearUserCache(osmID)
     this.withMRTransaction { implicit c =>
-      SQL"""DELETE FROM user_groups WHERE osm_user_id = $osmID AND group_id = ${group.id}""".executeUpdate()
+      SQL"""DELETE FROM user_groups WHERE osm_user_id = $osmID AND group_id = ${group.id}"""
+        .executeUpdate()
     }
   }
 
@@ -711,7 +849,9 @@ class UserDAL @Inject()(override val db: Database,
     * @param apiKeyUser The user that is requesting that their key be updated.
     * @return An optional variable that will contain the updated user if successful
     */
-  def generateAPIKey(apiKeyUser: User, user: User)(implicit c: Option[Connection] = None): Option[User] = {
+  def generateAPIKey(apiKeyUser: User, user: User)(
+      implicit c: Option[Connection] = None
+  ): Option[User] = {
     this.permission.hasAdminAccess(UserType(), user)(apiKeyUser.id)
 
     implicit val id = apiKeyUser.id
@@ -722,7 +862,10 @@ class UserDAL @Inject()(override val db: Database,
           s"""UPDATE users SET api_key = {apiKey} WHERE id = {id}
                         RETURNING ${this.retrieveColumns},
                         (SELECT score FROM user_metrics um WHERE um.user_id = {id}) as score"""
-        SQL(query).on('apiKey -> newAPIKey, 'id -> apiKeyUser.id).as(this.parser.*).headOption
+        SQL(query)
+          .on(Symbol("apiKey") -> newAPIKey, Symbol("id") -> apiKeyUser.id)
+          .as(this.parser.*)
+          .headOption
       }
     }
   }
@@ -740,15 +883,21 @@ class UserDAL @Inject()(override val db: Database,
     val homeProjectId = this.projectDAL.retrieveByName(homeName) match {
       case Some(project) => project.id
       case None =>
-        this.projectDAL.insert(Project(id = -1,
-          owner = user.osmProfile.id,
-          name = homeName,
-          created = DateTime.now(),
-          modified = DateTime.now(),
-          description = Some(s"Home project for user ${user.name}"),
-          enabled = false,
-          displayName = Some(s"${user.osmProfile.displayName}'s Project")
-        ), user).id
+        this.projectDAL
+          .insert(
+            Project(
+              id = -1,
+              owner = user.osmProfile.id,
+              name = homeName,
+              created = DateTime.now(),
+              modified = DateTime.now(),
+              description = Some(s"Home project for user ${user.name}"),
+              enabled = false,
+              displayName = Some(s"${user.osmProfile.displayName}'s Project")
+            ),
+            user
+          )
+          .id
     }
     // make sure the user is an admin of this project
     if (!user.groups.exists(g => g.projectId == homeProjectId)) {
@@ -766,22 +915,26 @@ class UserDAL @Inject()(override val db: Database,
     * @param groupType The type of group to add 1 - Admin, 2 - Write, 3 - Read
     * @param user      The user that is adding the user to the project
     */
-  def addUserToProject(osmID: Long, projectId: Long, groupType: Int, user: User)(implicit c: Option[Connection] = None): User = {
+  def addUserToProject(osmID: Long, projectId: Long, groupType: Int, user: User)(
+      implicit c: Option[Connection] = None
+  ): User = {
     this.permission.hasProjectAccess(this.projectDAL.retrieveById(projectId), user)
-    implicit val osmKey = osmID
+    implicit val osmKey         = osmID
     implicit val requestingUser = user
     // expire the user group cache
     userGroupDAL.clearUserCache(osmID)
     this.verifyProjectGroups(projectId)
-    this.cacheManager.withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
-      this.withMRTransaction { implicit c =>
-        SQL"""INSERT INTO user_groups (osm_user_id, group_id)
+    this.cacheManager
+      .withUpdatingCache(Long => retrieveByOSMID) { cachedUser =>
+        this.withMRTransaction { implicit c =>
+          SQL"""INSERT INTO user_groups (osm_user_id, group_id)
             SELECT $osmID, id FROM groups
             WHERE group_type = $groupType AND project_id = $projectId
          """.executeUpdate()
+        }
+        Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
       }
-      Some(cachedUser.copy(groups = userGroupDAL.getUserGroups(osmID, User.superUser)))
-    }.get
+      .get
   }
 
   /**
@@ -794,8 +947,12 @@ class UserDAL @Inject()(override val db: Database,
     * @param c      The existing connection if any
     * @return a List of challenges
     */
-  def getSavedChallenges(userId: Long, user: User, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0)
-                        (implicit c: Option[Connection] = None): List[Challenge] = {
+  def getSavedChallenges(
+      userId: Long,
+      user: User,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0
+  )(implicit c: Option[Connection] = None): List[Challenge] = {
     this.permission.hasReadAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
       val query =
@@ -820,7 +977,9 @@ class UserDAL @Inject()(override val db: Database,
     * @param user        the user executing the request
     * @param c           The existing connection if any
     */
-  def saveChallenge(userId: Long, challengeId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def saveChallenge(userId: Long, challengeId: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasWriteAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
       SQL(
@@ -839,10 +998,14 @@ class UserDAL @Inject()(override val db: Database,
     * @param user        The user executing the unsave function
     * @param c           The existing connection if any
     */
-  def unsaveChallenge(userId: Long, challengeId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def unsaveChallenge(userId: Long, challengeId: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasWriteAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
-      SQL(s"""DELETE FROM saved_challenges WHERE user_id = $userId AND challenge_id = $challengeId""").execute()
+      SQL(
+        s"""DELETE FROM saved_challenges WHERE user_id = $userId AND challenge_id = $challengeId"""
+      ).execute()
     }
   }
 
@@ -857,8 +1020,13 @@ class UserDAL @Inject()(override val db: Database,
     * @param c            The existing connection if any
     * @return a List of challenges
     */
-  def getSavedTasks(userId: Long, user: User, challengeIds: Seq[Long] = Seq.empty, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0)
-                   (implicit c: Option[Connection] = None): List[Task] = {
+  def getSavedTasks(
+      userId: Long,
+      user: User,
+      challengeIds: Seq[Long] = Seq.empty,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0
+  )(implicit c: Option[Connection] = None): List[Task] = {
     this.permission.hasReadAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
       val query =
@@ -868,13 +1036,11 @@ class UserDAL @Inject()(override val db: Database,
            |WHERE tasks.id IN (
            |  SELECT task_id FROM saved_tasks
            |  WHERE user_id = $userId
-           |  ${
-          if (challengeIds.nonEmpty) {
-            s"AND challenge_id IN (${challengeIds.mkString(",")})"
-          } else {
-            ""
-          }
-        }
+           |  ${if (challengeIds.nonEmpty) {
+             s"AND challenge_id IN (${challengeIds.mkString(",")})"
+           } else {
+             ""
+           }}
            |  ORDER BY created
            |  LIMIT ${sqlLimit(limit)} OFFSET $offset
            |)
@@ -892,7 +1058,9 @@ class UserDAL @Inject()(override val db: Database,
     * @param user   the user executing the request
     * @param c      The existing connection if any
     */
-  def saveTask(userId: Long, taskId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def saveTask(userId: Long, taskId: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasWriteAccess(UserType(), user)(userId)
     withMRTransaction { implicit c =>
       this.taskDAL.retrieveById(taskId) match {
@@ -915,7 +1083,9 @@ class UserDAL @Inject()(override val db: Database,
     * @param user    The user executing the unsave function
     * @param c       The existing connection if any
     */
-  def unsaveTask(userId: Long, task_id: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def unsaveTask(userId: Long, task_id: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     this.permission.hasWriteAccess(UserType(), user)(userId)
     withMRConnection { implicit c =>
       SQL(s"""DELETE FROM saved_tasks WHERE user_id = $userId AND task_id = $task_id""").execute()
@@ -932,8 +1102,13 @@ class UserDAL @Inject()(override val db: Database,
     * @param asReviewer Whether the user is the reviewer (true) or the mapper (false)
     * @param user       The user who should get the credit
     */
-  def updateUserScore(taskStatus: Option[Int], taskReviewStatus: Option[Int], isReviewRevision: Boolean = false,
-                      asReviewer: Boolean = false, userId: Long)(implicit c: Connection = null) = {
+  def updateUserScore(
+      taskStatus: Option[Int],
+      taskReviewStatus: Option[Int],
+      isReviewRevision: Boolean = false,
+      asReviewer: Boolean = false,
+      userId: Long
+  )(implicit c: Connection = null) = {
     // We need to invalidate the user in the cache.
     implicit val id = userId
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
@@ -961,7 +1136,7 @@ class UserDAL @Inject()(override val db: Database,
             statusBump = ", total_skipped=(total_skipped + 1)"
             config.taskScoreSkipped
           }
-          case None => 0
+          case None    => 0
           case default => 0
         }
 
@@ -989,8 +1164,7 @@ class UserDAL @Inject()(override val db: Database,
           case Some(Task.REVIEW_STATUS_DISPUTED) => {
             if (asReviewer) {
               statusBump = ", total_disputed_as_reviewer=(total_disputed_as_reviewer + 1)"
-            }
-            else {
+            } else {
               statusBump = ", total_disputed_as_mapper=(total_disputed_as_mapper + 1)"
 
               // Let's rollback mapper's rejected score
@@ -1029,7 +1203,10 @@ class UserDAL @Inject()(override val db: Database,
     val homeName = s"Home_${user.osmProfile.id}"
     this.projectDAL.retrieveByName(homeName) match {
       case Some(project) => project
-      case None => throw new NotFoundException("You should never get this exception, Home project should always exist for user.")
+      case None =>
+        throw new NotFoundException(
+          "You should never get this exception, Home project should always exist for user."
+        )
     }
   }
 
@@ -1042,45 +1219,77 @@ class UserDAL @Inject()(override val db: Database,
     * @param reviewMonthDuration
     * @param c            The existing connection if any
     */
-  def getMetricsForUser(userId: Long, user: User, taskMonthDuration: Int, reviewMonthDuration: Int)(
-    implicit c: Option[Connection] = None): Map[String,Map[String,Int]] = {
+  def getMetricsForUser(
+      userId: Long,
+      user: User,
+      taskMonthDuration: Int,
+      reviewMonthDuration: Int,
+      reviewerMonthDuration: Int,
+      startDate: String,
+      endDate: String,
+      reviewStartDate: String,
+      reviewEndDate: String,
+      reviewerStartDate: String,
+      reviewerEndDate: String
+  )(implicit c: Option[Connection] = None): Map[String, Map[String, Int]] = {
 
     val targetUser = retrieveById(userId)
+    var isReviewer = false
     targetUser match {
       case Some(u) =>
         if (u.settings.leaderboardOptOut.getOrElse(false) && !user.isSuperUser && userId != user.id) {
           throw new IllegalAccessException(s"User metrics are not public for this user.")
         }
+        isReviewer = u.settings.isReviewer.getOrElse(false)
       case _ =>
         throw new NotFoundException(s"Could not find user with id: $userId")
     }
 
     this.withMRConnection { implicit c =>
       // Fetch task metrics
-      val timeClause = taskMonthDuration match {
-          case -1 => "1=1"
-          case default =>
-            val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-            val startMonth = LocalDate.now.minus(Period.ofMonths(taskMonthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-            s"""sa1.created::DATE BETWEEN '$startMonth' AND '$today'"""
-        }
+      var timeClause = taskMonthDuration match {
+        case -1 => "1=1"
+        case 0 =>
+          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          val startOfMonth =
+            LocalDate.now.withDayOfMonth(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          s"""sa1.created::DATE BETWEEN '$startOfMonth' AND '$today'"""
+        case default =>
+          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          val startMonth = LocalDate.now
+            .minus(Period.ofMonths(taskMonthDuration))
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          s"""sa1.created::DATE BETWEEN '$startMonth' AND '$today'"""
+      }
 
-      val taskCountsParser: RowParser[Map[String,Int]] = {
-          get[Int]("total") ~
+      if (startDate != null && startDate.matches("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]") &&
+          endDate != null && endDate.matches("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")) {
+        timeClause =
+          s"""sa1.created::DATE BETWEEN '${startDate} 00:00:00' AND '${endDate} 23:59:59'"""
+      }
+
+      val taskCountsParser: RowParser[Map[String, Int]] = {
+        get[Int]("total") ~
           get[Int]("total_fixed") ~
           get[Int]("total_false_positive") ~
           get[Int]("total_already_fixed") ~
           get[Int]("total_too_hard") ~
           get[Int]("total_skipped") map {
           case total ~ fixed ~ falsePositive ~ alreadyFixed ~ tooHard ~ skipped => {
-            Map("total" -> total, "fixed" -> fixed, "falsePositive" -> falsePositive,
-                "alreadyFixed" -> alreadyFixed, "tooHard" -> tooHard, "skipped" -> skipped)
+            Map(
+              "total"         -> total,
+              "fixed"         -> fixed,
+              "falsePositive" -> falsePositive,
+              "alreadyFixed"  -> alreadyFixed,
+              "tooHard"       -> tooHard,
+              "skipped"       -> skipped
+            )
           }
         }
       }
 
       val taskCountsQuery =
-       s"""SELECT COUNT(tasks.id) AS total,
+        s"""SELECT COUNT(tasks.id) AS total,
              COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_FIXED} then 1 else 0 end), 0) total_fixed,
              COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_FALSE_POSITIVE} then 1 else 0 end), 0) total_false_positive,
              COALESCE(SUM(CASE WHEN sa1.status = ${Task.STATUS_ALREADY_FIXED} then 1 else 0 end), 0) total_already_fixed,
@@ -1091,33 +1300,56 @@ class UserDAL @Inject()(override val db: Database,
            INNER JOIN users ON users.osm_id = sa1.osm_user_id AND users.id=${userId}
            WHERE $timeClause;"""
 
-       val taskCounts = SQL(taskCountsQuery).as(taskCountsParser.single)
+      val taskCounts = SQL(taskCountsQuery).as(taskCountsParser.single)
 
-       // Now fetch Review Metrics
-       val reviewTimeClause = reviewMonthDuration match {
-           case -1 => "1=1"
-           case default =>
-             val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-             val startMonth = LocalDate.now.minus(Period.ofMonths(reviewMonthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-             s"""reviewed_at::DATE BETWEEN '$startMonth' AND '$today'"""
-         }
+      // Now fetch Review Metrics
+      var reviewTimeClause = reviewMonthDuration match {
+        case -1 => "1=1"
+        case 0 =>
+          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          val startOfMonth =
+            LocalDate.now.withDayOfMonth(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          s"""reviewed_at::DATE BETWEEN '$startOfMonth' AND '$today'"""
+        case default =>
+          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          val startMonth = LocalDate.now
+            .minus(Period.ofMonths(reviewMonthDuration))
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+          s"""reviewed_at::DATE BETWEEN '$startMonth' AND '$today'"""
+      }
 
-       val reviewCountsParser: RowParser[Map[String,Int]] = {
-           get[Int]("total") ~
-           get[Int]("approvedCount") ~
-           get[Int]("rejectedCount") ~
-           get[Int]("assistedCount") ~
-           get[Int]("disputedCount") ~
-           get[Int]("requestedCount") map {
-           case total ~ approvedCount ~ rejectedCount ~ assistedCount ~ disputedCount ~ requestedCount => {
-             Map("total" -> total, "approved" -> approvedCount, "rejected" -> rejectedCount,
-                 "assisted" -> assistedCount, "disputed" -> disputedCount, "requested" -> requestedCount)
-           }
-         }
-       }
+      if (reviewStartDate != null && reviewStartDate.matches(
+            "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+          ) &&
+          reviewEndDate != null && reviewEndDate.matches(
+            "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+          )) {
+        reviewTimeClause =
+          s"""reviewed_at::DATE BETWEEN '${reviewStartDate} 00:00:00' AND '${reviewEndDate} 23:59:59'"""
+      }
 
-       val reviewCountsQuery =
-         s"""
+      val reviewCountsParser: RowParser[Map[String, Int]] = {
+        get[Int]("total") ~
+          get[Int]("approvedCount") ~
+          get[Int]("rejectedCount") ~
+          get[Int]("assistedCount") ~
+          get[Int]("disputedCount") ~
+          get[Int]("requestedCount") map {
+          case total ~ approvedCount ~ rejectedCount ~ assistedCount ~ disputedCount ~ requestedCount => {
+            Map(
+              "total"     -> total,
+              "approved"  -> approvedCount,
+              "rejected"  -> rejectedCount,
+              "assisted"  -> assistedCount,
+              "disputed"  -> disputedCount,
+              "requested" -> requestedCount
+            )
+          }
+        }
+      }
+
+      val reviewCountsQuery =
+        s"""
             |SELECT count(*) as total,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_APPROVED} then 1 else 0 end), 0) approvedCount,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REJECTED} then 1 else 0 end), 0) rejectedCount,
@@ -1125,12 +1357,57 @@ class UserDAL @Inject()(override val db: Database,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_DISPUTED} then 1 else 0 end), 0) disputedCount,
             |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REQUESTED} then 1 else 0 end), 0) requestedCount
             |FROM task_review
-            |WHERE task_review.review_requested_by = $userId AND ${reviewTimeClause}
+            |WHERE task_review.review_requested_by = $userId AND (${reviewTimeClause} OR task_review.reviewed_at IS NULL)
         """.stripMargin
 
-        val reviewCounts = SQL(reviewCountsQuery).as(reviewCountsParser.single)
+      val reviewCounts = SQL(reviewCountsQuery).as(reviewCountsParser.single)
 
-       Map("tasks" -> taskCounts, "reviewTasks" -> reviewCounts)
+      if (isReviewer) {
+        var reviewerTimeClause = reviewerMonthDuration match {
+          case -1 => "1=1"
+          case 0 =>
+            val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val startOfMonth =
+              LocalDate.now.withDayOfMonth(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            s"""reviewed_at::DATE BETWEEN '$startOfMonth' AND '$today'"""
+          case default =>
+            val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val startMonth = LocalDate.now
+              .minus(Period.ofMonths(reviewerMonthDuration))
+              .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            s"""reviewed_at::DATE BETWEEN '$startMonth' AND '$today'"""
+        }
+        if (reviewerStartDate != null && reviewerStartDate.matches(
+              "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+            ) &&
+            reviewerEndDate != null && reviewerEndDate.matches(
+              "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
+            )) {
+          reviewerTimeClause =
+            s"""reviewed_at::DATE BETWEEN '${reviewerStartDate} 00:00:00' AND '${reviewerEndDate} 23:59:59'"""
+        }
+
+        val asReviewerCountsQuery =
+          s"""
+               |SELECT count(*) as total,
+               |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_APPROVED} then 1 else 0 end), 0) approvedCount,
+               |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REJECTED} then 1 else 0 end), 0) rejectedCount,
+               |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_ASSISTED} then 1 else 0 end), 0) assistedCount,
+               |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_DISPUTED} then 1 else 0 end), 0) disputedCount,
+               |COALESCE(sum(case when review_status = ${Task.REVIEW_STATUS_REQUESTED} then 1 else 0 end), 0) requestedCount
+               |FROM task_review
+               |WHERE task_review.reviewed_by = $userId AND ${reviewerTimeClause}
+           """.stripMargin
+
+        val asReviewerCounts = SQL(asReviewerCountsQuery).as(reviewCountsParser.single)
+        Map(
+          "tasks"           -> taskCounts,
+          "reviewTasks"     -> reviewCounts,
+          "asReviewerTasks" -> asReviewerCounts
+        )
+      } else {
+        Map("tasks" -> taskCounts, "reviewTasks" -> reviewCounts)
+      }
     }
   }
 }

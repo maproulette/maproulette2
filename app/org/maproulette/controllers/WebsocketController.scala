@@ -13,23 +13,26 @@ import play.api.libs.streams.ActorFlow
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 
-
 /**
- * @author nrotstan
- */
-class WebSocketController @Inject()(dalManager: DALManager,
-                                    sessionManager: SessionManager,
-                                    components: ControllerComponents)(implicit system: ActorSystem, mat: Materializer)
-                                    extends AbstractController(components) with StatusMessages {
+  * @author nrotstan
+  */
+class WebSocketController @Inject() (
+    dalManager: DALManager,
+    sessionManager: SessionManager,
+    components: ControllerComponents
+)(implicit system: ActorSystem, mat: Materializer)
+    extends AbstractController(components)
+    with StatusMessages {
 
   // implicit reads and writes used for various JSON messages
   implicit val clientMessageReads = WebSocketMessages.clientMessageReads
-  implicit val messageFlowTransformer = MessageFlowTransformer.jsonMessageFlowTransformer[WebSocketMessages.ClientMessage, JsValue]
+  implicit val messageFlowTransformer =
+    MessageFlowTransformer.jsonMessageFlowTransformer[WebSocketMessages.ClientMessage, JsValue]
 
   /**
-   * Instantiate a WebSocketActor to handle communication for a new client
-   * websocket connection
-   */
+    * Instantiate a WebSocketActor to handle communication for a new client
+    * websocket connection
+    */
   def socket = WebSocket.accept[WebSocketMessages.ClientMessage, JsValue] { request =>
     ActorFlow.actorRef { out =>
       WebSocketActor.props(out)

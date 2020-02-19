@@ -14,9 +14,13 @@ import play.api.mvc._
   *
   * @author cuthbertm
   */
-class APIController @Inject()(dalManager: DALManager,
-                              sessionManager: SessionManager,
-                              components: ControllerComponents) extends AbstractController(components) with StatusMessages {
+class APIController @Inject() (
+    dalManager: DALManager,
+    sessionManager: SessionManager,
+    components: ControllerComponents
+) extends AbstractController(components)
+    with StatusMessages {
+
   /**
     * In the routes file this will be mapped to any /api/v2/ paths. It is the last mapping to take
     * place so if it doesn't match any of the other routes it will fall into this invalid path.

@@ -7,6 +7,7 @@ import java.sql.Connection
 import anorm.SqlParser._
 import anorm._
 import javax.inject.{Inject, Provider, Singleton}
+import org.maproulette.Config
 import org.maproulette.exception.InvalidException
 import org.maproulette.models._
 import org.maproulette.permissions.Permission
@@ -18,11 +19,15 @@ import play.api.libs.json.JsValue
   * @author cuthbertm
   */
 @Singleton
-class SurveyDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
-                          override val tagDAL: TagDAL,
-                          projectDAL: Provider[ProjectDAL],
-                          override val permission: Permission)
-  extends ChallengeDAL(db, taskDAL, tagDAL, projectDAL, permission) {
+class SurveyDAL @Inject() (
+    override val db: Database,
+    taskDAL: TaskDAL,
+    override val tagDAL: TagDAL,
+    projectDAL: Provider[ProjectDAL],
+    notificationDAL: Provider[NotificationDAL],
+    override val permission: Permission,
+    config: Config
+) extends ChallengeDAL(db, taskDAL, tagDAL, projectDAL, notificationDAL, permission, config) {
 
   private val answerParser: RowParser[Answer] = {
     get[Long]("answers.id") ~
@@ -44,7 +49,7 @@ class SurveyDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     // if no answers are found, then use the default answers
     answers match {
       case a if a.isEmpty => List(Challenge.defaultAnswerValid, Challenge.defaultAnswerInvalid)
-      case a => a
+      case a              => a
     }
   }
 
@@ -59,10 +64,13 @@ class SurveyDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     * @param user     The user answering the question, if none will default to a guest user on the database
     * @return
     */
-  def answerQuestion(survey: Challenge, taskId: Long, answerId: Long, user: User)(implicit c: Option[Connection] = None): Option[Long] = {
+  def answerQuestion(survey: Challenge, taskId: Long, answerId: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Option[Long] = {
     this.withMRTransaction { implicit c =>
       SQL"""INSERT INTO survey_answers (osm_user_id, project_id, survey_id, task_id, answer_id)
-            VALUES (${user.osmProfile.id}, ${survey.general.parent}, ${survey.id}, $taskId, $answerId)""".executeInsert()
+            VALUES (${user.osmProfile.id}, ${survey.general.parent}, ${survey.id}, $taskId, $answerId)"""
+        .executeInsert()
     }
   }
 
@@ -75,14 +83,17 @@ class SurveyDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     * @param user      The user executing the request
     * @return The object that was inserted into the database. This will include the newly created id
     */
-  def insertAnswers(challenge: Challenge, answers: List[String], user: User)(implicit c: Option[Connection] = None): Unit = {
+  def insertAnswers(challenge: Challenge, answers: List[String], user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     if (answers.size < 2) {
       throw new InvalidException("At least 2 answers required for creating a survey")
     }
     this.permission.hasObjectWriteAccess(challenge, user)
     this.withMRTransaction { implicit c =>
       // insert the answers into the table
-      val sqlQuery = s"""INSERT INTO answers (survey_id, answer) VALUES (${challenge.id}, {answer})"""
+      val sqlQuery =
+        s"""INSERT INTO answers (survey_id, answer) VALUES (${challenge.id}, {answer})"""
       val parameters = answers.map(answer => {
         Seq[NamedParameter]("answer" -> answer)
       })
@@ -98,14 +109,17 @@ class SurveyDAL @Inject()(override val db: Database, taskDAL: TaskDAL,
     * @param id      The id of the object that you are updating
     * @return An optional object, it will return None if no object found with a matching id that was supplied
     */
-  override def update(updates: JsValue, user: User)(implicit id: Long, c: Option[Connection] = None): Option[Challenge] = {
+  override def update(
+      updates: JsValue,
+      user: User
+  )(implicit id: Long, c: Option[Connection] = None): Option[Challenge] = {
     this.withMRTransaction { implicit c =>
-      val updatedChallenge = super.update(updates, user)
+      val updatedChallenge     = super.update(updates, user)
       implicit val answerReads = Challenge.answerReads
       // list of answers to delete
       (updates \ "answers" \ "delete").asOpt[List[Long]] match {
         case Some(values) => SQL"""DELETE FROM answers WHERE id IN ($values)""".execute()
-        case None => //ignore
+        case None         => //ignore
       }
       (updates \ "answers" \ "update").asOpt[List[Answer]] match {
         case Some(values) =>

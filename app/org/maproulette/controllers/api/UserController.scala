@@ -19,38 +19,47 @@ import scala.util.{Failure, Success}
 /**
   * @author cuthbertm
   */
-class UserController @Inject()(userDAL: UserDAL,
-                               userGroupDAL: UserGroupDAL,
-                               sessionManager: SessionManager,
-                               projectDAL: ProjectDAL,
-                               components: ControllerComponents,
-                               bodyParsers: PlayBodyParsers,
-                               crypto: Crypto) extends AbstractController(components) with DefaultWrites {
+class UserController @Inject() (
+    userDAL: UserDAL,
+    userGroupDAL: UserGroupDAL,
+    sessionManager: SessionManager,
+    projectDAL: ProjectDAL,
+    components: ControllerComponents,
+    bodyParsers: PlayBodyParsers,
+    crypto: Crypto
+) extends AbstractController(components)
+    with DefaultWrites {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  implicit val userReadWrite = User.UserFormat
-  implicit val challengeWrites = Challenge.writes.challengeWrites
-  implicit val taskWrites = Task.TaskFormat
+  implicit val userReadWrite          = User.UserFormat
+  implicit val challengeWrites        = Challenge.writes.challengeWrites
+  implicit val taskWrites             = Task.TaskFormat
   implicit val userSearchResultWrites = User.searchResultWrites
-  implicit val projectManagerWrites = User.projectManagerWrites
+  implicit val projectManagerWrites   = User.projectManagerWrites
 
-  def deleteUser(osmId: Long, anonymize: Boolean): Action[AnyContent] = Action.async { implicit request =>
-    implicit val requireSuperUser = true
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (anonymize) {
-        this.userDAL.anonymizeUser(osmId, user)
-      }
-      // delete the user
-      this.userDAL.deleteByOsmID(osmId, user)
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"User with osm ID $osmId deleted from the database${
+  def deleteUser(osmId: Long, anonymize: Boolean): Action[AnyContent] = Action.async {
+    implicit request =>
+      implicit val requireSuperUser = true
+      this.sessionManager.authenticatedRequest { implicit user =>
         if (anonymize) {
-          " and anonymized"
-        } else {
-          ""
+          this.userDAL.anonymizeUser(osmId, user)
         }
-      }"))))
-    }
+        // delete the user
+        this.userDAL.deleteByOsmID(osmId, user)
+        Ok(
+          Json.toJson(
+            StatusMessage(
+              "OK",
+              JsString(s"User with osm ID $osmId deleted from the database${if (anonymize) {
+                " and anonymized"
+              } else {
+                ""
+              }}")
+            )
+          )
+        )
+      }
   }
 
   def whoami(): Action[AnyContent] = Action.async { implicit request =>
@@ -66,84 +75,97 @@ class UserController @Inject()(userDAL: UserDAL,
       } else if (user.isSuperUser) {
         this.userDAL.retrieveByOSMID(userId, user) match {
           case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
-          case None => this.userDAL.retrieveById(userId) match {
-            case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
-            case None => throw new NotFoundException(s"No user found with id '$userId'")
-          }
+          case None =>
+            this.userDAL.retrieveById(userId) match {
+              case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
+              case None    => throw new NotFoundException(s"No user found with id '$userId'")
+            }
         }
       } else {
-        throw new IllegalAccessException("Only super users have access to other user account information")
+        throw new IllegalAccessException(
+          "Only super users have access to other user account information"
+        )
       }
     }
   }
 
-  def getUserByOSMUsername(username: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (user.name == username) {
-        Ok(Json.toJson(user))
-      } else {
-        // we don't need to check access here as the API only allows super users to make the call,
-        // so if not a super user, the correct IllegalAccessException will be thrown
-        this.userDAL.retrieveByOSMUsername(username, user) match {
-          case Some(u) => Ok(Json.toJson(u))
-          case None => throw new NotFoundException(s"No user found with OSM username '$username'")
+  def getUserByOSMUsername(username: String): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        if (user.name == username) {
+          Ok(Json.toJson(user))
+        } else {
+          // we don't need to check access here as the API only allows super users to make the call,
+          // so if not a super user, the correct IllegalAccessException will be thrown
+          this.userDAL.retrieveByOSMUsername(username, user) match {
+            case Some(u) => Ok(Json.toJson(u))
+            case None    => throw new NotFoundException(s"No user found with OSM username '$username'")
+          }
         }
       }
-    }
   }
 
   def getPublicUser(userId: Long): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
       val target = this.userDAL.retrieveByOSMID(userId, User.superUser) match {
         case Some(u) => u
-        case None => this.userDAL.retrieveById(userId) match {
-          case Some(u) => u
-          case None => throw new NotFoundException(s"No user found with id '$userId'")
-        }
+        case None =>
+          this.userDAL.retrieveById(userId) match {
+            case Some(u) => u
+            case None    => throw new NotFoundException(s"No user found with id '$userId'")
+          }
       }
 
       Ok(buildBasicUser(target))
     }
   }
 
-  def getPublicUserByOSMUsername(username: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      this.userDAL.retrieveByOSMUsername(username, User.superUser) match {
-        case Some(u) => Ok(buildBasicUser(u))
-        case None => throw new NotFoundException(s"No user found with OSM username '$username'")
+  def getPublicUserByOSMUsername(username: String): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        this.userDAL.retrieveByOSMUsername(username, User.superUser) match {
+          case Some(u) => Ok(buildBasicUser(u))
+          case None    => throw new NotFoundException(s"No user found with OSM username '$username'")
+        }
       }
-    }
   }
 
-  def searchUserByOSMUsername(username: String, limit: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (StringUtils.isEmpty(username)) {
-        Ok(Json.toJson(List[JsValue]()))
-      } else {
-        Ok(Json.toJson(this.userDAL.searchByOSMUsername(username, limit)))
+  def searchUserByOSMUsername(username: String, limit: Int): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        if (StringUtils.isEmpty(username)) {
+          Ok(Json.toJson(List[JsValue]()))
+        } else {
+          Ok(Json.toJson(this.userDAL.searchByOSMUsername(username, limit)))
+        }
       }
-    }
   }
 
   private def buildBasicUser(user: User): JsValue = {
-    val avatar = user.osmProfile.avatarURL
-    val displayName = user.osmProfile.displayName
+    val avatar       = user.osmProfile.avatarURL
+    val displayName  = user.osmProfile.displayName
     val leaderOptOut = user.settings.leaderboardOptOut.getOrElse(false)
 
-    Json.obj("id" -> user.id,
-                      "osmProfile" -> Json.obj("id" -> user.osmProfile.id,
-                        "avatarURL" -> avatar, "displayName" -> displayName),
-                      "name" -> user.name,
-                      "created" -> user.created.toString,
-                      "settings" -> Json.obj("leaderboardOptOut" -> leaderOptOut))
+    Json.obj(
+      "id" -> user.id,
+      "osmProfile" -> Json
+        .obj("id" -> user.osmProfile.id, "avatarURL" -> avatar, "displayName" -> displayName),
+      "name"     -> user.name,
+      "created"  -> user.created.toString,
+      "settings" -> Json.obj("leaderboardOptOut" -> leaderOptOut)
+    )
   }
 
   def updateUser(id: Long): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       implicit val settingsRead = User.settingsReads
-      userDAL.managedUpdate(request.body.as[UserSettings], (request.body \ "properties").toOption, user)(id) match {
+      userDAL.managedUpdate(
+        request.body.as[UserSettings],
+        (request.body \ "properties").toOption,
+        user
+      )(id) match {
         case Some(u) => Ok(Json.toJson(u))
-        case None => throw new NotFoundException(s"No user found to update with id '$id'")
+        case None    => throw new NotFoundException(s"No user found to update with id '$id'")
       }
     }
   }
@@ -160,39 +182,55 @@ class UserController @Inject()(userDAL: UserDAL,
         case Some(u) =>
           sessionManager.refreshProfile(u.osmProfile.requestToken, user) onComplete {
             case Success(result) => p success Ok
-            case Failure(f) => p failure f
+            case Failure(f)      => p failure f
           }
-        case None => p failure new NotFoundException(s"Failed to find any user with OSM User id [$osmUserId]")
+        case None =>
+          p failure new NotFoundException(s"Failed to find any user with OSM User id [$osmUserId]")
       }
       p.future
     }
   }
 
-  def getSavedChallenges(userId: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      Ok(Json.toJson(this.userDAL.getSavedChallenges(userId, user, limit, offset)))
-    }
+  def getSavedChallenges(userId: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        Ok(Json.toJson(this.userDAL.getSavedChallenges(userId, user, limit, offset)))
+      }
   }
 
-  def saveChallenge(userId: Long, challengeId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      this.userDAL.saveChallenge(userId, challengeId, user)
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"Challenge $challengeId saved for user $userId"))))
-    }
+  def saveChallenge(userId: Long, challengeId: Long): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        this.userDAL.saveChallenge(userId, challengeId, user)
+        Ok(
+          Json
+            .toJson(StatusMessage("OK", JsString(s"Challenge $challengeId saved for user $userId")))
+        )
+      }
   }
 
-  def unsaveChallenge(userId: Long, challengeId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      this.userDAL.unsaveChallenge(userId, challengeId, user)
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"Challenge $challengeId unsaved from user $userId"))))
-    }
+  def unsaveChallenge(userId: Long, challengeId: Long): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        this.userDAL.unsaveChallenge(userId, challengeId, user)
+        Ok(
+          Json.toJson(
+            StatusMessage("OK", JsString(s"Challenge $challengeId unsaved from user $userId"))
+          )
+        )
+      }
   }
 
-  def getSavedTasks(userId: Long, challengeIds: String, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
+  def getSavedTasks(
+      userId: Long,
+      challengeIds: String,
+      limit: Int,
+      offset: Int
+  ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       val ids = challengeIds.split(",").filter(_.nonEmpty) match {
         case v if v.nonEmpty => v.map(_.toLong).toSeq
-        case _ => Seq.empty[Long]
+        case _               => Seq.empty[Long]
       }
       Ok(Json.toJson(this.userDAL.getSavedTasks(userId, user, ids, limit, offset)))
     }
@@ -205,11 +243,12 @@ class UserController @Inject()(userDAL: UserDAL,
     }
   }
 
-  def unsaveTask(userId: Long, taskId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      this.userDAL.unsaveTask(userId, taskId, user)
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"Task $taskId unsaved from user $userId"))))
-    }
+  def unsaveTask(userId: Long, taskId: Long): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        this.userDAL.unsaveTask(userId, taskId, user)
+        Ok(Json.toJson(StatusMessage("OK", JsString(s"Task $taskId unsaved from user $userId"))))
+      }
   }
 
   /**
@@ -220,51 +259,82 @@ class UserController @Inject()(userDAL: UserDAL,
     * @param groupType The type of group 1 - Admin, 2 - Write, 3 - Read
     * @return Standard status message
     */
-  def addUserToProject(userId: Long, projectId: Long, groupType: Int): Action[AnyContent] = Action.async { implicit request =>
+  def addUserToProject(
+      userId: Long,
+      projectId: Long,
+      groupType: Int,
+      isOSMUserId: Boolean
+  ): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
-      this.addUser(userId, projectId, groupType, user)
+      this.addUser(userId, isOSMUserId, projectId, groupType, user)
       // clear group caches
       this.userGroupDAL.clearCache()
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"User with id [$userId] added to project $projectId"))))
+      Ok(
+        Json.toJson(
+          StatusMessage("OK", JsString(s"User with id [$userId] added to project $projectId"))
+        )
+      )
     }
   }
 
-  def addUsersToProject(projectId: Long, groupType: Int): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
-    sessionManager.authenticatedRequest { implicit user =>
-      val jsBody = request.body
-      if (!jsBody.isInstanceOf[JsArray]) {
-        throw new InvalidException("Expecting JSON array of user id's for this request")
-      }
-
-      val idList = jsBody.as[JsArray].value
-      idList.foreach(id => {
-        this.addUser(id.as[Long], projectId, groupType, user)
-      })
-      // clear the group caches
-      this.userGroupDAL.clearCache()
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"Users with ids [${idList.mkString(",")} added to project $projectId"))))
-    }
-  }
-
-  private def addUser(userId: Long, projectId: Long, groupType: Int, user: User): Unit = {
-    val addUser = this.userDAL.retrieveById(userId) match {
-      case Some(addUser) => addUser
-      case None =>
-        // check to see if the osm id was supplied instead
-        this.userDAL.retrieveByOSMID(userId, user) match {
-          case Some(u) => u
-          case None => throw new NotFoundException(s"Could not find user with ID $userId")
+  def addUsersToProject(projectId: Long, groupType: Int, isOSMUserId: Boolean): Action[JsValue] =
+    Action.async(bodyParsers.json) { implicit request =>
+      sessionManager.authenticatedRequest { implicit user =>
+        val jsBody = request.body
+        if (!jsBody.isInstanceOf[JsArray]) {
+          throw new InvalidException("Expecting JSON array of user id's for this request")
         }
+
+        val idList = jsBody.as[JsArray].value
+        idList.foreach(id => {
+          this.addUser(id.as[Long], isOSMUserId, projectId, groupType, user)
+        })
+        // clear the group caches
+        this.userGroupDAL.clearCache()
+        Ok(
+          Json.toJson(
+            StatusMessage(
+              "OK",
+              JsString(s"Users with ids [${idList.mkString(",")} added to project $projectId")
+            )
+          )
+        )
+      }
     }
+
+  private def addUser(
+      userId: Long,
+      isOSMUserId: Boolean,
+      projectId: Long,
+      groupType: Int,
+      user: User
+  ): Unit = {
+    val addUser = this.retrieveUser(userId, isOSMUserId, user)
+
     if (addUser.groups.exists(g => g.projectId == projectId && g.groupType == groupType)) {
       throw new InvalidException(s"User ${addUser.name} is already part of project $projectId")
     }
     // quick verification to make sure that the project exists
     this.projectDAL.retrieveById(projectId) match {
       case Some(_) => // just ignore
-      case None => throw new NotFoundException(s"Could not find project with ID $projectId")
+      case None    => throw new NotFoundException(s"Could not find project with ID $projectId")
     }
     this.userDAL.addUserToProject(addUser.osmProfile.id, projectId, groupType, user)
+  }
+
+  private def retrieveUser(userId: Long, isOSMUserId: Boolean, user: User): User = {
+    isOSMUserId match {
+      case true =>
+        this.userDAL.retrieveByOSMID(userId, user) match {
+          case Some(u) => u
+          case None    => throw new NotFoundException(s"Could not find user with OSM ID $userId")
+        }
+      case false =>
+        this.userDAL.retrieveById(userId) match {
+          case Some(u) => u
+          case None    => throw new NotFoundException(s"Could not find user with ID $userId")
+        }
+    }
   }
 
   /**
@@ -276,17 +346,14 @@ class UserController @Inject()(userDAL: UserDAL,
     * @param groupType The type of group 1 - Admin, 2 - Write, 3 - Read
     * @return Standard status message
     */
-  def setUserProjectGroup(userId: Long, projectId: Long, groupType: Int): Action[AnyContent] = Action.async { implicit request =>
+  def setUserProjectGroup(
+      userId: Long,
+      projectId: Long,
+      groupType: Int,
+      isOSMUserId: Boolean
+  ): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
-      val addUser = this.userDAL.retrieveById(userId) match {
-        case Some(addUser) => addUser
-        case None =>
-          // check to see if the osm id was supplied instead. Superuser promotion required.
-          this.userDAL.retrieveByOSMID(userId, User.superUser) match {
-            case Some(u) => u
-            case None => throw new NotFoundException(s"Could not found user with ID $userId")
-          }
-      }
+      val addUser = retrieveUser(userId, isOSMUserId, user)
       this.userDAL.setUserProjectGroup(addUser.osmProfile.id, projectId, groupType, user)
       // clear group caches
       this.userGroupDAL.clearCache()
@@ -301,34 +368,45 @@ class UserController @Inject()(userDAL: UserDAL,
     * @param projectId
     * @return
     */
-  def removeUserFromProject(userId: Long, projectId: Long, groupType: Int): Action[AnyContent] = Action.async { implicit request =>
+  def removeUserFromProject(
+      userId: Long,
+      projectId: Long,
+      groupType: Int,
+      isOSMUserId: Boolean
+  ): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
-      this.removeUser(userId, projectId, groupType, user)
+      this.removeUser(userId, isOSMUserId, projectId, groupType, user)
       // clear group caches
       this.userGroupDAL.clearCache()
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"User with id $userId removed from project $projectId"))))
+      Ok(
+        Json.toJson(
+          StatusMessage("OK", JsString(s"User with id $userId removed from project $projectId"))
+        )
+      )
     }
   }
 
-  private def removeUser(userId: Long, projectId: Long, groupType: Int, user: User): Unit = {
-    val addUser = this.userDAL.retrieveById(userId) match {
-      case Some(addUser) => addUser
-      case None =>
-        // check to see if the osm id was supplied instead. Superuser promotion required.
-        this.userDAL.retrieveByOSMID(userId, User.superUser) match {
-          case Some(u) => u
-          case None => throw new NotFoundException(s"Could not find user with ID $userId")
-        }
-    }
+  private def removeUser(
+      userId: Long,
+      isOSMUserId: Boolean,
+      projectId: Long,
+      groupType: Int,
+      user: User
+  ): Unit = {
+    val addUser = this.retrieveUser(userId, isOSMUserId, user)
     // just check to make sure that the project exists
     this.projectDAL.retrieveById(projectId) match {
       case Some(_) => // just ignore
-      case None => throw new NotFoundException(s"Could not find project with ID $projectId")
+      case None    => throw new NotFoundException(s"Could not find project with ID $projectId")
     }
     this.userDAL.removeUserFromProject(addUser.osmProfile.id, projectId, groupType, user)
   }
 
-  def removeUsersFromProject(projectId: Long, groupType: Int): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
+  def removeUsersFromProject(
+      projectId: Long,
+      groupType: Int,
+      isOSMUserId: Boolean
+  ): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
       val jsBody = request.body
       if (!jsBody.isInstanceOf[JsArray]) {
@@ -337,11 +415,18 @@ class UserController @Inject()(userDAL: UserDAL,
 
       val idList = jsBody.as[JsArray].value
       idList.foreach(id => {
-        this.removeUser(id.as[Long], projectId, groupType, user)
+        this.removeUser(id.as[Long], isOSMUserId, projectId, groupType, user)
       })
       // clear the group caches
       this.userGroupDAL.clearCache()
-      Ok(Json.toJson(StatusMessage("OK", JsString(s"Users with ids [${idList.mkString(",")} removed from project $projectId"))))
+      Ok(
+        Json.toJson(
+          StatusMessage(
+            "OK",
+            JsString(s"Users with ids [${idList.mkString(",")} removed from project $projectId")
+          )
+        )
+      )
     }
   }
 
@@ -361,31 +446,66 @@ class UserController @Inject()(userDAL: UserDAL,
           case None => // look for the user under the OSM_ID
             this.userDAL.retrieveByOSMID(userId, user) match {
               case Some(u) => u
-              case None => throw new NotFoundException(s"No user found with id [$userId], no API key could be generated.")
+              case None =>
+                throw new NotFoundException(
+                  s"No user found with id [$userId], no API key could be generated."
+                )
             }
         }
       } else {
         user
       }
       this.userDAL.generateAPIKey(newAPIUser, user) match {
-        case Some(updated) => updated.apiKey match {
-          case Some(api) => Ok(api)
-          case None => NoContent
-        }
+        case Some(updated) =>
+          updated.apiKey match {
+            case Some(api) => Ok(api)
+            case None      => NoContent
+          }
         case None => NoContent
       }
     }
   }
 
-  def getUsersManagingProject(projectId: Long, osmIds: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      Ok(Json.toJson(this.userDAL.getUsersManagingProject(projectId, Utils.toLongList(osmIds), user)))
-    }
+  def getUsersManagingProject(projectId: Long, osmIds: String): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        Ok(
+          Json
+            .toJson(this.userDAL.getUsersManagingProject(projectId, Utils.toLongList(osmIds), user))
+        )
+      }
   }
 
-  def getMetricsForUser(userId: Long, monthDuration:Int = -1, reviewDuration:Int = -1): Action[AnyContent] = Action.async { implicit request =>
+  def getMetricsForUser(
+      userId: Long,
+      monthDuration: Int = -1,
+      reviewDuration: Int = -1,
+      reviewerDuration: Int = -1,
+      start: String,
+      end: String,
+      reviewStart: String,
+      reviewEnd: String,
+      reviewerStart: String,
+      reviewerEnd: String
+  ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Json.toJson(this.userDAL.getMetricsForUser(userId, User.userOrMocked(user), monthDuration, reviewDuration)))
+      Ok(
+        Json.toJson(
+          this.userDAL.getMetricsForUser(
+            userId,
+            User.userOrMocked(user),
+            monthDuration,
+            reviewDuration,
+            reviewerDuration,
+            start,
+            end,
+            reviewStart,
+            reviewEnd,
+            reviewerStart,
+            reviewerEnd
+          )
+        )
+      )
     }
   }
 }

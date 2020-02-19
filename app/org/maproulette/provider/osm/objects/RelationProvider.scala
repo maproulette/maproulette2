@@ -5,7 +5,7 @@ package org.maproulette.services.osm.objects
 import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
-import org.maproulette.cache.CacheStorage
+import org.maproulette.cache.BasicCache
 import org.maproulette.services.osm.OSMType
 import play.api.libs.ws.WSClient
 
@@ -18,13 +18,23 @@ import scala.xml.Node
   * @author mcuthbert
   */
 @Singleton
-class RelationProvider @Inject()(override val ws: WSClient, override val config: Config) extends ObjectProvider[VersionedRelation] {
-  val cache = new CacheStorage[Long, VersionedObjects[VersionedRelation]](cacheExpiry = ObjectProvider.DEFAULT_CACHE_EXPIRY)
+class RelationProvider @Inject() (override val ws: WSClient, override val config: Config)
+    extends ObjectProvider[VersionedRelation] {
+  val cache = new BasicCache[Long, VersionedObjects[VersionedRelation]](config)
 
   def get(ids: List[Long]): Future[List[VersionedRelation]] = getFromType(ids, OSMType.RELATION)
 
-  override protected def createVersionedObjectFromXML(elem: Node, id: Long, visible: Boolean, version: Int, changeset: Int,
-                                                      timestamp: DateTime, user: String, uid: Long, tags: Map[String, String]): VersionedRelation = {
+  override protected def createVersionedObjectFromXML(
+      elem: Node,
+      id: Long,
+      visible: Boolean,
+      version: Int,
+      changeset: Int,
+      timestamp: DateTime,
+      user: String,
+      uid: Long,
+      tags: Map[String, String]
+  ): VersionedRelation = {
     VersionedRelation(
       s"Node_$id",
       id,
@@ -35,9 +45,11 @@ class RelationProvider @Inject()(override val ws: WSClient, override val config:
       user,
       uid,
       tags,
-      (elem \ "member").map(elem => {
-        RelationMember((elem \ "@type").text, (elem \ "@ref").text.toLong, (elem \ "@role").text)
-      }).toList
+      (elem \ "member")
+        .map(elem => {
+          RelationMember((elem \ "@type").text, (elem \ "@ref").text.toLong, (elem \ "@role").text)
+        })
+        .toList
     )
   }
 }

@@ -46,13 +46,15 @@ case class Location(latitude: Double, longitude: Double, name: Option[String] = 
   * @param created      When their OSM account was created
   * @param requestToken The key and secret (access token) used for authorization
   */
-case class OSMProfile(id: Long,
-                      displayName: String,
-                      description: String,
-                      avatarURL: String,
-                      homeLocation: Location,
-                      created: DateTime,
-                      requestToken: RequestToken)
+case class OSMProfile(
+    id: Long,
+    displayName: String,
+    description: String,
+    avatarURL: String,
+    homeLocation: Location,
+    created: DateTime,
+    requestToken: RequestToken
+)
 
 /**
   * A user search result containing a few public fields from user's OSM Profile.
@@ -61,25 +63,27 @@ case class OSMProfile(id: Long,
   * @param displayName The display name for the osm user
   * @param avatarURL   The avatar URL to enabling displaying of their avatar
   */
-case class UserSearchResult(osmId: Long,
-                            displayName: String,
-                            avatarURL: String)
+case class UserSearchResult(osmId: Long, displayName: String, avatarURL: String)
 
 /**
   * Information specific to a user managing a project. Includes the project id,
   * a few basic fields about the user, and their group types for the project.
   *
   * @param projectId   The project id
+  * @param userId      The user's MapRoulette id
   * @param osmId       The user's osm id
   * @param displayName The display name for the osm user
   * @param avatarURL   The avatar URL to enabling displaying of their avatar
   * @param groupTypes  List of the user's group types for the project
   */
-case class ProjectManager(projectId: Long,
-                          osmId: Long,
-                          displayName: String,
-                          avatarURL: String,
-                          groupTypes: List[Int] = List())
+case class ProjectManager(
+    projectId: Long,
+    userId: Long,
+    osmId: Long,
+    displayName: String,
+    avatarURL: String,
+    groupTypes: List[Int] = List()
+)
 
 /**
   * Settings that are not defined by the OSM user profile, but specific to MapRoulette
@@ -98,33 +102,36 @@ case class ProjectManager(projectId: Long,
   *                          2=skin-blue, 3=skin-blue-light, 4=skin-green, 5=skin-green-light,
   *                          6=skin-purple, 7=skin-purple-light, 8=skin-red, 9=skin-red-light, 10=skin-yellow, 11=skin-yellow-light
   */
-case class UserSettings(defaultEditor: Option[Int] = None,
-                        defaultBasemap: Option[Int] = None,
-                        defaultBasemapId: Option[String] = None,
-                        customBasemap: Option[String] = None,
-                        locale: Option[String] = None,
-                        email: Option[String] = None,
-                        emailOptIn: Option[Boolean] = None,
-                        leaderboardOptOut: Option[Boolean] = None,
-                        needsReview: Option[Int] = None,
-                        isReviewer: Option[Boolean] = None,
-                        theme: Option[Int] = None) {
+case class UserSettings(
+    defaultEditor: Option[Int] = None,
+    defaultBasemap: Option[Int] = None,
+    defaultBasemapId: Option[String] = None,
+    customBasemap: Option[String] = None,
+    locale: Option[String] = None,
+    email: Option[String] = None,
+    emailOptIn: Option[Boolean] = None,
+    leaderboardOptOut: Option[Boolean] = None,
+    needsReview: Option[Int] = None,
+    isReviewer: Option[Boolean] = None,
+    theme: Option[Int] = None
+) {
   def getTheme: String = theme match {
-    case Some(t) => t match {
-      case User.THEME_BLACK => "skin-black"
-      case User.THEME_BLACK_LIGHT => "skin-black-light"
-      case User.THEME_BLUE => "skin-blue"
-      case User.THEME_BLUE_LIGHT => "skin-blue-light"
-      case User.THEME_GREEN => "skin-green"
-      case User.THEME_GREEN_LIGHT => "skin-green-light"
-      case User.THEME_PURPLE => "skin-purple"
-      case User.THEME_PURPLE_LIGHT => "skin-purple-light"
-      case User.THEME_RED => "skin-red"
-      case User.THEME_RED_LIGHT => "skin-red-light"
-      case User.THEME_YELLOW => "skin-yellow"
-      case User.THEME_YELLOW_LIGHT => "skin-yellow-light"
-      case _ => "skin-blue"
-    }
+    case Some(t) =>
+      t match {
+        case User.THEME_BLACK        => "skin-black"
+        case User.THEME_BLACK_LIGHT  => "skin-black-light"
+        case User.THEME_BLUE         => "skin-blue"
+        case User.THEME_BLUE_LIGHT   => "skin-blue-light"
+        case User.THEME_GREEN        => "skin-green"
+        case User.THEME_GREEN_LIGHT  => "skin-green-light"
+        case User.THEME_PURPLE       => "skin-purple"
+        case User.THEME_PURPLE_LIGHT => "skin-purple-light"
+        case User.THEME_RED          => "skin-red"
+        case User.THEME_RED_LIGHT    => "skin-red-light"
+        case User.THEME_YELLOW       => "skin-yellow"
+        case User.THEME_YELLOW_LIGHT => "skin-yellow-light"
+        case _                       => "skin-blue"
+      }
     case None => "skin-blue"
   }
 }
@@ -140,16 +147,18 @@ case class UserSettings(defaultEditor: Option[Int] = None,
   * @param apiKey     The current api key to validate requests
   * @param guest      Whether this is a guest account or not.
   */
-case class User(override val id: Long,
-                override val created: DateTime,
-                override val modified: DateTime,
-                osmProfile: OSMProfile,
-                groups: List[Group] = List(),
-                apiKey: Option[String] = None,
-                guest: Boolean = false,
-                settings: UserSettings = UserSettings(),
-                properties: Option[String] = None,
-                score: Option[Int] = None) extends BaseObject[Long] {
+case class User(
+    override val id: Long,
+    override val created: DateTime,
+    override val modified: DateTime,
+    osmProfile: OSMProfile,
+    groups: List[Group] = List(),
+    apiKey: Option[String] = None,
+    guest: Boolean = false,
+    settings: UserSettings = UserSettings(),
+    properties: Option[String] = None,
+    score: Option[Int] = None
+) extends BaseObject[Long] {
   // for users the display name is always retrieved from OSM
   override def name: String = osmProfile.displayName
 
@@ -157,10 +166,11 @@ case class User(override val id: Long,
 
   def homeLocation: String = osmProfile.homeLocation.name match {
     case Some(name) => name
-    case None => "Unknown"
+    case None       => "Unknown"
   }
 
-  def formattedOSMCreatedDate: String = DateTimeFormat.forPattern("MMMM. yyyy").print(osmProfile.created)
+  def formattedOSMCreatedDate: String =
+    DateTimeFormat.forPattern("MMMM. yyyy").print(osmProfile.created)
 
   def formattedMPCreatedDate: String = DateTimeFormat.forPattern("MMMM. yyyy").print(created)
 
@@ -173,7 +183,8 @@ case class User(override val id: Long,
 
   def isAdmin: Boolean = groups.exists(_.groupType == Group.TYPE_ADMIN)
 
-  def adminForProject(projectId: Long): Boolean = groups.exists(g => g.groupType == Group.TYPE_ADMIN && g.projectId == projectId)
+  def adminForProject(projectId: Long): Boolean =
+    groups.exists(g => g.groupType == Group.TYPE_ADMIN && g.projectId == projectId)
 
   def getUserLocale: Locale = new Locale(this.settings.locale.getOrElse("en"))
 }
@@ -182,69 +193,80 @@ case class User(override val id: Long,
   * Static functions to easily create user objects
   */
 object User {
-  implicit val tokenWrites: Writes[RequestToken] = Json.writes[RequestToken]
-  implicit val tokenReads: Reads[RequestToken] = Json.reads[RequestToken]
-  implicit val settingsWrites: Writes[UserSettings] = Json.writes[UserSettings]
-  implicit val settingsReads: Reads[UserSettings] = Json.reads[UserSettings]
-  implicit val userGroupWrites: Writes[Group] = Group.groupWrites
-  implicit val userGroupReads: Reads[Group] = Group.groupReads
-  implicit val locationWrites: Writes[Location] = Json.writes[Location]
-  implicit val locationReads: Reads[Location] = Json.reads[Location]
-  implicit val osmWrites: Writes[OSMProfile] = Json.writes[OSMProfile]
-  implicit val osmReads: Reads[OSMProfile] = Json.reads[OSMProfile]
+  implicit val tokenWrites: Writes[RequestToken]            = Json.writes[RequestToken]
+  implicit val tokenReads: Reads[RequestToken]              = Json.reads[RequestToken]
+  implicit val settingsWrites: Writes[UserSettings]         = Json.writes[UserSettings]
+  implicit val settingsReads: Reads[UserSettings]           = Json.reads[UserSettings]
+  implicit val userGroupWrites: Writes[Group]               = Group.groupWrites
+  implicit val userGroupReads: Reads[Group]                 = Group.groupReads
+  implicit val locationWrites: Writes[Location]             = Json.writes[Location]
+  implicit val locationReads: Reads[Location]               = Json.reads[Location]
+  implicit val osmWrites: Writes[OSMProfile]                = Json.writes[OSMProfile]
+  implicit val osmReads: Reads[OSMProfile]                  = Json.reads[OSMProfile]
   implicit val searchResultWrites: Writes[UserSearchResult] = Json.writes[UserSearchResult]
   implicit val projectManagerWrites: Writes[ProjectManager] = Json.writes[ProjectManager]
 
   implicit object UserFormat extends Format[User] {
     override def writes(o: User): JsValue = {
       implicit val taskWrites: Writes[User] = Json.writes[User]
-      val original = Json.toJson(o)(Json.writes[User])
+      val original                          = Json.toJson(o)(Json.writes[User])
       val updated = o.properties match {
         case Some(p) => Utils.insertIntoJson(original, "properties", Json.parse(p), true)
-        case None => original
+        case None    => original
       }
       Utils.insertIntoJson(updated, "properties", Json.parse(o.properties.getOrElse("{}")), true)
     }
 
-    override def reads(json: JsValue): JsResult[User] = Json.fromJson[User](json)(Json.reads[User])
+    override def reads(json: JsValue): JsResult[User] = {
+      val modifiedJson: JsValue = (json \ "properties").toOption match {
+        case Some(p) =>
+          p match {
+            case props: JsString => json
+            case _ =>
+              json.as[JsObject] ++ Json.obj("properties" -> p.toString())
+          }
+        case None => json
+      }
+      Json.fromJson[User](modifiedJson)(Json.reads[User])
+    }
   }
 
   val DEFAULT_GUEST_USER_ID = -998
   val DEFAULT_SUPER_USER_ID = -999
-  val DEFAULT_GROUP_ID = -999
+  val DEFAULT_GROUP_ID      = -999
 
-  val THEME_BLACK = 0
-  val THEME_BLACK_LIGHT = 1
-  val THEME_BLUE = 2
-  val THEME_BLUE_LIGHT = 3
-  val THEME_GREEN = 4
-  val THEME_GREEN_LIGHT = 5
-  val THEME_PURPLE = 6
+  val THEME_BLACK        = 0
+  val THEME_BLACK_LIGHT  = 1
+  val THEME_BLUE         = 2
+  val THEME_BLUE_LIGHT   = 3
+  val THEME_GREEN        = 4
+  val THEME_GREEN_LIGHT  = 5
+  val THEME_PURPLE       = 6
   val THEME_PURPLE_LIGHT = 7
-  val THEME_RED = 8
-  val THEME_RED_LIGHT = 9
-  val THEME_YELLOW = 10
+  val THEME_RED          = 8
+  val THEME_RED_LIGHT    = 9
+  val THEME_YELLOW       = 10
   val THEME_YELLOW_LIGHT = 11
-  val superGroup: Group = Group(DEFAULT_GROUP_ID, "SUPERUSERS", 0, Group.TYPE_SUPER_USER)
+  val superGroup: Group  = Group(DEFAULT_GROUP_ID, "SUPERUSERS", 0, Group.TYPE_SUPER_USER)
   val settingsForm = Form(
     mapping(
-      "defaultEditor" -> optional(number),
-      "defaultBasemap" -> optional(number),
-      "defaultBasemapId" -> optional(text),
-      "customBasemap" -> optional(text),
-      "locale" -> optional(text),
-      "email" -> optional(text),
-      "emailOptIn" -> optional(boolean),
+      "defaultEditor"     -> optional(number),
+      "defaultBasemap"    -> optional(number),
+      "defaultBasemapId"  -> optional(text),
+      "customBasemap"     -> optional(text),
+      "locale"            -> optional(text),
+      "email"             -> optional(text),
+      "emailOptIn"        -> optional(boolean),
       "leaderboardOptOut" -> optional(boolean),
-      "needsReview" -> optional(number),
-      "isReviewer" -> optional(boolean),
-      "theme" -> optional(number)
+      "needsReview"       -> optional(number),
+      "isReviewer"        -> optional(boolean),
+      "theme"             -> optional(number)
     )(UserSettings.apply)(UserSettings.unapply)
   )
 
   val REVIEW_NOT_NEEDED = 0
-  val REVIEW_NEEDED = 1
-  val REVIEW_MANDATORY = 2
+  val REVIEW_NEEDED     = 1
+  val REVIEW_MANDATORY  = 2
 
   /**
     * Generates a User object based on the json details and request token
@@ -264,54 +286,86 @@ object User {
     * @return A user object based on the XML details provided
     */
   def generate(root: Elem, requestToken: RequestToken, config: Config): User = {
-    val userXML = (root \ "user").head
-    val displayName = userXML \@ "display_name"
+    val userXML           = (root \ "user").head
+    val displayName       = userXML \@ "display_name"
     val osmAccountCreated = userXML \@ "account_created"
-    val osmId = userXML \@ "id"
-    val description = (userXML \ "description").head.text
+    val osmId             = userXML \@ "id"
+    val description       = (userXML \ "description").head.text
     val avatarURL = (userXML \ "img").headOption match {
       case Some(img) => img \@ "href"
-      case None => "/assets/images/user_no_image.png"
+      case None      => "/assets/images/user_no_image.png"
     }
     val location = (userXML \ "home").headOption match {
       case Some(loc) => Location((loc \@ "lat").toDouble, (loc \@ "lon").toDouble)
-      case None => Location(47.608013, -122.335167)
+      case None      => Location(47.608013, -122.335167)
     }
     // check whether this user is a super user
-    val groups = if (config.superAccounts.contains(osmId) ||
-      (config.superAccounts.size == 1 && config.superAccounts.head.equals("*"))) {
-      List(superGroup)
-    } else {
-      List[Group]()
-    }
-    User(-1, new DateTime(), new DateTime(), OSMProfile(osmId.toLong,
-      displayName,
-      description,
-      avatarURL,
-      location,
-      DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").parseDateTime(osmAccountCreated),
-      requestToken
-    ), groups, settings = UserSettings(theme = Some(THEME_BLUE), needsReview = Option(config.defaultNeedsReview)))
+    val groups =
+      if (config.superAccounts.contains(osmId) ||
+          (config.superAccounts.size == 1 && config.superAccounts.head.equals("*"))) {
+        List(superGroup)
+      } else {
+        List[Group]()
+      }
+    User(
+      -1,
+      new DateTime(),
+      new DateTime(),
+      OSMProfile(
+        osmId.toLong,
+        displayName,
+        description,
+        avatarURL,
+        location,
+        DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss'Z'").parseDateTime(osmAccountCreated),
+        requestToken
+      ),
+      groups,
+      settings =
+        UserSettings(theme = Some(THEME_BLUE), needsReview = Option(config.defaultNeedsReview))
+    )
   }
 
-  def superUser: User = User(DEFAULT_SUPER_USER_ID, DateTime.now(), DateTime.now(),
-    OSMProfile(DEFAULT_SUPER_USER_ID, "SuperUser", "FULL ACCESS", "/assets/images/user_no_image.png",
-      Location(47.608013, -122.335167),
+  def superUser: User =
+    User(
+      DEFAULT_SUPER_USER_ID,
       DateTime.now(),
-      RequestToken("", "")
-    ), List(superGroup.copy()), settings = UserSettings(theme = Some(THEME_BLACK))
-  )
+      DateTime.now(),
+      OSMProfile(
+        DEFAULT_SUPER_USER_ID,
+        "SuperUser",
+        "FULL ACCESS",
+        "/assets/images/user_no_image.png",
+        Location(47.608013, -122.335167),
+        DateTime.now(),
+        RequestToken("", "")
+      ),
+      List(superGroup.copy()),
+      settings = UserSettings(theme = Some(THEME_BLACK))
+    )
 
   def withDecryptedAPIKey(user: User)(implicit crypto: Crypto): User = {
     user.apiKey match {
       case Some(key) if key.nonEmpty =>
         try {
           val decryptedAPIKey = Some(s"${user.id}|${crypto.decrypt(key)}")
-          new User(user.id, user.created, user.modified, user.osmProfile, user.groups,
-                   decryptedAPIKey, user.guest, user.settings, user.properties, user.score)
+          new User(
+            user.id,
+            user.created,
+            user.modified,
+            user.osmProfile,
+            user.groups,
+            decryptedAPIKey,
+            user.guest,
+            user.settings,
+            user.properties,
+            user.score
+          )
         } catch {
           case _: BadPaddingException | _: IllegalBlockSizeException =>
-            LoggerFactory.getLogger(this.getClass).debug("Invalid key found, could be that the application secret on server changed.")
+            LoggerFactory
+              .getLogger(this.getClass)
+              .debug("Invalid key found, could be that the application secret on server changed.")
             user
           case e: Throwable => throw e
         }
@@ -329,20 +383,30 @@ object User {
   def userOrMocked(user: Option[User]): User = {
     user match {
       case Some(u) => u
-      case None => guestUser
+      case None    => guestUser
     }
   }
 
   /**
     * Creates a guest user object with default information.
     */
-  def guestUser: User = User(DEFAULT_GUEST_USER_ID, DateTime.now(), DateTime.now(),
-    OSMProfile(DEFAULT_GUEST_USER_ID, "Guest",
-      "Sign in using your OSM account for more access to MapRoulette features.",
-      "/assets/images/user_no_image.png",
-      Location(-33.918861, 18.423300),
+  def guestUser: User =
+    User(
+      DEFAULT_GUEST_USER_ID,
       DateTime.now(),
-      RequestToken("", "")
-    ), List(), None, true, UserSettings(theme = Some(THEME_GREEN))
-  )
+      DateTime.now(),
+      OSMProfile(
+        DEFAULT_GUEST_USER_ID,
+        "Guest",
+        "Sign in using your OSM account for more access to MapRoulette features.",
+        "/assets/images/user_no_image.png",
+        Location(-33.918861, 18.423300),
+        DateTime.now(),
+        RequestToken("", "")
+      ),
+      List(),
+      None,
+      true,
+      UserSettings(theme = Some(THEME_GREEN))
+    )
 }

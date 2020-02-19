@@ -19,12 +19,14 @@ import play.api.mvc._
   *
   * @author cuthbertm
   */
-class TagController @Inject()(override val sessionManager: SessionManager,
-                              override val actionManager: ActionManager,
-                              override val dal: TagDAL,
-                              components: ControllerComponents,
-                              override val bodyParsers: PlayBodyParsers)
-  extends AbstractController(components) with CRUDController[Tag] {
+class TagController @Inject() (
+    override val sessionManager: SessionManager,
+    override val actionManager: ActionManager,
+    override val dal: TagDAL,
+    components: ControllerComponents,
+    override val bodyParsers: PlayBodyParsers
+) extends AbstractController(components)
+    with CRUDController[Tag] {
 
   // json reads for automatically reading Tags from a posted json body
   override implicit val tReads: Reads[Tag] = Tag.tagReads
@@ -43,11 +45,12 @@ class TagController @Inject()(override val sessionManager: SessionManager,
     *               changing to offset 1 will return the next set of 10 tags.
     * @return
     */
-  def getTags(prefix: String, tagType: String, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Json.toJson(this.dal.findTags(prefix, tagType, limit, offset)))
+  def getTags(prefix: String, tagType: String, limit: Int, offset: Int): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        Ok(Json.toJson(this.dal.findTags(prefix, tagType, limit, offset)))
+      }
     }
-  }
 
   /**
     * Function is primarily called from CRUDController, which is used to handle the actual creation
@@ -60,17 +63,31 @@ class TagController @Inject()(override val sessionManager: SessionManager,
     * @param user        The id of the user that is executing the request
     * @param update      If an item is found then update it, if parameter set to true, otherwise we skip.
     */
-  override def internalBatchUpload(requestBody: JsValue, arr: List[JsValue], user: User, update: Boolean): Unit = {
-    val tagList = arr.flatMap(element => (element \ "id").asOpt[Long] match {
-      case Some(itemID) if update => element.validate[Tag].fold(
-        errors => None,
-        value => Some(value)
-      )
-      case None => Utils.insertJsonID(element).validate[Tag].fold(
-        errors => None,
-        value => Some(value)
-      )
-    })
+  override def internalBatchUpload(
+      requestBody: JsValue,
+      arr: List[JsValue],
+      user: User,
+      update: Boolean
+  ): Unit = {
+    val tagList = arr.flatMap(element =>
+      (element \ "id").asOpt[Long] match {
+        case Some(itemID) if update =>
+          element
+            .validate[Tag]
+            .fold(
+              errors => None,
+              value => Some(value)
+            )
+        case None =>
+          Utils
+            .insertJsonID(element)
+            .validate[Tag]
+            .fold(
+              errors => None,
+              value => Some(value)
+            )
+      }
+    )
     this.dal.updateTagList(tagList, user)
   }
 }

@@ -15,7 +15,7 @@ import org.maproulette.Config
   * @author mcuthbert
   */
 @Singleton
-class Crypto @Inject()(config: Config) {
+class Crypto @Inject() (config: Config) {
   val key = config.config.get[String]("play.http.secret.key")
 
   def encrypt(value: String): String = {
@@ -26,7 +26,7 @@ class Crypto @Inject()(config: Config) {
 
   def keyToSpec: SecretKeySpec = {
     var keyBytes: Array[Byte] = (Crypto.SALT + key).getBytes("UTF-8")
-    val sha: MessageDigest = MessageDigest.getInstance("SHA-1")
+    val sha: MessageDigest    = MessageDigest.getInstance("SHA-1")
     keyBytes = sha.digest(keyBytes)
     keyBytes = Arrays.copyOf(keyBytes, Crypto.BYTE_LENGTH)
     new SecretKeySpec(keyBytes, "AES")
@@ -41,5 +41,5 @@ class Crypto @Inject()(config: Config) {
 
 object Crypto {
   private val SALT: String = "jMhKlOuJnM34G6NHkqo9V010GhLAqOpF0BePojHgh1HgNg8^72k"
-  private val BYTE_LENGTH = 16
+  private val BYTE_LENGTH  = 16
 }

@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 package org.maproulette.models.utils
 
-import java.sql.SQLException
+import java.sql.{PreparedStatement, SQLException}
 
 import anorm._
 import org.apache.commons.lang3.StringUtils
@@ -37,7 +37,8 @@ trait DALHelper {
   private val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
   // The set of characters that are allowed for column names, so that we can sanitize in unknown input
   // for protection against SQL injection
-  private val ordinary = (('a' to 'z') ++ ('A' to 'Z') ++ ('0' to '9') ++ Seq('_') ++ Seq('.')).toSet
+  private val ordinary =
+    (('a' to 'z') ++ ('A' to 'Z') ++ ('0' to '9') ++ Seq('_') ++ Seq('.')).toSet
 
   /**
     * Function will return "ALL" if value is 0 otherwise the value itself. Postgres does not allow
@@ -46,7 +47,7 @@ trait DALHelper {
     * @param value The limit used in the query
     * @return ALL if 0 otherwise the value
     */
-  def sqlLimit(value: Int): String = if (value <= 0) "ALL" else value + ""
+  def sqlLimit(value: Int): String = if (value <= 0) "ALL" else s"$value"
 
   /**
     * Corrects the search string by adding % before and after string, so that it doesn't rely
@@ -69,13 +70,18 @@ trait DALHelper {
     *                       not guaranteed.
     * @return
     */
-  def order(orderColumn: Option[String] = None, orderDirection: String = "ASC", tablePrefix: String = "",
-            nameFix: Boolean = false, ignoreCase: Boolean = false): String = orderColumn match {
+  def order(
+      orderColumn: Option[String] = None,
+      orderDirection: String = "ASC",
+      tablePrefix: String = "",
+      nameFix: Boolean = false,
+      ignoreCase: Boolean = false
+  ): String = orderColumn match {
     case Some(column) =>
       this.testColumnName(column)
       val direction = orderDirection match {
         case "DESC" => "DESC"
-        case _ => "ASC"
+        case _      => "ASC"
       }
       // sanitize the column name to prevent sql injection. Only allow underscores and A-Za-z
       if (column.forall(this.ordinary.contains)) {
@@ -88,13 +94,11 @@ trait DALHelper {
         if (ignoreCase) {
           casedColumn ++= ")"
         }
-        s"ORDER BY $casedColumn $direction ${
-          if (nameFix) {
-            "," + this.getPrefix(tablePrefix) + "name";
-          } else {
-            "";
-          }
-        }"
+        s"ORDER BY $casedColumn $direction ${if (nameFix) {
+          "," + this.getPrefix(tablePrefix) + "name";
+        } else {
+          "";
+        }}"
       } else {
         ""
       }
@@ -103,21 +107,22 @@ trait DALHelper {
 
   def sqlWithParameters(query: String, parameters: ListBuffer[NamedParameter]): SimpleSql[Row] = {
     if (parameters.nonEmpty) {
-      SQL(query).on(parameters: _*)
+      SQL(query).on(parameters.toSeq: _*)
     } else {
       SQL(query).asSimple[Row]()
     }
   }
 
-  def parentFilter(parentId: Long)
-                  (implicit conjunction: Option[SQLKey] = Some(AND())): String = if (parentId != -1) {
-    s"${this.getSqlKey} parent_id = $parentId"
-  } else {
-    ""
-  }
+  def parentFilter(parentId: Long)(implicit conjunction: Option[SQLKey] = Some(AND())): String =
+    if (parentId != -1) {
+      s"${this.getSqlKey} parent_id = $parentId"
+    } else {
+      ""
+    }
 
-  def getLongListFilter(list: Option[List[Long]], columnName: String)
-                       (implicit conjunction: Option[SQLKey] = Some(AND())): String = {
+  def getLongListFilter(list: Option[List[Long]], columnName: String)(
+      implicit conjunction: Option[SQLKey] = Some(AND())
+  ): String = {
     this.testColumnName(columnName)
     list match {
       case Some(idList) if idList.nonEmpty =>
@@ -126,22 +131,23 @@ trait DALHelper {
     }
   }
 
-  def getOptionalFilter(filterValue:Option[Any], columnName:String, key:String) = {
+  def getOptionalFilter(filterValue: Option[Any], columnName: String, key: String) = {
     filterValue match {
       case Some(value) => s"$columnName = {$key}"
-      case None => ""
+      case None        => ""
     }
   }
 
-  def getOptionalMatchFilter(filterValue:Option[Any], columnName:String, key:String) = {
+  def getOptionalMatchFilter(filterValue: Option[Any], columnName: String, key: String) = {
     filterValue match {
       case Some(value) => s"LOWER($columnName) LIKE LOWER({$key})"
-      case None => ""
+      case None        => ""
     }
   }
 
-  def getIntListFilter(list:Option[List[Int]], columnName:String)
-                      (implicit conjunction:Option[SQLKey]=Some(AND())) : String = {
+  def getIntListFilter(list: Option[List[Int]], columnName: String)(
+      implicit conjunction: Option[SQLKey] = Some(AND())
+  ): String = {
     this.testColumnName(columnName)
     list match {
       case Some(idList) if idList.nonEmpty =>
@@ -159,12 +165,13 @@ trait DALHelper {
   private def getSqlKey(implicit conjunction: Option[SQLKey]): String = {
     conjunction match {
       case Some(c) => c.getSQLKey()
-      case None => ""
+      case None    => ""
     }
   }
 
-  def getDateClause(column: String, start: Option[DateTime] = None, end: Option[DateTime] = None)
-                   (implicit sqlKey: Option[SQLKey] = None): String = {
+  def getDateClause(column: String, start: Option[DateTime] = None, end: Option[DateTime] = None)(
+      implicit sqlKey: Option[SQLKey] = None
+  ): String = {
     this.testColumnName(column)
     val dates = getDates(start, end)
     s"${this.getSqlKey} $column::date BETWEEN '${dates._1}' AND '${dates._2}'"
@@ -173,55 +180,82 @@ trait DALHelper {
   def getDates(start: Option[DateTime] = None, end: Option[DateTime] = None): (String, String) = {
     val startDate = start match {
       case Some(s) => dateFormat.print(s)
-      case None => dateFormat.print(DateTime.now().minusWeeks(1))
+      case None    => dateFormat.print(DateTime.now().minusWeeks(1))
     }
     val endDate = end match {
       case Some(e) => dateFormat.print(e)
-      case None => dateFormat.print(DateTime.now())
+      case None    => dateFormat.print(DateTime.now())
     }
     (startDate, endDate)
   }
 
-  def addSearchToQuery(params: SearchParameters, whereClause: StringBuilder,
-                       projectPrefix: String = "p", challengePrefix: String = "c")
-                      (implicit projectSearch: Boolean = true): ListBuffer[NamedParameter] = {
+  def addSearchToQuery(
+      params: SearchParameters,
+      whereClause: StringBuilder,
+      projectPrefix: String = "p",
+      challengePrefix: String = "c"
+  )(implicit projectSearch: Boolean = true): ListBuffer[NamedParameter] = {
     val parameters = new ListBuffer[NamedParameter]()
 
     if (!projectSearch) {
       params.getProjectIds match {
-        case Some(p) if p.nonEmpty => whereClause ++= s"$challengePrefix.parent_id IN (${p.mkString(",")})"
+        case Some(p) if p.nonEmpty =>
+          whereClause ++= s"$challengePrefix.parent_id IN (${p.mkString(",")})"
         case _ =>
           params.projectSearch match {
             case Some(ps) if ps.nonEmpty =>
               params.fuzzySearch match {
                 case Some(x) =>
-                  whereClause ++= this.fuzzySearch(s"$projectPrefix.display_name", "ps", x)(if (whereClause.isEmpty) None else Some(AND()))
-                  parameters += ('ps -> ps)
+                  whereClause ++= this.fuzzySearch(s"$projectPrefix.display_name", "ps", x)(
+                    if (whereClause.isEmpty) None else Some(AND())
+                  )
+                  parameters += (Symbol("ps") -> ps)
                 case None =>
-                  whereClause ++= this.searchField(s"$projectPrefix.display_name", "ps")(if (whereClause.isEmpty) None else Some(AND()))
-                  parameters += ('ps -> s"%$ps%")
+                  whereClause ++= (if (whereClause.isEmpty) "" else " AND ")
+                  whereClause ++= " (" + this.searchField(s"$projectPrefix.display_name", "ps")(
+                    None
+                  )
+                  whereClause ++= s" OR $challengePrefix.id IN (SELECT vp2.challenge_id FROM virtual_project_challenges vp2 INNER JOIN projects p2 ON p2.id = vp2.project_id WHERE " +
+                    this.searchField(s"p2.display_name", "ps")(None) + " AND p2.enabled=true)) "
+                  parameters += (Symbol("ps") -> s"%$ps%")
               }
             case _ => // we can ignore this
           }
-          this.appendInWhereClause(whereClause, this.enabled(params.projectEnabled.getOrElse(false), "p")(None))
+          this.appendInWhereClause(
+            whereClause,
+            this.enabled(params.projectEnabled.getOrElse(false), projectPrefix)(None)
+          )
       }
     }
 
     params.getChallengeIds match {
-      case Some(c) if c.nonEmpty => this.appendInWhereClause(whereClause, s"$challengePrefix.id IN (${c.mkString(",")})")
+      case Some(c) if c.nonEmpty =>
+        this.appendInWhereClause(whereClause, s"$challengePrefix.id IN (${c.mkString(",")})")
       case _ =>
-        params.challengeSearch match {
+        params.challengeParams.challengeSearch match {
           case Some(cs) if cs.nonEmpty =>
             params.fuzzySearch match {
               case Some(x) =>
-                this.appendInWhereClause(whereClause, this.fuzzySearch(s"$challengePrefix.name", "cs", x)(None))
-                parameters += ('cs -> cs)
+                this.appendInWhereClause(
+                  whereClause,
+                  this.fuzzySearch(s"$challengePrefix.name", "cs", x)(None)
+                )
+                parameters += (Symbol("cs") -> cs)
               case None =>
-                this.appendInWhereClause(whereClause, this.searchField(s"$challengePrefix.name", "cs")(None))
-                parameters += ('cs -> s"%$cs%")
+                this.appendInWhereClause(
+                  whereClause,
+                  this.searchField(s"$challengePrefix.name", "cs")(None)
+                )
+                parameters += (Symbol("cs") -> s"%$cs%")
             }
           case _ => // ignore
         }
+        this.appendInWhereClause(
+          whereClause,
+          this.enabled(params.challengeParams.challengeEnabled.getOrElse(false), challengePrefix)(
+            None
+          )
+        )
     }
 
     parameters
@@ -237,8 +271,9 @@ trait DALHelper {
     * @param key         Defaulted to "AND"
     * @return
     */
-  def enabled(value: Boolean, tablePrefix: String = "")
-             (implicit key: Option[SQLKey] = Some(AND())): String = {
+  def enabled(value: Boolean, tablePrefix: String = "")(
+      implicit key: Option[SQLKey] = Some(AND())
+  ): String = {
     if (value) {
       s"${this.getSqlKey} ${this.getPrefix(tablePrefix)}enabled = TRUE"
     } else {
@@ -263,8 +298,9 @@ trait DALHelper {
     * @param value       The value that is being appended
     * @param conjunction The conjunction, by default AND
     */
-  def appendInWhereClause(whereClause: StringBuilder, value: String)
-                         (implicit conjunction: Option[SQLKey] = Some(AND())): Unit = {
+  def appendInWhereClause(whereClause: StringBuilder, value: String)(
+      implicit conjunction: Option[SQLKey] = Some(AND())
+  ): Unit = {
     if (whereClause.nonEmpty && value.nonEmpty) {
       whereClause ++= s" ${this.getSqlKey} $value"
     } else {
@@ -281,8 +317,9 @@ trait DALHelper {
     * @param key         The search string that you are testing against
     * @return
     */
-  def searchField(column: String, key: String = "ss")
-                 (implicit conjunction: Option[SQLKey] = Some(AND())): String =
+  def searchField(column: String, key: String = "ss")(
+      implicit conjunction: Option[SQLKey] = Some(AND())
+  ): String =
     s" ${this.getSqlKey} LOWER($column) LIKE LOWER({$key})"
 
   /**
@@ -296,10 +333,12 @@ trait DALHelper {
     * @param conjunction       Default AND
     * @return A string with all the fuzzy search functions
     */
-  def fuzzySearch(column: String, key: String = "ss",
-                  levenshsteinScore: Int = DALHelper.DEFAULT_LEVENSHSTEIN_SCORE,
-                  metaphoneSize: Int = DALHelper.DEFAULT_METAPHONE_SIZE)
-                 (implicit conjunction: Option[SQLKey] = Some(AND())): String = {
+  def fuzzySearch(
+      column: String,
+      key: String = "ss",
+      levenshsteinScore: Int = DALHelper.DEFAULT_LEVENSHSTEIN_SCORE,
+      metaphoneSize: Int = DALHelper.DEFAULT_METAPHONE_SIZE
+  )(implicit conjunction: Option[SQLKey] = Some(AND())): String = {
     val score = if (levenshsteinScore > 0) {
       levenshsteinScore
     } else {
@@ -312,11 +351,15 @@ trait DALHelper {
           )"""
   }
 
-  def addChallengeTagMatchingToQuery(params: SearchParameters, whereClause: StringBuilder,
-                                     joinClause: StringBuilder, challengePrefix: String = "c"): ListBuffer[NamedParameter] = {
+  def addChallengeTagMatchingToQuery(
+      params: SearchParameters,
+      whereClause: StringBuilder,
+      joinClause: StringBuilder,
+      challengePrefix: String = "c"
+  ): ListBuffer[NamedParameter] = {
     val parameters = new ListBuffer[NamedParameter]()
 
-    params.challengeTags match {
+    params.challengeParams.challengeTags match {
       case Some(ct) if ct.nonEmpty =>
         joinClause ++=
           s"""
@@ -334,9 +377,30 @@ trait DALHelper {
     }
     parameters
   }
+
+  /**
+    * Our key for our objects are current Long, but can support String if need be. This function
+    * handles transforming java objects to SQL for a specific set related to the object key
+    *
+    * @tparam Key The type of Key, this is currently always Long, but could be changed easily enough in the future
+    * @return
+    */
+  def keyToStatement[Key]: ToStatement[Key] = {
+    new ToStatement[Key] {
+      def set(s: PreparedStatement, i: Int, identifier: Key) =
+        identifier match {
+          case id: String                  => ToStatement.stringToStatement.set(s, i, id)
+          case Some(id: String)            => ToStatement.stringToStatement.set(s, i, id)
+          case id: Long                    => ToStatement.longToStatement.set(s, i, id)
+          case Some(id: Long)              => ToStatement.longToStatement.set(s, i, id)
+          case intValue: Integer           => ToStatement.integerToStatement.set(s, i, intValue)
+          case list: List[Long @unchecked] => ToStatement.listToStatement[Long].set(s, i, list)
+        }
+    }
+  }
 }
 
 object DALHelper {
   private val DEFAULT_LEVENSHSTEIN_SCORE = 3
-  private val DEFAULT_METAPHONE_SIZE = 4
+  private val DEFAULT_METAPHONE_SIZE     = 4
 }

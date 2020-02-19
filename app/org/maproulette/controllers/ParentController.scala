@@ -40,7 +40,9 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
         case Some(obj) =>
           Ok(Json.toJson(this.dal.undelete(id, user)))
         case None =>
-          throw new NotFoundException(s"Object with id [$id] was not found, this is most likely because it has been removed from the database and cannot be undeleted.")
+          throw new NotFoundException(
+            s"Object with id [$id] was not found, this is most likely because it has been removed from the database and cannot be undeleted."
+          )
       }
     }
   }
@@ -64,18 +66,19 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
     * @param id The id of the parent
     * @return 201 Created with no content
     */
-  def createChildren(implicit id: Long): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      this.dal.retrieveById match {
-        case Some(parent) =>
-          this.extractAndCreate(Json.obj("children" -> request.body), parent, user)
-          Created
-        case None =>
-          val message = s"Bad id, no parent found with supplied id [$id]"
-          logger.error(message)
-          NotFound(Json.toJson(StatusMessage("KO", JsString(message))))
+  def createChildren(implicit id: Long): Action[JsValue] = Action.async(bodyParsers.json) {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        this.dal.retrieveById match {
+          case Some(parent) =>
+            this.extractAndCreate(Json.obj("children" -> request.body), parent, user)
+            Created
+          case None =>
+            val message = s"Bad id, no parent found with supplied id [$id]"
+            logger.error(message)
+            NotFound(Json.toJson(StatusMessage("KO", JsString(message))))
+        }
       }
-    }
   }
 
   /**
@@ -87,36 +90,46 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
     * @param createdObject The object that was created by the create function
     * @param user          the user executing the request
     */
-  override def extractAndCreate(body: JsValue, createdObject: T, user: User)(implicit c: Option[Connection] = None): Unit = {
+  override def extractAndCreate(body: JsValue, createdObject: T, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     implicit val reads: Reads[C] = cReads
     (body \ "children").asOpt[List[JsValue]] match {
-      case Some(children) => children map { child =>
-        // add the parent id to the child.
-        child.transform(parentAddition(createdObject.id)) match {
-          case JsSuccess(value, _) =>
-            (value \ "id").asOpt[String] match {
-              case Some(identifier) =>
-                this.childController.internalUpdate(this.childController.updateUpdateBody(value, user), user)(identifier, -1)
-              case None => this.childController.updateCreateBody(value, user).validate[C].fold(
-                errors => {
-                  throw new Exception(JsError.toJson(errors).toString)
-                },
-                element => {
-                  try {
-                    this.childController.internalCreate(value, element, user)
-                  } catch {
-                    case e: Exception =>
-                      logger.error(e.getMessage, e)
-                      throw e
-                  }
-                }
-              )
-            }
-          case JsError(errors) =>
-            logger.error(JsError.toJson(errors).toString)
-            throw new Exception(JsError.toJson(errors).toString)
+      case Some(children) =>
+        children map { child =>
+          // add the parent id to the child.
+          child.transform(parentAddition(createdObject.id)) match {
+            case JsSuccess(value, _) =>
+              (value \ "id").asOpt[String] match {
+                case Some(identifier) =>
+                  this.childController.internalUpdate(
+                    this.childController.updateUpdateBody(value, user),
+                    user
+                  )(identifier, -1)
+                case None =>
+                  this.childController
+                    .updateCreateBody(value, user)
+                    .validate[C]
+                    .fold(
+                      errors => {
+                        throw new Exception(JsError.toJson(errors).toString)
+                      },
+                      element => {
+                        try {
+                          this.childController.internalCreate(value, element, user)
+                        } catch {
+                          case e: Exception =>
+                            logger.error(e.getMessage, e)
+                            throw e
+                        }
+                      }
+                    )
+              }
+            case JsError(errors) =>
+              logger.error(JsError.toJson(errors).toString)
+              throw new Exception(JsError.toJson(errors).toString)
+          }
         }
-      }
       case None => // ignore
     }
   }
@@ -131,7 +144,9 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
     */
   def parentAddition(id: Long): Reads[JsObject] = {
     __.json.update(
-      __.read[JsObject] map { o => o ++ Json.obj("parent" -> Json.toJson(id)) }
+      __.read[JsObject] map { o =>
+        o ++ Json.obj("parent" -> Json.toJson(id))
+      }
     )
   }
 
@@ -144,11 +159,12 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
     * @param offset For paging
     * @return 200 OK with json array of children objects
     */
-  def listChildren(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    implicit val writes: Writes[C] = this.cWrites
-    this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Json.toJson(this.dal.listChildren(limit, offset)(id).map(this.childController.inject)))
-    }
+  def listChildren(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async {
+    implicit request =>
+      implicit val writes: Writes[C] = this.cWrites
+      this.sessionManager.userAwareRequest { implicit user =>
+        Ok(Json.toJson(this.dal.listChildren(limit, offset)(id).map(this.childController.inject)))
+      }
   }
 
   /**
@@ -162,17 +178,20 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
     * @param offset For paging
     * @return 200 Ok with parent json object containing children objects
     */
-  def expandedList(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    implicit val writes: Writes[C] = cWrites
-    this.sessionManager.userAwareRequest { implicit user =>
-      // now replace the parent field in the parent with a children array
-      Json.toJson(this.dal.retrieveById(id)).transform(this.childrenAddition(this.dal.listChildren(limit, offset)(id))) match {
-        case JsSuccess(value, _) => Ok(value)
-        case JsError(errors) =>
-          logger.error(JsError.toJson(errors).toString)
-          InternalServerError(Json.toJson(StatusMessage("KO", JsError.toJson(errors))))
+  def expandedList(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async {
+    implicit request =>
+      implicit val writes: Writes[C] = cWrites
+      this.sessionManager.userAwareRequest { implicit user =>
+        // now replace the parent field in the parent with a children array
+        Json
+          .toJson(this.dal.retrieveById(id))
+          .transform(this.childrenAddition(this.dal.listChildren(limit, offset)(id))) match {
+          case JsSuccess(value, _) => Ok(value)
+          case JsError(errors) =>
+            logger.error(JsError.toJson(errors).toString)
+            InternalServerError(Json.toJson(StatusMessage("KO", JsError.toJson(errors))))
+        }
       }
-    }
   }
 
   /**
@@ -184,7 +203,9 @@ trait ParentController[T <: BaseObject[Long], C <: BaseObject[Long]] extends CRU
   def childrenAddition(children: List[C]): Reads[JsObject] = {
     implicit val writes: Writes[C] = cWrites
     __.json.update(
-      __.read[JsObject] map { o => o ++ Json.obj("children" -> Json.toJson(children)) }
+      __.read[JsObject] map { o =>
+        o ++ Json.obj("children" -> Json.toJson(children))
+      }
     )
   }
 }

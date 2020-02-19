@@ -9,29 +9,32 @@ import play.api.Logger
 
 import scala.xml._
 
-
 /**
   * @author mcuthbert
   */
-case class Changeset(id: Long,
-                     user: String,
-                     userId: Long,
-                     createdAt: DateTime,
-                     closedAt: DateTime,
-                     open: Boolean,
-                     minLat: Double,
-                     minLon: Double,
-                     maxLat: Double,
-                     maxLon: Double,
-                     commentsCount: Int,
-                     tags: Map[String, String],
-                     hasMapRouletteComment: Boolean)
+case class Changeset(
+    id: Long,
+    user: String,
+    userId: Long,
+    createdAt: DateTime,
+    closedAt: DateTime,
+    open: Boolean,
+    minLat: Double,
+    minLon: Double,
+    maxLat: Double,
+    maxLon: Double,
+    commentsCount: Int,
+    tags: Map[String, String],
+    hasMapRouletteComment: Boolean
+)
 
 object ChangesetParser {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   def parse(el: Elem): List[Changeset] = {
-    (el \\ "changeset").map { c => this.parse(c) }.toList
+    (el \\ "changeset").map { c =>
+      this.parse(c)
+    }.toList
   }
 
   def parse(changeSetElement: Node): Changeset = {
@@ -50,9 +53,12 @@ object ChangesetParser {
 
     var mapRouletteTag = false
     val tags = (changeSetElement \\ "tag").map { t =>
-      val key = (t \ "k").text
+      val key   = (t \ "k").text
       val value = (t \ "v").text
-      if (StringUtils.equals(key, "comment") && StringUtils.containsIgnoreCase(value, "maproulette")) {
+      if (StringUtils.equals(key, "comment") && StringUtils.containsIgnoreCase(
+            value,
+            "maproulette"
+          )) {
         mapRouletteTag = true
       }
       key -> value
@@ -70,22 +76,22 @@ object ChangesetParser {
         open.toBoolean
       },
       if (StringUtils.isEmpty(minLat)) {
-        0D
+        0d
       } else {
         minLat.toDouble
       },
       if (StringUtils.isEmpty(minLon)) {
-        0D
+        0d
       } else {
         minLon.toDouble
       },
       if (StringUtils.isEmpty(maxLat)) {
-        0D
+        0d
       } else {
         maxLat.toDouble
       },
       if (StringUtils.isEmpty(maxLon)) {
-        0D
+        0d
       } else {
         maxLon.toDouble
       },

@@ -1,23 +1,33 @@
 package org.maproulette.cache
 
 import org.joda.time.DateTime
+import org.maproulette.Config
 import org.maproulette.data.{ItemType, ProjectType}
 import org.maproulette.models.BaseObject
 import org.scalatestplus.play.PlaySpec
+import play.api.Configuration
+import play.api.libs.json.{DefaultWrites, JodaReads, JodaWrites, Json, Reads, Writes}
 
 /**
   * @author cuthbertm
   */
-case class TestBaseObject(override val id:Long,
-                          override val name:String,
-                          override val created:DateTime=DateTime.now(),
-                          override val modified:DateTime=DateTime.now()) extends BaseObject[Long] {
+case class TestBaseObject(
+    override val id: Long,
+    override val name: String,
+    override val created: DateTime = DateTime.now(),
+    override val modified: DateTime = DateTime.now()
+) extends BaseObject[Long] {
   override val itemType: ItemType = ProjectType()
 }
 
-class CacheSpec extends PlaySpec {
-  implicit val manager = new CacheManager[Long, TestBaseObject](6, 5)
-  val theCache = manager.cache
+class CacheSpec extends PlaySpec with JodaWrites with JodaReads {
+  implicit val groupWrites: Writes[TestBaseObject] = Json.writes[TestBaseObject]
+  implicit val groupReads: Reads[TestBaseObject]   = Json.reads[TestBaseObject]
+  implicit val configuration = Configuration.from(
+    Map(Config.KEY_CACHING_CACHE_LIMIT -> 6, Config.KEY_CACHING_CACHE_EXPIRY -> 5)
+  )
+  implicit val manager = new CacheManager[Long, TestBaseObject](new Config())
+  val theCache         = manager.cache
 
   "CacheManager" should {
     "cache element withOptionCaching" in {
@@ -92,7 +102,9 @@ class CacheSpec extends PlaySpec {
     "caching must be able to be disabled" in {
       theCache.clear()
       implicit val caching = false
-      manager.withOptionCaching { () => Some(TestBaseObject(1, "name1"))}
+      manager.withOptionCaching { () =>
+        Some(TestBaseObject(1, "name1"))
+      }
       theCache.size mustEqual 0
     }
 
@@ -173,8 +185,10 @@ class CacheSpec extends PlaySpec {
     }
   }
 
-  private def fakeRetrieve(id:Long) : Option[TestBaseObject] = Some(TestBaseObject(3, "testObject"))
+  private def fakeRetrieve(id: Long): Option[TestBaseObject] = Some(TestBaseObject(3, "testObject"))
 
-  private def cacheObject(id:Long, name:String) =
-    manager.withOptionCaching { () => Some(TestBaseObject(id, name))}
+  private def cacheObject(id: Long, name: String) =
+    manager.withOptionCaching { () =>
+      Some(TestBaseObject(id, name))
+    }
 }

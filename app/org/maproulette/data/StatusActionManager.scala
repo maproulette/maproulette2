@@ -24,47 +24,55 @@ import scala.concurrent.Future
 /**
   * @author cuthbertm
   */
-case class StatusActionItem(id: Long,
-                            created: DateTime,
-                            osmUserId: Long,
-                            osmUserName: String,
-                            projectId: Long,
-                            projectName: String,
-                            challengeId: Long,
-                            challengeName: String,
-                            taskId: Long,
-                            oldStatus: Int,
-                            newStatus: Int)
+case class StatusActionItem(
+    id: Long,
+    created: DateTime,
+    osmUserId: Long,
+    osmUserName: String,
+    projectId: Long,
+    projectName: String,
+    challengeId: Long,
+    challengeName: String,
+    taskId: Long,
+    oldStatus: Int,
+    newStatus: Int
+)
 
-case class DailyStatusActionSummary(date: DateTime,
-                                    osmUserId: Long,
-                                    osmUserName: String,
-                                    fixedUpdates: Int,
-                                    lastFixedUpdated: Option[DateTime],
-                                    falsePositiveUpdates: Int,
-                                    lastFalsePositiveUpdated: Option[DateTime],
-                                    skippedUpdates: Int,
-                                    lastSkippedUpdated: Option[DateTime],
-                                    alreadyFixedUpdates: Int,
-                                    lastAlreadyFixedUpdated: Option[DateTime],
-                                    tooHardUpdates: Int,
-                                    lastTooHardUpdated: Option[DateTime],
-                                    answeredUpdates: Int,
-                                    lastAnsweredUpdated: Option[DateTime])
+case class DailyStatusActionSummary(
+    date: DateTime,
+    osmUserId: Long,
+    osmUserName: String,
+    fixedUpdates: Int,
+    lastFixedUpdated: Option[DateTime],
+    falsePositiveUpdates: Int,
+    lastFalsePositiveUpdated: Option[DateTime],
+    skippedUpdates: Int,
+    lastSkippedUpdated: Option[DateTime],
+    alreadyFixedUpdates: Int,
+    lastAlreadyFixedUpdated: Option[DateTime],
+    tooHardUpdates: Int,
+    lastTooHardUpdated: Option[DateTime],
+    answeredUpdates: Int,
+    lastAnsweredUpdated: Option[DateTime]
+)
 
-case class StatusActionLimits(startDate: Option[DateTime] = None,
-                              endDate: Option[DateTime] = None,
-                              osmUserIds: List[Long] = List.empty,
-                              projectIds: List[Long] = List.empty,
-                              challengeIds: List[Long] = List.empty,
-                              taskIds: List[Long] = List.empty,
-                              newStatuses: List[Int] = List.empty,
-                              oldStatuses: List[Int] = List.empty)
+case class StatusActionLimits(
+    startDate: Option[DateTime] = None,
+    endDate: Option[DateTime] = None,
+    osmUserIds: List[Long] = List.empty,
+    projectIds: List[Long] = List.empty,
+    challengeIds: List[Long] = List.empty,
+    taskIds: List[Long] = List.empty,
+    newStatuses: List[Int] = List.empty,
+    oldStatuses: List[Int] = List.empty
+)
 
-class StatusActionManager @Inject()(config: Config, db: Database)(implicit application: Application) extends DALHelper {
+class StatusActionManager @Inject() (config: Config, db: Database)(
+    implicit application: Application
+) extends DALHelper {
 
   implicit val actionItemWrites: Writes[StatusActionItem] = Json.writes[StatusActionItem]
-  implicit val actionItemReads: Reads[StatusActionItem] = Json.reads[StatusActionItem]
+  implicit val actionItemReads: Reads[StatusActionItem]   = Json.reads[StatusActionItem]
 
   /**
     * A anorm row parser for the actions table
@@ -82,9 +90,20 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
       get[Int]("status_actions.old_status") ~
       get[Int]("status_actions.status") map {
       case id ~ created ~ osmUserId ~ osmUserName ~ projectId ~ projectName ~ challengeId ~
-        challengeName ~ taskId ~ old_status ~ status => {
-        new StatusActionItem(id, created, osmUserId, osmUserName, projectId, projectName,
-          challengeId, challengeName, taskId, old_status, status)
+            challengeName ~ taskId ~ old_status ~ status => {
+        new StatusActionItem(
+          id,
+          created,
+          osmUserId,
+          osmUserName,
+          projectId,
+          projectName,
+          challengeId,
+          challengeName,
+          taskId,
+          old_status,
+          status
+        )
       }
     }
   }
@@ -106,9 +125,23 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
       get[Int]("answered") ~
       get[Option[DateTime]]("lastAnswered") map {
       case daily ~ osmUserId ~ osmUsername ~ fixed ~ lastFixed ~ falsePositive ~ lastFalsePositive ~ skipped ~ lastSkipped ~
-        alreadyFixed ~ lastAlreadyFixed ~ tooHard ~ lastTooHard ~ answered ~ lastAnswered => {
-        new DailyStatusActionSummary(daily, osmUserId, osmUsername, fixed, lastFixed, falsePositive, lastFalsePositive,
-          skipped, lastSkipped, alreadyFixed, lastAlreadyFixed, tooHard, lastTooHard, answered, lastAnswered
+            alreadyFixed ~ lastAlreadyFixed ~ tooHard ~ lastTooHard ~ answered ~ lastAnswered => {
+        new DailyStatusActionSummary(
+          daily,
+          osmUserId,
+          osmUsername,
+          fixed,
+          lastFixed,
+          falsePositive,
+          lastFalsePositive,
+          skipped,
+          lastSkipped,
+          alreadyFixed,
+          lastAlreadyFixed,
+          tooHard,
+          lastTooHard,
+          answered,
+          lastAnswered
         )
       }
     }
@@ -122,11 +155,16 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
     * @param status The new updated status that was replaced
     * @return
     */
-  def setStatusAction(user: User, task: Task, status: Int, startedAt: Option[DateTime] = None): Future[Boolean] = {
+  def setStatusAction(
+      user: User,
+      task: Task,
+      status: Int,
+      startedAt: Option[DateTime] = None
+  ): Future[Boolean] = {
     Future {
       val startDate = startedAt match {
         case Some(d) => new Timestamp(d.getMillis())
-        case None => null
+        case None    => null
       }
 
       db.withTransaction { implicit c =>
@@ -149,11 +187,16 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
     * @param limit        limit the number of tasks coming back
     * @return a list of StatusActionItems
     */
-  def getStatusActions(task: Task, user: User, statusLimits: Option[List[Int]] = None, limit: Int = 1): List[StatusActionItem] = {
+  def getStatusActions(
+      task: Task,
+      user: User,
+      statusLimits: Option[List[Int]] = None,
+      limit: Int = 1
+  ): List[StatusActionItem] = {
     db.withConnection { implicit c =>
       val sLimits = statusLimits match {
         case Some(l) => s"""AND sa.status IN (${l.mkString(",")})"""
-        case None => ""
+        case None    => ""
       }
 
       SQL"""SELECT * FROM status_actions sa
@@ -167,17 +210,38 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
     }
   }
 
-  def getStatusUpdates(user: User, statusActionLimits: StatusActionLimits,
-                       limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0): List[StatusActionItem] = {
-    val parameters = new ListBuffer[NamedParameter]()
+  def getStatusUpdates(
+      user: User,
+      statusActionLimits: StatusActionLimits,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0
+  ): List[StatusActionItem] = {
+    val parameters  = new ListBuffer[NamedParameter]()
     val whereClause = new StringBuilder()
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.osmUserIds), "sa.osm_user_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.projectIds), "sa.project_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.challengeIds), "sa.challenge_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.taskIds), "sa.task_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getIntListFilter(Some(statusActionLimits.newStatuses), "sa.status")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getIntListFilter(Some(statusActionLimits.oldStatuses), "sa.old_status")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getDateClause("sa.created", statusActionLimits.startDate, statusActionLimits.endDate)(getCurrentConjunction(whereClause))
+    whereClause ++= this.getLongListFilter(Some(statusActionLimits.osmUserIds), "sa.osm_user_id")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getLongListFilter(Some(statusActionLimits.projectIds), "sa.project_id")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getLongListFilter(
+      Some(statusActionLimits.challengeIds),
+      "sa.challenge_id"
+    )(getCurrentConjunction(whereClause))
+    whereClause ++= this.getLongListFilter(Some(statusActionLimits.taskIds), "sa.task_id")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getIntListFilter(Some(statusActionLimits.newStatuses), "sa.status")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getIntListFilter(Some(statusActionLimits.oldStatuses), "sa.old_status")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getDateClause(
+      "sa.created",
+      statusActionLimits.startDate,
+      statusActionLimits.endDate
+    )(getCurrentConjunction(whereClause))
 
     val query =
       s"""SELECT sa.*, u.name, p.name, c.name
@@ -185,13 +249,11 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
          |INNER JOIN users u ON u.osm_id = sa.osm_user_id
          |INNER JOIN projects p ON p.id = sa.project_id
          |INNER JOIN challenges c ON c.id = sa.challenge_id
-         | ${
-        if (whereClause.nonEmpty) {
-          s"WHERE ${whereClause.toString}"
-        } else {
-          ""
-        }
-      }
+         | ${if (whereClause.nonEmpty) {
+           s"WHERE ${whereClause.toString}"
+         } else {
+           ""
+         }}
          |ORDER BY created DESC
          |LIMIT ${sqlLimit(limit)} OFFSET $offset""".stripMargin
     db.withConnection { implicit c =>
@@ -199,19 +261,31 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
     }
   }
 
-  private def getCurrentConjunction(clause: StringBuilder) = if (clause.nonEmpty) {
-    Some(AND())
-  } else {
-    None
-  }
+  private def getCurrentConjunction(clause: StringBuilder) =
+    if (clause.nonEmpty) {
+      Some(AND())
+    } else {
+      None
+    }
 
-  def getStatusSummary(user: User, statusActionLimits: StatusActionLimits,
-                       limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0): List[DailyStatusActionSummary] = {
-    val parameters = new ListBuffer[NamedParameter]()
+  def getStatusSummary(
+      user: User,
+      statusActionLimits: StatusActionLimits,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0
+  ): List[DailyStatusActionSummary] = {
+    val parameters  = new ListBuffer[NamedParameter]()
     val whereClause = new StringBuilder()
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.osmUserIds), "sa.osm_user_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.projectIds), "sa.project_id")(getCurrentConjunction(whereClause))
-    whereClause ++= this.getLongListFilter(Some(statusActionLimits.challengeIds), "sa.challenge_id")(getCurrentConjunction(whereClause))
+    whereClause ++= this.getLongListFilter(Some(statusActionLimits.osmUserIds), "sa.osm_user_id")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getLongListFilter(Some(statusActionLimits.projectIds), "sa.project_id")(
+      getCurrentConjunction(whereClause)
+    )
+    whereClause ++= this.getLongListFilter(
+      Some(statusActionLimits.challengeIds),
+      "sa.challenge_id"
+    )(getCurrentConjunction(whereClause))
 
     val query =
       s"""SELECT DATE_TRUNC('day', sa.created) AS daily, sa.osm_user_id, u.name,
@@ -229,13 +303,11 @@ class StatusActionManager @Inject()(config: Config, db: Database)(implicit appli
          |    MAX(sa.created) FILTER (where sa.status = 7) AS lastAnswered
          |FROM status_actions sa
          |INNER JOIN users u ON u.osm_id = sa.osm_user_id
-         | ${
-        if (whereClause.nonEmpty) {
-          s"WHERE ${whereClause.toString}"
-        } else {
-          ""
-        }
-      }
+         | ${if (whereClause.nonEmpty) {
+           s"WHERE ${whereClause.toString}"
+         } else {
+           ""
+         }}
          |GROUP BY daily, sa.osm_user_id, u.name
          |ORDER BY daily DESC
          |LIMIT ${sqlLimit(limit)} OFFSET $offset""".stripMargin

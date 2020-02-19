@@ -12,22 +12,25 @@ import play.api.libs.json.JodaReads._
 /**
   * @author mcuthbert
   */
-case class VirtualChallenge(override val id: Long,
-                            override val name: String,
-                            override val created: DateTime,
-                            override val modified: DateTime,
-                            override val description: Option[String] = None,
-                            ownerId: Long,
-                            searchParameters: SearchParameters,
-                            expiry: DateTime,
-                            taskIdList: Option[List[Long]] = None) extends BaseObject[Long] with DefaultWrites {
+case class VirtualChallenge(
+    override val id: Long,
+    override val name: String,
+    override val created: DateTime,
+    override val modified: DateTime,
+    override val description: Option[String] = None,
+    ownerId: Long,
+    searchParameters: SearchParameters,
+    expiry: DateTime,
+    taskIdList: Option[List[Long]] = None
+) extends BaseObject[Long]
+    with DefaultWrites {
 
   override val itemType: ItemType = VirtualChallengeType()
 
-  def isExpired : Boolean = DateTime.now().isAfter(expiry)
+  def isExpired: Boolean = DateTime.now().isAfter(expiry)
 }
 
 object VirtualChallenge {
   implicit val virtualChallengeWrites: Writes[VirtualChallenge] = Json.writes[VirtualChallenge]
-  implicit val virtualChallengeReads: Reads[VirtualChallenge] = Json.reads[VirtualChallenge]
+  implicit val virtualChallengeReads: Reads[VirtualChallenge]   = Json.reads[VirtualChallenge]
 }

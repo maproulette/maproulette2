@@ -4,7 +4,7 @@ package org.maproulette.controllers.api
 
 import javax.inject.Inject
 import org.maproulette.Config
-import org.maproulette.data.{ActionManager, QuestionAnswered, SurveyType}
+import org.maproulette.data.{ActionManager, QuestionAnswered, SurveyType, SnapshotManager}
 import org.maproulette.exception.NotFoundException
 import org.maproulette.models.dal._
 import org.maproulette.models.{Answer, Challenge}
@@ -24,19 +24,35 @@ import play.api.mvc._
   *
   * @author cuthbertm
   */
-class SurveyController @Inject()(override val childController: TaskController,
-                                 override val sessionManager: SessionManager,
-                                 override val actionManager: ActionManager,
-                                 override val dal: SurveyDAL,
-                                 dalManager: DALManager,
-                                 override val tagDAL: TagDAL,
-                                 challengeProvider: ChallengeProvider,
-                                 wsClient: WSClient,
-                                 permission: Permission,
-                                 config: Config,
-                                 components: ControllerComponents,
-                                 override val bodyParsers: PlayBodyParsers)
-  extends ChallengeController(childController, sessionManager, actionManager, dalManager.challenge, dalManager, tagDAL, challengeProvider, wsClient, permission, config, components, bodyParsers) {
+class SurveyController @Inject() (
+    override val childController: TaskController,
+    override val sessionManager: SessionManager,
+    override val actionManager: ActionManager,
+    override val dal: SurveyDAL,
+    dalManager: DALManager,
+    override val tagDAL: TagDAL,
+    challengeProvider: ChallengeProvider,
+    wsClient: WSClient,
+    permission: Permission,
+    config: Config,
+    components: ControllerComponents,
+    override val bodyParsers: PlayBodyParsers,
+    override val snapshotManager: SnapshotManager
+) extends ChallengeController(
+      childController,
+      sessionManager,
+      actionManager,
+      dalManager.challenge,
+      dalManager,
+      tagDAL,
+      challengeProvider,
+      wsClient,
+      permission,
+      config,
+      components,
+      bodyParsers,
+      snapshotManager
+    ) {
 
   // The type of object that this controller deals with.
   override implicit val itemType = SurveyType()
@@ -53,7 +69,7 @@ class SurveyController @Inject()(override val childController: TaskController,
     // if no answers provided with Challenge, then provide the default answers
     val answers = this.dalManager.survey.getAnswers(obj.id) match {
       case a if a.isEmpty => List(Challenge.defaultAnswerValid, Challenge.defaultAnswerInvalid)
-      case a => a
+      case a              => a
     }
     Utils.insertIntoJson(json, Challenge.KEY_ANSWER, Json.toJson(answers))
   }
@@ -80,26 +96,37 @@ class SurveyController @Inject()(override val childController: TaskController,
     * @param answerId    The id of the answer
     * @return
     */
-  def answerSurveyQuestion(challengeId: Long, taskId: Long, answerId: Long, comment: String): Action[AnyContent] = Action.async { implicit request =>
+  def answerSurveyQuestion(
+      challengeId: Long,
+      taskId: Long,
+      answerId: Long,
+      comment: String
+  ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
       // make sure that the survey and answer exists first
       this.dal.retrieveById(challengeId) match {
         case Some(challenge) =>
-          val ans = if (answerId != Challenge.defaultAnswerValid.id && answerId != Challenge.defaultAnswerInvalid.id) {
-            this.dalManager.survey.getAnswers(challengeId).find(_.id == answerId) match {
-              case None =>
-                throw new NotFoundException(s"Requested answer [$answerId] for survey does not exist.")
-              case Some(a) => a.answer
+          val ans =
+            if (answerId != Challenge.defaultAnswerValid.id && answerId != Challenge.defaultAnswerInvalid.id) {
+              this.dalManager.survey.getAnswers(challengeId).find(_.id == answerId) match {
+                case None =>
+                  throw new NotFoundException(
+                    s"Requested answer [$answerId] for survey does not exist."
+                  )
+                case Some(a) => a.answer
+              }
+            } else if (answerId == Challenge.defaultAnswerValid.id) {
+              Challenge.defaultAnswerValid.answer
+            } else {
+              Challenge.defaultAnswerInvalid.answer
             }
-          } else if (answerId == Challenge.defaultAnswerValid.id) {
-            Challenge.defaultAnswerValid.answer
-          } else {
-            Challenge.defaultAnswerInvalid.answer
-          }
           this.dal.answerQuestion(challenge, taskId, answerId, user)
           this.childController.customTaskStatus(taskId, QuestionAnswered(answerId), user, comment)
           NoContent
-        case None => throw new NotFoundException(s"Requested survey [$challengeId] to answer question from does not exist.")
+        case None =>
+          throw new NotFoundException(
+            s"Requested survey [$challengeId] to answer question from does not exist."
+          )
       }
     }
   }

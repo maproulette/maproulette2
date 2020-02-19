@@ -17,7 +17,9 @@ import org.maproulette.session.User
   *
   * @author cuthbertm
   */
-trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL[Key, T] with DALHelper {
+trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]]
+    extends BaseDAL[Key, T]
+    with DALHelper {
   // The table of the child for this type
   val childTable: String
   // The anorm row parser for the child of this type
@@ -25,7 +27,6 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
   // The specific columns to be retrieved for the child. This is used in the particular cases
   // where you want to retrieve derived data. Specifically data from PostGIS
   val childColumns: String = "*"
-
 
   /**
     * Deletes an item from the database, this will be limited to Projects and Challenges
@@ -35,24 +36,29 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
     * @param immediate If set to true it will delete it immediately, otherwise will delay the delete and simply set a flag for later deletion
     * @return Count of deleted row(s)
     */
-  override def delete(id: Key, user: User, immediate: Boolean)(implicit c: Option[Connection] = None): T = {
+  override def delete(id: Key, user: User, immediate: Boolean)(
+      implicit c: Option[Connection] = None
+  ): T = {
     implicit val key = id
-    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) { implicit deletedItem =>
-      this.permission.hasObjectAdminAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
-      this.withMRTransaction { implicit c =>
-        val query = if (immediate) {
-          s"DELETE FROM ${this.tableName} WHERE id = {id}"
-        } else {
-          s"UPDATE ${this.tableName} SET deleted = true WHERE id = {id}"
+    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) {
+      implicit deletedItem =>
+        this.permission.hasObjectAdminAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
+        this.withMRTransaction { implicit c =>
+          val query = if (immediate) {
+            s"DELETE FROM ${this.tableName} WHERE id = {id}"
+          } else {
+            s"UPDATE ${this.tableName} SET deleted = true WHERE id = {id}"
+          }
+          SQL(query)
+            .on(Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id))
+            .executeUpdate()
+          Some(deletedItem)
         }
-        SQL(query).on('id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id)).executeUpdate()
-        Some(deletedItem)
-      }
     }
 
     deletedItem match {
       case Some(item) => item
-      case None => throw new NotFoundException(s"No object with id $id found to delete")
+      case None       => throw new NotFoundException(s"No object with id $id found to delete")
     }
   }
 
@@ -67,17 +73,23 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
     */
   def undelete(id: Key, user: User)(implicit c: Option[Connection] = None): T = {
     implicit val key = id
-    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) { implicit deletedItem =>
-      this.permission.hasObjectWriteAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
-      this.withMRTransaction { implicit c =>
-        val query = s"UPDATE ${this.tableName} SET deleted = false WHERE id = {id}"
-        SQL(query).on('id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id)).executeUpdate()
-        Some(deletedItem)
-      }
+    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) {
+      implicit deletedItem =>
+        this.permission.hasObjectWriteAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
+        this.withMRTransaction { implicit c =>
+          val query = s"UPDATE ${this.tableName} SET deleted = false WHERE id = {id}"
+          SQL(query)
+            .on(Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id))
+            .executeUpdate()
+          Some(deletedItem)
+        }
     }
     deletedItem match {
       case Some(item) => item
-      case None => throw new NotFoundException(s"Object with id [$id] was not found, most likely because the object has already been deleted")
+      case None =>
+        throw new NotFoundException(
+          s"Object with id [$id] was not found, most likely because the object has already been deleted"
+        )
     }
   }
 
@@ -89,8 +101,14 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
     * @param id     The parent ID
     * @return A list of children objects
     */
-  def listChildren(limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false, searchString: String = "",
-                   orderColumn: String = "id", orderDirection: String = "ASC")(implicit id: Key, c: Option[Connection] = None): List[C] = {
+  def listChildren(
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0,
+      onlyEnabled: Boolean = false,
+      searchString: String = "",
+      orderColumn: String = "id",
+      orderDirection: String = "ASC"
+  )(implicit id: Key, c: Option[Connection] = None): List[C] = {
     // add a child caching option that will keep a list of children for the parent
     this.withMRConnection { implicit c =>
       val query =
@@ -99,9 +117,12 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
                       ${this.searchField("name")}
                       ${this.order(Some(orderColumn), orderDirection)}
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-      SQL(query).on('ss -> this.search(searchString),
-        'id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id),
-        'offset -> offset)
+      SQL(query)
+        .on(
+          Symbol("ss")     -> this.search(searchString),
+          Symbol("id")     -> ToParameterValue.apply[Key](p = keyToStatement).apply(id),
+          Symbol("offset") -> offset
+        )
         .as(this.childParser.*)
     }
   }
@@ -114,8 +135,14 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
     * @param name   The parent name
     * @return A list of children objects
     */
-  def listChildrenByName(limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false, searchString: String = "",
-                         orderColumn: String = "id", orderDirection: String = "ASC")(implicit name: String, c: Option[Connection] = None): List[C] = {
+  def listChildrenByName(
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0,
+      onlyEnabled: Boolean = false,
+      searchString: String = "",
+      orderColumn: String = "id",
+      orderDirection: String = "ASC"
+  )(implicit name: String, c: Option[Connection] = None): List[C] = {
     // add a child caching option that will keep a list of children for the parent
     this.withMRConnection { implicit c =>
       // TODO currently it will only check if the parent is enabled and not the child, this is because
@@ -127,9 +154,12 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
                       ${this.searchField("c.name")}
                       ${this.order(Some(orderColumn), orderDirection, "c")}
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-      SQL(query).on('ss -> this.search(searchString),
-        'name -> ToParameterValue.apply[String].apply(name),
-        'offset -> offset)
+      SQL(query)
+        .on(
+          Symbol("ss")     -> this.search(searchString),
+          Symbol("name")   -> ToParameterValue.apply[String].apply(name),
+          Symbol("offset") -> offset
+        )
         .as(this.childParser.*)
     }
   }
@@ -141,16 +171,21 @@ trait ParentDAL[Key, T <: BaseObject[Key], C <: BaseObject[Key]] extends BaseDAL
     * @param id          The id for the parent
     * @return A integer value representing the total number of children
     */
-  def getTotalChildren(onlyEnabled: Boolean = false, searchString: String = "")(implicit id: Key, c: Option[Connection] = None): Int = {
+  def getTotalChildren(
+      onlyEnabled: Boolean = false,
+      searchString: String = ""
+  )(implicit id: Key, c: Option[Connection] = None): Int = {
     this.withMRConnection { implicit c =>
       val query =
         s"""SELECT COUNT(*) as TotalChildren FROM ${this.childTable}
            |WHERE parent_id = {id} ${this.searchField("name")}
            |${this.enabled(onlyEnabled)}""".stripMargin
-      SQL(query).on(
-        'id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id),
-        'ss -> this.search(searchString)
-      ).as(SqlParser.int("TotalChildren").single)
+      SQL(query)
+        .on(
+          Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id),
+          Symbol("ss") -> this.search(searchString)
+        )
+        .as(SqlParser.int("TotalChildren").single)
     }
   }
 }

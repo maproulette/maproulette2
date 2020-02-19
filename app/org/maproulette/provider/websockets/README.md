@@ -52,3 +52,17 @@ code can use to easily send a message via the WebSocketPublisher without having
 to interact directly or be aware of the Akka actor system. Most server code
 will wish to use this method to send messages rather than trying to deal with
 the Akka actor system.
+
+
+## Adding a New Message Type
+
+1. Edit WebSocketMessages and add:
+  - case class for payload data
+  - case class for message
+  - helper method for generating message
+  - writes for data class
+  - writes for message class
+  - new subscription type if needed
+
+2. Edit WebSocketActor and add:
+  - match case for the new message type

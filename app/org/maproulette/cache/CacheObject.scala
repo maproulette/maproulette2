@@ -5,7 +5,7 @@ package org.maproulette.cache
 /**
   * @author mcuthbert
   */
-trait CacheObject[Key] {
+trait CacheObject[Key] extends Serializable {
   def name: String
 
   def id: Key

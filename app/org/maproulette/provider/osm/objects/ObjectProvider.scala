@@ -4,7 +4,7 @@ package org.maproulette.services.osm.objects
 
 import org.joda.time.DateTime
 import org.maproulette.Config
-import org.maproulette.cache.CacheStorage
+import org.maproulette.cache.BasicCache
 import org.maproulette.exception.NotFoundException
 import org.maproulette.services.osm.OSMType.OSMType
 import play.api.libs.ws.WSClient
@@ -20,7 +20,7 @@ import scala.xml.Node
   */
 trait ObjectProvider[T <: VersionedObject] {
   implicit val ws: WSClient
-  implicit val cache: CacheStorage[Long, VersionedObjects[T]]
+  implicit val cache: BasicCache[Long, VersionedObjects[T]]
   implicit val config: Config
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -69,19 +69,21 @@ trait ObjectProvider[T <: VersionedObject] {
       val allItems = ids.map(id => {
         this.getObjectFromCache(id) match {
           case Some(obj) => id -> obj.getLatest
-          case None => id -> None
+          case None      => id -> None
         }
       })
       val uncachedIds = allItems.filter(_._2.isEmpty).map(_._1)
       if (uncachedIds.isEmpty) {
         p success allItems.filter(_._2.isDefined).flatMap(_._2)
       } else {
-        val objectURL = s"${this.getURLPrefix(osmType)}s?${osmType.toString.toLowerCase}s=${uncachedIds.mkString(",")}"
+        val objectURL =
+          s"${this.getURLPrefix(osmType)}s?${osmType.toString.toLowerCase}s=${uncachedIds.mkString(",")}"
         ws.url(objectURL).get() onComplete {
           case Success(res) =>
             res.status match {
               case ObjectProvider.STATUS_OK =>
-                val resultObjects = (res.xml \ osmType.toString.toLowerCase).map(createVersionedObject).toList
+                val resultObjects =
+                  (res.xml \ osmType.toString.toLowerCase).map(createVersionedObject).toList
                 val cachedObjects = allItems.filter(_._2.isDefined).flatMap(_._2)
                 p success resultObjects ++ cachedObjects
               case _ => p failure new NotFoundException(s"${res.status} thrown for URL: $objectURL")
@@ -99,30 +101,50 @@ trait ObjectProvider[T <: VersionedObject] {
     s"${config.getOSMServer}/api/0.6/${osmType.toString.toLowerCase}"
 
   private def createVersionedObject(elem: Node): T = {
-    val tags = (elem \ "tag").map(v => (v \ "@k").text -> (v \ "@v").text).toMap
-    val id = (elem \ "@id").text.toLong
-    val visible = (elem \ "@visible").text.toBoolean
-    val version = (elem \ "@version").text.toInt
+    val tags      = (elem \ "tag").map(v => (v \ "@k").text -> (v \ "@v").text).toMap
+    val id        = (elem \ "@id").text.toLong
+    val visible   = (elem \ "@visible").text.toBoolean
+    val version   = (elem \ "@version").text.toInt
     val changeset = (elem \ "@changeset").text.toInt
     val timestamp = DateTime.parse((elem \ "@timestamp").text)
-    val user = (elem \ "@user").text
-    val uid = (elem \ "@uid").text.toLong
-    this.addObjectToCache(this.createVersionedObjectFromXML(elem, id, visible, version, changeset, timestamp, user, uid, tags))
+    val user      = (elem \ "@user").text
+    val uid       = (elem \ "@uid").text.toLong
+    this.addObjectToCache(
+      this.createVersionedObjectFromXML(
+        elem,
+        id,
+        visible,
+        version,
+        changeset,
+        timestamp,
+        user,
+        uid,
+        tags
+      )
+    )
   }
 
   private def addObjectToCache(obj: T): T = {
     val objects = this.cache.get(obj.id) match {
       case Some(v) => v
-      case None => new VersionedObjects[T](obj.id, obj.name)
+      case None    => new VersionedObjects[T](obj.id, obj.name)
     }
     objects.put(obj)
     this.cache.addObject(objects)
     obj
   }
 
-  protected def createVersionedObjectFromXML(elem: Node, id: Long, visible: Boolean, version: Int,
-                                             changeset: Int, timestamp: DateTime, user: String, uid:
-                                             Long, tags: Map[String, String]): T
+  protected def createVersionedObjectFromXML(
+      elem: Node,
+      id: Long,
+      visible: Boolean,
+      version: Int,
+      changeset: Int,
+      timestamp: DateTime,
+      user: String,
+      uid: Long,
+      tags: Map[String, String]
+  ): T
 }
 
 object ObjectProvider {

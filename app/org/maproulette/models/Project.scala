@@ -16,28 +16,32 @@ import play.api.libs.json.JodaReads._
   *
   * @author cuthbertm
   */
-case class Project(override val id: Long,
-                   owner: Long,
-                   override val name: String,
-                   override val created: DateTime,
-                   override val modified: DateTime,
-                   override val description: Option[String] = None,
-                   groups: List[Group] = List.empty,
-                   enabled: Boolean = false,
-                   displayName: Option[String] = None,
-                   deleted: Boolean = false,
-                   isVirtual: Option[Boolean] = Some(false)) extends BaseObject[Long] {
+case class Project(
+    override val id: Long,
+    owner: Long,
+    override val name: String,
+    override val created: DateTime,
+    override val modified: DateTime,
+    override val description: Option[String] = None,
+    groups: List[Group] = List.empty,
+    enabled: Boolean = false,
+    displayName: Option[String] = None,
+    deleted: Boolean = false,
+    isVirtual: Option[Boolean] = Some(false),
+    featured: Boolean = false
+) extends BaseObject[Long] {
 
   override val itemType: ItemType = ProjectType()
 }
 
 object Project {
-  implicit val groupWrites: Writes[Group] = Json.writes[Group]
-  implicit val groupReads: Reads[Group] = Json.reads[Group]
+  implicit val groupWrites: Writes[Group]     = Json.writes[Group]
+  implicit val groupReads: Reads[Group]       = Json.reads[Group]
   implicit val projectWrites: Writes[Project] = Json.writes[Project]
-  implicit val projectReads: Reads[Project] = Json.reads[Project]
+  implicit val projectReads: Reads[Project]   = Json.reads[Project]
 
   val KEY_GROUPS = "groups"
 
-  def emptyProject: Project = Project(-1, User.DEFAULT_SUPER_USER_ID, "", DateTime.now(), DateTime.now())
+  def emptyProject: Project =
+    Project(-1, User.DEFAULT_SUPER_USER_ID, "", DateTime.now(), DateTime.now())
 }

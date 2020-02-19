@@ -15,18 +15,20 @@ import play.api.libs.json.JodaReads._
   *
   * @author cuthbertm
   */
-case class Tag(override val id: Long,
-               override val name: String,
-               override val description: Option[String] = None,
-               override val created: DateTime = DateTime.now(),
-               override val modified: DateTime = DateTime.now(),
-               tagType: String = "challenges") extends BaseObject[Long] {
+case class Tag(
+    override val id: Long,
+    override val name: String,
+    override val description: Option[String] = None,
+    override val created: DateTime = DateTime.now(),
+    override val modified: DateTime = DateTime.now(),
+    tagType: String = "challenges"
+) extends BaseObject[Long] {
   override val itemType: ItemType = TagType()
 }
 
 object Tag {
   implicit val tagWrites: Writes[Tag] = Json.writes[Tag]
-  implicit val tagReads: Reads[Tag] = Json.reads[Tag]
+  implicit val tagReads: Reads[Tag]   = Json.reads[Tag]
 
   val KEY = "tags"
 }

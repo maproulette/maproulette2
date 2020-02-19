@@ -23,54 +23,85 @@ import play.api.libs.ws.WSClient
   * @author krotstan
   */
 @Singleton
-class TaskHistoryDAL @Inject()(override val db: Database,
-                                override val tagDAL: TagDAL, config: Config,
-                                override val permission: Permission,
-                                userDAL: Provider[UserDAL],
-                                projectDAL: Provider[ProjectDAL],
-                                challengeDAL: Provider[ChallengeDAL],
-                                notificationDAL: Provider[NotificationDAL],
-                                actions: ActionManager,
-                                statusActions: StatusActionManager,
-                                webSocketProvider: WebSocketProvider,
-                                ws: WSClient)
-  extends TaskDAL(db, tagDAL, config, permission, userDAL, projectDAL, challengeDAL, notificationDAL,
-                  actions, statusActions, webSocketProvider, ws) {
+class TaskHistoryDAL @Inject() (
+    override val db: Database,
+    override val tagDAL: TagDAL,
+    config: Config,
+    override val permission: Permission,
+    dalManager: Provider[DALManager],
+    webSocketProvider: WebSocketProvider,
+    ws: WSClient
+) extends TaskDAL(db, tagDAL, permission, config, dalManager, webSocketProvider, ws) {
 
   private val commentEntryParser: RowParser[TaskLogEntry] = {
-      get[Long]("task_comments.task_id") ~
+    get[Long]("task_comments.task_id") ~
       get[DateTime]("task_comments.created") ~
       get[Int]("users.id") ~
       get[String]("task_comments.comment") map {
-      case taskId ~ created ~ userId ~ comment => new TaskLogEntry(taskId, created,
-        TaskLogEntry.ACTION_COMMENT, Some(userId), None, None, None, None, None, None, Some(comment))
+      case taskId ~ created ~ userId ~ comment =>
+        new TaskLogEntry(
+          taskId,
+          created,
+          TaskLogEntry.ACTION_COMMENT,
+          Some(userId),
+          None,
+          None,
+          None,
+          None,
+          None,
+          None,
+          Some(comment)
+        )
     }
   }
 
   private val reviewEntryParser: RowParser[TaskLogEntry] = {
-      get[Long]("task_id") ~
+    get[Long]("task_id") ~
       get[DateTime]("reviewed_at") ~
+      get[Option[DateTime]]("review_started_at") ~
       get[Int]("review_status") ~
       get[Int]("requested_by") ~
       get[Option[Int]]("reviewed_by") map {
-      case taskId ~ reviewedAt ~ reviewStatus ~ requestedBy ~
-           reviewedBy => new TaskLogEntry(taskId, reviewedAt,
-        TaskLogEntry.ACTION_REVIEW, None, None, None, None, Some(reviewStatus), Some(requestedBy),
-        reviewedBy, None)
+      case taskId ~ reviewedAt ~ reviewStartedAt ~ reviewStatus ~ requestedBy ~
+            reviewedBy =>
+        new TaskLogEntry(
+          taskId,
+          reviewedAt,
+          TaskLogEntry.ACTION_REVIEW,
+          None,
+          None,
+          None,
+          reviewStartedAt,
+          Some(reviewStatus),
+          Some(requestedBy),
+          reviewedBy,
+          None
+        )
     }
   }
 
   private val statusActionEntryParser: RowParser[TaskLogEntry] = {
-      get[Long]("status_actions.task_id") ~
+    get[Long]("status_actions.task_id") ~
       get[DateTime]("status_actions.created") ~
       get[Int]("users.id") ~
       get[Int]("status_actions.old_status") ~
       get[Int]("status_actions.status") ~
       get[Option[DateTime]]("status_actions.started_at") map {
       case taskId ~ created ~ userId ~ oldStatus ~ status ~
-           startedAt => new TaskLogEntry(taskId, created,
-        TaskLogEntry.ACTION_STATUS_CHANGE, Some(userId), Some(oldStatus), Some(status),
-        startedAt, None, None, None, None)
+            startedAt =>
+        new TaskLogEntry(
+          taskId,
+          created,
+          TaskLogEntry.ACTION_STATUS_CHANGE,
+          Some(userId),
+          Some(oldStatus),
+          Some(status),
+          startedAt,
+          None,
+          None,
+          None,
+          None
+        )
     }
   }
 
@@ -79,11 +110,11 @@ class TaskHistoryDAL @Inject()(override val db: Database,
   }
 
   /**
-   * Returns a history log for the task -- includes comments, status actions,
-   * review actions
-   * @param taskId
-   * @return List of TaskLogEntry
-   */
+    * Returns a history log for the task -- includes comments, status actions,
+    * review actions
+    * @param taskId
+    * @return List of TaskLogEntry
+    */
   def getTaskHistoryLog(taskId: Long)(implicit c: Option[Connection] = None): List[TaskLogEntry] = {
     this.withMRConnection { implicit c =>
       val comments =
@@ -92,7 +123,9 @@ class TaskHistoryDAL @Inject()(override val db: Database,
               WHERE task_id = $taskId""".as(this.commentEntryParser.*)
 
       val reviews =
-        SQL"""SELECT * FROM task_review_history WHERE task_id = $taskId""".as(this.reviewEntryParser.*)
+        SQL"""SELECT * FROM task_review_history WHERE task_id = $taskId""".as(
+          this.reviewEntryParser.*
+        )
 
       val statusActions =
         SQL"""SELECT sa.task_id, sa.created, users.id, sa.old_status, sa.status, sa.started_at

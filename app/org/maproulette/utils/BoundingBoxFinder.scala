@@ -13,8 +13,9 @@ import play.api.libs.json.{JsObject, Json}
   */
 
 @Singleton
-class BoundingBoxFinder @Inject()(implicit val env: Environment) {
-  private val jsonContent = scala.io.Source.fromInputStream(env.resourceAsStream("country-code-bounding-box.json")).mkString
+class BoundingBoxFinder @Inject() (implicit val env: Environment) {
+  private val jsonContent =
+    scala.io.Source.fromInputStream(env.resourceAsStream("country-code-bounding-box.json")).mkString
   private val jsonData = Json.parse(jsonContent).as[JsObject]
 
   /**
@@ -27,7 +28,7 @@ class BoundingBoxFinder @Inject()(implicit val env: Environment) {
     // Data is in format "US" => ["United States", [-125.0, 25.0, -66.96, 49.5]]
     jsonData.keys.foreach(countryCode => {
       val result = (jsonData \ countryCode).toString
-      val index = result.indexOf(',')
+      val index  = result.indexOf(',')
 
       // Fetch just the bounding box coordinates
       val boundingBox = result.slice(index + 2, result.length - 3)

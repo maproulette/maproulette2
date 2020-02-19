@@ -14,6 +14,7 @@ import org.maproulette.models.Task
   * @author krotstan
   */
 object LeaderboardHelper {
+
   /**
     * Returns the SQL to rebuild the Challenges Leaderboard table with the
     * given dates
@@ -22,12 +23,14 @@ object LeaderboardHelper {
     */
   def rebuildChallengesLeaderboardSQL(monthDuration: Int, config: Config): String = {
     val timeClause = monthDuration match {
-        case -1 => ""
-        case default =>
-          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
-      }
+      case -1 => ""
+      case default =>
+        val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val startMonth = LocalDate.now
+          .minus(Period.ofMonths(monthDuration))
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
+    }
 
     s"""INSERT INTO user_leaderboard
         (month_duration, user_id, user_name, user_avatar_url, user_ranking, user_score)
@@ -51,15 +54,21 @@ object LeaderboardHelper {
     * @param countryCode - The countryCode corresponding to the bounding box
     * @param boundingBox - The boundingBox to search in
     */
-  def rebuildChallengesLeaderboardSQLCountry(monthDuration: Int, countryCode: String,
-                                             boundingBox: String, config: Config): String = {
+  def rebuildChallengesLeaderboardSQLCountry(
+      monthDuration: Int,
+      countryCode: String,
+      boundingBox: String,
+      config: Config
+  ): String = {
     val timeClause = monthDuration match {
-        case -1 => ""
-        case default =>
-          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
-      }
+      case -1 => ""
+      case default =>
+        val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val startMonth = LocalDate.now
+          .minus(Period.ofMonths(monthDuration))
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
+    }
 
     s"""INSERT INTO user_leaderboard
         (month_duration, country_code, user_id, user_name, user_avatar_url, user_ranking, user_score)
@@ -100,12 +109,14 @@ object LeaderboardHelper {
     */
   def rebuildTopChallengesSQL(monthDuration: Int, config: Config): String = {
     val timeClause = monthDuration match {
-        case -1 => ""
-        case default =>
-          val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-          s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
-      }
+      case -1 => ""
+      case default =>
+        val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val startMonth = LocalDate.now
+          .minus(Period.ofMonths(monthDuration))
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
+    }
 
     s"""INSERT INTO user_top_challenges
         (month_duration, user_id, challenge_id, challenge_name, activity)
@@ -124,15 +135,21 @@ object LeaderboardHelper {
     * @param start_date
     * @param end_date
     */
-  def rebuildTopChallengesSQLCountry(monthDuration: Int, countryCode: String,
-                                     boundingBox: String, config: Config): String = {
+  def rebuildTopChallengesSQLCountry(
+      monthDuration: Int,
+      countryCode: String,
+      boundingBox: String,
+      config: Config
+  ): String = {
     val timeClause = monthDuration match {
-       case -1 => ""
-       case default =>
-         val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-         val startMonth = LocalDate.now.minus(Period.ofMonths(monthDuration)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-         s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
-     }
+      case -1 => ""
+      case default =>
+        val today = LocalDate.now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        val startMonth = LocalDate.now
+          .minus(Period.ofMonths(monthDuration))
+          .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+        s"""sa.created::DATE BETWEEN '$startMonth' AND '$today' AND"""
+    }
 
     s"""INSERT INTO user_top_challenges
         (month_duration, country_code, user_id, challenge_id, challenge_name, activity)

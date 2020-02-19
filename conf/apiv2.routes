@@ -296,6 +296,31 @@ PUT  /project/:id/undelete                         @org.maproulette.controllers.
 GET     /projects/find                              @org.maproulette.controllers.api.ProjectController.find(q:String ?= "", parentId:Long ?= -1, limit:Int ?= 10, page:Int ?= 0, onlyEnabled:Boolean ?= true)
 ###
 # tags: [ Project ]
+# summary: Retrieve featured projects
+# produces: [ application/json ]
+# description: Get all the currently featured projects
+# responses:
+#   '200':
+#     description: An array of all the featured projects
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Project'
+# parameters:
+#   - name: onlyEnabled
+#     in: query
+#     description: Flag to set if only wanting enabled projects returned. Default value is true.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /projects/featured                          @org.maproulette.controllers.api.ProjectController.getFeaturedProjects(onlyEnabled:Boolean ?= true, limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Project ]
 # summary: List all the projects.
 # consumes: [ application/json ]
 # produces: [ application/json ]
@@ -557,6 +582,7 @@ POST     /project/:projectId/challenge/:id/remove           @org.maproulette.con
 ###
 GET     /project/:id/tasks                          @org.maproulette.controllers.api.ProjectController.getRandomTasks(id:Long, limit:Int ?= 1, proximity:Long ?= -1)
 ###
+# tags: [ Task ]
 # summary: Retrieves a history for the task
 # produces: [ application/json ]
 # description: Retrieves list of task history log entries. This includes comments,
@@ -574,6 +600,7 @@ GET     /project/:id/tasks                          @org.maproulette.controllers
 ###
 GET     /task/:id/history                       @org.maproulette.controllers.api.TaskHistoryController.getTaskHistoryLog(id:Long)
 ###
+# tags: [ Review ]
 # summary: Retrieves and claims a review needed Task
 # produces: [ application/json ]
 # description: Retrieves a Task and claims that task for review
@@ -590,6 +617,7 @@ GET     /task/:id/history                       @org.maproulette.controllers.api
 ###
 GET     /task/:id/review/start                       @org.maproulette.controllers.api.TaskReviewController.startTaskReview(id:Long)
 ###
+# tags: [ Review ]
 # summary: Cancels a claim on a task for review
 # produces: [ application/json ]
 # description: Cancels a claim on a task for review
@@ -606,6 +634,7 @@ GET     /task/:id/review/start                       @org.maproulette.controller
 ###
 GET     /task/:id/review/cancel                       @org.maproulette.controllers.api.TaskReviewController.cancelTaskReview(id:Long)
 ###
+# tags: [ Review ]
 # summary: Retrieves tasks that need review
 # produces: [ application/json ]
 # description: Retrieves list of Tasks and total count
@@ -618,6 +647,9 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #         type: object
 #         $ref: '#/definitions/org.maproulette.models.Task'
 # parameters:
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
 #   - name: startDate
 #     in: query
 #     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
@@ -633,6 +665,9 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #   - name: order
 #     in: query
 #     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
 #   - name: cs
 #     in: query
 #     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
@@ -640,8 +675,9 @@ GET     /task/:id/review/cancel                       @org.maproulette.controlle
 #     in: query
 #     description: The search string used to match the name of the person requesting the review. (review_requested_by)
 ###
-GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, onlySaved: Boolean ?= false, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, onlySaved: Boolean ?= false, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC", excludeOtherReviewers: Boolean ?= false)
 ###
+# tags: [ Review ]
 # summary: Retrieves reviewed tasks that have been reviewed either by this user or where the user requested
 #          the review.
 # produces: [ application/json ]
@@ -691,6 +727,7 @@ GET     /tasks/review                          @org.maproulette.controllers.api.
 ###
 GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskReviewController.getReviewedTasks(mappers:String ?= "", reviewers:String ?= "", startDate: String ?= null, endDate: String ?= null, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
 ###
+# tags: [ Review ]
 # summary: Retrieves and claims a the next review needed Task
 # produces: [ application/json ]
 # description: Retrieves the next Task (given the search parameters) and claims that task for review
@@ -701,12 +738,21 @@ GET     /tasks/reviewed                          @org.maproulette.controllers.ap
 #       type: object
 #       $ref: '#/definitions/org.maproulette.models.Task'
 # parameters:
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
 #   - name: sort
 #     in: query
 #     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
 #   - name: order
 #     in: query
 #     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+#   - name: lastTaskId
+#     in: query
+#     description: Fetch the next task after the lastTaskId. (so if you want to 'skip' a task you can get the next one)
 #   - name: cs
 #     in: query
 #     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
@@ -717,8 +763,9 @@ GET     /tasks/reviewed                          @org.maproulette.controllers.ap
 #     in: query
 #     description: The search string used to match the Reviewer names. (reviewed_by)
 ###
-GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(onlySaved:Boolean ?= false, sort:String ?= "", order:String ?= "ASC")
+GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(onlySaved:Boolean ?= false, sort:String ?= "", order:String ?= "ASC", lastTaskId:Long ?= -1, excludeOtherReviewers:Boolean ?= false)
 ###
+# tags: [ Review ]
 # summary: Retrieves tasks that need review
 # produces: [ application/json ]
 # description: Retrieves list of Tasks and total count
@@ -740,14 +787,26 @@ GET     /tasks/review/next                       @org.maproulette.controllers.ap
 #   - name: reviewers
 #     in: query
 #     description: the reviewer ids to search by (reviewed_by)
+#   - name: priorities
+#     in: query
+#     description: the priorities to search by
 #   - name: startDate
 #     in: query
 #     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
 #   - name: endDate
 #     in: query
 #     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+#   - name: includeByPriority
+#     in: query
+#     description: Also include a breakdown of review status by priority
 ###
-GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, mappers: String ?= "", reviewers: String ?= "", startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, mappers: String ?= "", reviewers: String ?= "", priorities:String ?= "", startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false, excludeOtherReviewers: Boolean ?= false, includeByPriority:Boolean ?= false)
 ###
 # tags: [ Project ]
 # summary: Retrieves clustered challenge points
@@ -1510,6 +1569,10 @@ PUT     /challenge/:id/addTasks                     @org.maproulette.controllers
 #                  data. If set to false, unmatched existing tasks are simply
 #                  left as-is.
 #     default: false
+#   - name: skipSnapshot
+#     in: query
+#     description: If included will skip recording a snapshot before proceeding. (By default false, so it will create snapshot.)
+#     default: false
 #   - name: apiKey
 #     in: header
 #     description: The user's apiKey to authorize the request
@@ -1520,7 +1583,7 @@ PUT     /challenge/:id/addTasks                     @org.maproulette.controllers
 #     description: The geojson to build the tasks from.
 #     required: true
 ###
-PUT     /challenge/:id/addFileTasks                 @org.maproulette.controllers.api.ChallengeController.addTasksToChallengeFromFile(id:Long, lineByLine:Boolean ?= true, removeUnmatched:Boolean ?= false)
+PUT     /challenge/:id/addFileTasks                 @org.maproulette.controllers.api.ChallengeController.addTasksToChallengeFromFile(id:Long, lineByLine:Boolean ?= true, removeUnmatched:Boolean ?= false, dataOriginDate:Option[String], skipSnapshot:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves children for Challenge
@@ -1608,8 +1671,12 @@ PUT     /challenge/:id/clone/:name                  @org.maproulette.controllers
 #                  data. If set to false, unmatched existing tasks are simply
 #                  left as-is.
 #     default: false
+#   - name: skipSnapshot
+#     in: query
+#     description: If included will skip recording a snapshot before proceeding. (By default false, so it will create snapshot.)
+#     default: false
 ###
-PUT     /challenge/:id/rebuild                      @org.maproulette.controllers.api.ChallengeController.rebuildChallenge(id:Long, removeUnmatched:Boolean ?= false)
+PUT     /challenge/:id/rebuild                      @org.maproulette.controllers.api.ChallengeController.rebuildChallenge(id:Long, removeUnmatched:Boolean ?= false, skipSnapshot:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves random Task
@@ -1692,8 +1759,11 @@ GET     /challenge/:cid/tasks/randomTasks           @org.maproulette.controllers
 #   - name: proximity
 #     in: query
 #     description: Id of task around which geographically closest tasks are desired
+#   - name: excludeSelfLocked
+#     in: query
+#     description: exclude tasks this user has locked (always excludes tasks locked by others)
 ###
-GET     /challenge/:cid/tasksNearby/:proximityId           @org.maproulette.controllers.api.ChallengeController.getNearbyTasks(cid:Long, proximityId:Long, limit:Int ?= 5)
+GET     /challenge/:cid/tasksNearby/:proximityId           @org.maproulette.controllers.api.ChallengeController.getNearbyTasks(cid:Long, proximityId:Long, excludeSelfLocked:Boolean ?=false, limit:Int ?= 5)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves prioritized random Task
@@ -1793,8 +1863,12 @@ GET     /challenge/:cid/previousTask/:id            @org.maproulette.controllers
 #   - name: reviewStatus
 #     in: query
 #     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
 ###
 GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
+POST    /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
 ###
 # tags: [ Challenge ]
 # summary: Retrieves clustered Task points
@@ -1816,7 +1890,7 @@ GET     /challenge/view/:id                         @org.maproulette.controllers
 #     in: query
 #     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
 ###
-GET     /challenge/clustered/:id                    @org.maproulette.controllers.api.ChallengeController.getClusteredPoints(id:Long, filter:String ?= "", limit:Int ?= 2500)
+GET     /challenge/clustered/:id                    @org.maproulette.controllers.api.ChallengeController.getClusteredPoints(id:Long, filter:String ?= "", limit:Int ?= 2500, excludeLocked:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Update Task Priorities
@@ -1939,8 +2013,32 @@ GET     /challenge/:id/comments/extract             @org.maproulette.controllers
 #   - name: reviewStatus
 #     in: query
 #     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
 ###
-GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
+GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "", exportProperties:String ?= "")
+POST     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "", exportProperties:String ?= "")
+###
+# tags: [ Project ]
+# summary: Retrieve summaries of all tasks in a Project
+# description: This will retrieve summaries of all the tasks of a given project and respond with a csv
+# response:
+#   '200':
+#     description: A CSV file containing the following data "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,Username"
+#   '404':
+#     description: No Project with provided ID found
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The ID of the project
+#     required: true
+#   - name: cId
+#     in: query
+#     description: A list of challengeIds to include. If not provided, then all challenges in the project are used.
+#     required: optional
+###
+GET     /project/:projectId/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractAllTaskSummaries(projectId:Long, cId:Option[String])
 ###
 # tags: [ Challenge ]
 # summary: Match OSM Changesets
@@ -2719,6 +2817,29 @@ GET     /task/:id/start                               @org.maproulette.controlle
 GET     /task/:id/release                               @org.maproulette.controllers.api.TaskController.releaseTask(id:Long)
 ###
 # tags: [ Task ]
+# summary: Refresh an existing lock on a Task
+# produces: [ application/json ]
+# description: Refreshes an existing lock, extending its allowed duration, on the
+#              task with the supplied ID. The requesting user must already own an
+#              active lock on the task (i.e. via the task/:id/start API) or a 403
+#              will be raised
+# responses:
+#   '200':
+#     description: The lock was successfully refreshed
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+#   '403':
+#     description: The user does not own a lock on the task
+#   '404':
+#     description: ID field supplied but no Task found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Task on which the lock is to be refreshed
+###
+GET     /task/:id/refreshLock                           @org.maproulette.controllers.api.TaskController.refreshTaskLock(id:Long)
+###
+# tags: [ Task ]
 # summary: Retrieves an already existing Task
 # produces: [ application/json ]
 # description: Retrieves an already existing Task based on the name of the Task rather than an ID
@@ -2841,6 +2962,32 @@ GET     /task/:id/tags                              @org.maproulette.controllers
 GET     /tasks/tags                                 @org.maproulette.controllers.api.TaskController.getItemsBasedOnTags(tags:String ?= "", limit:Int ?= 10, page:Int ?= 0)
 ###
 # tags: [ Task ]
+# summary: Updates Task Tags
+# description: Updates the tags on the Task
+# responses:
+#   '304':
+#     description: A basic 304 with NoContent will be returned on a successful delete
+#   '400':
+#     description: If no tags are supplied a BadRequest response will be returned
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the Task
+#   - name: tags
+#     in: query
+#     description: A complete comma separated list of tags. If empty, then all tags will be removed.
+#     required: true
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET  /task/:id/tags/update                              @org.maproulette.controllers.api.TaskController.updateItemTags(id:Long, tags:String ?= "")
+###
+# tags: [ Task ]
 # summary: Delete Task Tags
 # description: Deletes all the supplied tags from the Task
 # responses:
@@ -2909,7 +3056,8 @@ GET     /tasks/random                               @org.maproulette.controllers
 # description: Retrieves tasks within a given bounding box.
 # responses:
 #   '200':
-#     description: The list of clusteredPoints representing Tasks that match the search criteria within the bounding box
+#     description: The list of clusteredPoints representing Tasks that match the search criteria within the bounding box.
+#                  To specify a json body of a taskPropertySearch, use the PUT method.
 #     schema:
 #       type: array
 #       items:
@@ -2934,8 +3082,12 @@ GET     /tasks/random                               @org.maproulette.controllers
 #   - name: page
 #     in: query
 #     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: includeGeometries
+#     in: query
+#     description: Optional flag to have geometries data returned for each task.
 ###
-GET     /tasks/box/:left/:bottom/:right/:top        @org.maproulette.controllers.api.TaskController.getTasksInBoundingBox(left:Double, bottom:Double, right:Double, top:Double, limit:Int ?= 10000, page:Int ?= 0)
+GET     /tasks/box/:left/:bottom/:right/:top        @org.maproulette.controllers.api.TaskController.getTasksInBoundingBox(left:Double, bottom:Double, right:Double, top:Double, limit:Int ?= 10000, page:Int ?= 0, excludeLocked:Boolean ?= false, sort:String ?= "", order:String ?= "ASC", includeTotal:Boolean ?= false, includeGeometries:Boolean ?=false)
+PUT     /tasks/box/:left/:bottom/:right/:top        @org.maproulette.controllers.api.TaskController.getTasksInBoundingBox(left:Double, bottom:Double, right:Double, top:Double, limit:Int ?= 10000, page:Int ?= 0, excludeLocked:Boolean ?= false, sort:String ?= "", order:String ?= "ASC", includeTotal:Boolean ?= false, includeGeometries:Boolean ?=false)
 ###
 # tags: [ Task ]
 # summary: Update Task Changeset
@@ -2992,16 +3144,57 @@ PUT     /task/:id/changeset                         @org.maproulette.controllers
 #     in: query
 #     description: Boolean indicating if a review is requested on this task. (Will override user settings if provided)
 #   - name: tags
+#     in: query
 #     description: Optional tags to associate with this task
+#   - name: completionResponses
+#     in: body
+#     description: Optional key/value json to be stored with this task.
 ###
 PUT     /task/:id/:status                           @org.maproulette.controllers.api.TaskController.setTaskStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
+###
+# tags: [ Task ]
+# summary: Update Bundle Task Status
+# produces: [ application/json ]
+# description: Will update a Bundled list of Tasks statuses to one of the following. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+# responses:
+#   '200':
+#     description: TaskBundle
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: The bundle or primary task was not found with the supplied Id.
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: bundleId
+#     in: path
+#     description: The ID of the bundle
+#   - name: primaryId
+#     in: path
+#     description: The primary ID of the task for this bundle
+#   - name: status
+#     in: path
+#     description: The status to update the Task too. Following status Integers can be used. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: comment
+#     in: query
+#     description: Any comment that is provided by the user when setting the status
+#   - name: requestReview
+#     in: query
+#     description: Boolean indicating if a review is requested on this task. (Will override user settings if provided)
+#   - name: tags
+#     description: Optional tags to associate with this task
+###
+PUT     /taskBundle/:bundleId/:status                           @org.maproulette.controllers.api.TaskBundleController.setBundleTaskStatus(bundleId:Long, primaryId:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
 # tags: [ Task ]
 # summary: Update Task Review Status
 # produces: [ application/json ]
 # description: Will update a Tasks review status to one of the following. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted
 # responses:
-#   '304':
+#   '200':
 #     description: No Content, update successful
 #   '401':
 #     description: The user is not authorized to make this request
@@ -3027,13 +3220,45 @@ PUT     /task/:id/:status                           @org.maproulette.controllers
 ###
 PUT     /task/:id/review/:status                           @org.maproulette.controllers.api.TaskController.setTaskReviewStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
 ###
+# tags: [ Task ]
+# summary: Update Task Review Status for a Bundle
+# produces: [ application/json ]
+# description: Will update a Tasks review status to one of the following. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted
+# responses:
+#   '200':
+#     description: Task Bundle
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: The task with the supplied ID was not found.
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: id
+#     in: path
+#     description: The ID of the bundle
+#   - name: status
+#     in: path
+#     description: The status to update the Task to. Following status Integers can be used. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted
+#   - name: comment
+#     in: query
+#     description: Any comment that is provided by the user when setting the review status
+#   - name: tags
+#     description: Optional tags to associate with this task
+###
+PUT     /taskBundle/:id/review/:status                     @org.maproulette.controllers.api.TaskBundleController.setBundleTaskReviewStatus(id:Long, status:Int, comment:String ?= "", tags:String ?="")
+###
 # tags: [ Challenge ]
 # summary: Retrieves task clusters
 # produces: [ application/json ]
 # description: Retrieves task clusters that contain the centroid location for a group of tasks
 # responses:
 #   '200':
-#     description: An array of task clusters that represents clusters of tasks for a challenge. If none found will return an empty list
+#     description: An array of task clusters that represents clusters of tasks for a challenge. If none found will return an empty list.
+#                  To specify a json body of a taskPropertySearch, use the PUT method.
 #     schema:
 #       type: array
 #       items:
@@ -3045,6 +3270,7 @@ PUT     /task/:id/review/:status                           @org.maproulette.cont
 #     description: The number of clusters that you want returned
 ###
 GET     /taskCluster                                @org.maproulette.controllers.api.TaskController.getTaskClusters(points:Int ?= 100)
+PUT     /taskCluster                                @org.maproulette.controllers.api.TaskController.getTaskClusters(points:Int ?= 100)
 ###
 # tags: [ TaskReview ]
 # summary: Retrieves task review clusters
@@ -3071,8 +3297,14 @@ GET     /taskCluster                                @org.maproulette.controllers
 #   - name: endDate
 #     in: query
 #     description: The end date to search within
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
 ###
-GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false)
+GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false, excludeOtherReviewers:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # summary: Retrieves tasks in a cluster
@@ -3115,7 +3347,7 @@ GET     /tasksInCluster/:clusterId                  @org.maproulette.controllers
 #     in: path
 #     description: The ID for the comment
 ###
-GET     /comment/:id                                @org.maproulette.controllers.api.TaskController.retrieveComment(id:Long)
+GET     /comment/:id                                @org.maproulette.controllers.api.CommentController.retrieveComment(id:Long)
 ###
 # tags: [ Comment ]
 # summary: Retrieves comments for a Task
@@ -3136,7 +3368,7 @@ GET     /comment/:id                                @org.maproulette.controllers
 #     in: path
 #     description: The ID for the Task
 ###
-GET     /task/:id/comments                          @org.maproulette.controllers.api.TaskController.retrieveComments(id:Long)
+GET     /task/:id/comments                          @org.maproulette.controllers.api.CommentController.retrieveComments(id:Long)
 ###
 # tags: [ Comment ]
 # summary: Adds comment to Task
@@ -3159,7 +3391,28 @@ GET     /task/:id/comments                          @org.maproulette.controllers
 #     in: query
 #     description: An optional action ID that may be associated with the comment
 ###
-POST    /task/:id/comment                           @org.maproulette.controllers.api.TaskController.addComment(id:Long, comment:String, actionId:Option[Long])
+POST    /task/:id/comment                           @org.maproulette.controllers.api.CommentController.addComment(id:Long, comment:String, actionId:Option[Long])
+###
+# tags: [ Comment ]
+# summary: Adds comment to each Task in a Task Bundle
+# description: Adds a comment to each Task in Bundle
+# responses:
+#   '201':
+#     description: The task bundle
+#   '404':
+#     description: If the bundle is not found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID for the bundle
+#   - name: comment
+#     in: query
+#     description: A URLEncoded comment for the Task
+#   - name: actionId
+#     in: query
+#     description: An optional action ID that may be associated with the comment
+###
+POST    /taskBundle/:id/comment                     @org.maproulette.controllers.api.CommentController.addCommentToBundleTasks(id:Long, comment:String, actionId:Option[Long])
 ###
 # tags: [ Comment ]
 # summary: Update comment on Task
@@ -3181,7 +3434,7 @@ POST    /task/:id/comment                           @org.maproulette.controllers
 #     in: query
 #     description: A URLEncoded comment for the Task
 ###
-PUT    /comment/:commentId                          @org.maproulette.controllers.api.TaskController.updateComment(commentId:Long, comment:String)
+PUT    /comment/:commentId                          @org.maproulette.controllers.api.CommentController.updateComment(commentId:Long, comment:String)
 ###
 # tags: [ Comment ]
 # summary: Deletes comment from Task
@@ -3199,7 +3452,7 @@ PUT    /comment/:commentId                          @org.maproulette.controllers
 #     in: path
 #     description: The ID for the Comment
 ###
-DELETE  /task/:id/comment/:commentId                @org.maproulette.controllers.api.TaskController.deleteComment(id:Long, commentId:Long)
+DELETE  /task/:id/comment/:commentId                @org.maproulette.controllers.api.CommentController.deleteComment(id:Long, commentId:Long)
 ###
 # tags: [ Keyword ]
 # summary: Create a Keyword
@@ -3433,13 +3686,17 @@ GET     /keywords                                   @org.maproulette.controllers
 ###
 GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
 ### NoDocs ###
-GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, survey:Int ?= -1, priority:Int ?= -1)
+GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, survey:Int ?= -1, priority:String ?= "", includeByPriority:Boolean ?= false)
+GET     /snapshot/challenge/:challengeId/record     @org.maproulette.controllers.api.SnapshotController.recordChallengeSnapshot(challengeId:Long)
+GET     /snapshot/challenge/:challengeId/list       @org.maproulette.controllers.api.SnapshotController.getChallengeSnapshotList(challengeId:Long, includeAllData:Boolean ?= false)
+GET     /snapshot/challenge/:challengeId/export     @org.maproulette.controllers.api.SnapshotController.exportChallengeSnapshots(challengeId:Long)
+GET     /snapshot/:snapshotId                       @org.maproulette.controllers.api.SnapshotController.getChallengeSnapshot(snapshotId:Long)
 ### NoDocs ###
 GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ###
 # deprecated: true
 ###
-POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:Int ?= -1, onlyEnabled:Boolean ?= true)
+POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:String ?= "", onlyEnabled:Boolean ?= true)
 ### NoDocs ###
 GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)
 ### NoDocs ###
@@ -3451,11 +3708,11 @@ GET     /data/user/:userId/leaderboard              @org.maproulette.controllers
 ### NoDocs ###
 GET     /data/user/:userId/topChallenges            @org.maproulette.controllers.api.DataController.getUserTopChallenges(userId:Long, projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, limit:Int ?= 20, offset:Int ?= 0)
 ### NoDocs ###
-GET     /data/user/:userId/metrics                  @org.maproulette.controllers.api.UserController.getMetricsForUser(userId:Long, monthDuration:Int ?= -1, reviewDuration:Int ?= -1)
+GET     /data/user/:userId/metrics                  @org.maproulette.controllers.api.UserController.getMetricsForUser(userId:Long, monthDuration:Int ?= -1, reviewDuration:Int ?= -1, reviewerDuration:Int ?= -1, start: String ?= null, end: String ?= null, reviewStart: String ?= null, reviewEnd: String ?= null, reviewerStart: String ?= null, reviewerEnd: String ?= null)
 ### NoDocs ###
 GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
 ### NoDocs ###
-GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", onlyEnabled:Boolean ?= true)
+GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", onlyEnabled:Boolean ?= true, includeByPriority:Boolean ?= false)
 ### NoDocs ###
 GET     /data/challenge/:challengeId/activity       @org.maproulette.controllers.api.DataController.getChallengeActivity(challengeId:Long, start:String ?= "", end:String ?= "", survey:Int ?= 0, priority:Int ?= -1)
 ### NoDocs ###
@@ -3466,6 +3723,8 @@ GET     /data/status/activity                       @org.maproulette.controllers
 GET     /data/status/latestActivity                 @org.maproulette.controllers.api.DataController.getLatestChallengeActivity(projectIds:String ?= "", challengeIds:String ?= "", entries:Int ?= 1)
 ### NoDocs ###
 GET     /data/status/summary                        @org.maproulette.controllers.api.DataController.getStatusSummary(userIds:String ?= "", projectIds:String ?= "", challengeIds:String ?= "", start:String ?= "", end:String ?= "", limit:Int ?= 10, page:Int ?= 0)
+### NoDocs ###
+GET     /data/challenge/:challengeId/propertyKeys   @org.maproulette.controllers.api.DataController.getPropertyKeys(challengeId:Long)
 ###
 # tags: [ User ]
 # summary: Retrieves current user's JSON information
@@ -4019,15 +4278,21 @@ GET     /user/project/:projectId                     @org.maproulette.controller
 # parameters:
 #   - name: userId
 #     in: path
-#     description: The id of the user to add
+#     description: The id of the user to add. If using an OSM user id, then
+#                  the isOSMUserId query parameter must be set to true
 #   - name: projectId
 #     in: path
 #     description: The id of the project to add the user too
 #   - name: groupType
 #     in: path
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user id is to be treated as an OSM user id
 ###
-POST     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.addUserToProject(userId:Long, projectId:Long, groupType:Int)
+POST     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.addUserToProject(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
 ###
 # tags: [ User ]
 # summary: Set project group for user, removing any prior groups
@@ -4047,8 +4312,13 @@ POST     /user/:userId/project/:projectId/:groupType  @org.maproulette.controlle
 #   - name: groupType
 #     in: path
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user id is to be treated as an OSM user id
 ###
-PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.setUserProjectGroup(userId:Long, projectId:Long, groupType:Int)
+PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.setUserProjectGroup(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
 ###
 # tags: [ User ]
 # summary: Adds a list of user to project group
@@ -4067,14 +4337,20 @@ PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.controller
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
 #   - name: body
 #     in: body
-#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     description: A JSON array of user ids. If using OSM user Ids then the
+#                  isOSMUserId query parameter must be set to true
 #     required: true
 #     schema:
 #       type: array
 #       items:
 #         type: integer
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
 ###
-PUT     /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.addUsersToProject(projectId:Long, groupType:Int)
+PUT     /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.addUsersToProject(projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
 ###
 # tags: [ User ]
 # summary: Removes a user from a project group
@@ -4087,15 +4363,21 @@ PUT     /user/project/:projectId/:groupType         @org.maproulette.controllers
 # parameters:
 #   - name: userId
 #     in: path
-#     description: The id of the user to add
+#     description: The id of the user to remove. If using an OSM user id, then
+#                  the isOSMUserId query parameter must be set to true
 #   - name: projectId
 #     in: path
-#     description: The id of the project to add the user too
+#     description: The id of the project to remove the user from
 #   - name: groupType
 #     in: path
 #     description: Either -1 all, 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
 ###
-DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.removeUserFromProject(userId:Long, projectId:Long, groupType:Int)
+DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controllers.api.UserController.removeUserFromProject(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
 ###
 # tags: [ User ]
 # summary: Removes a list of users from a project group
@@ -4108,20 +4390,27 @@ DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.controller
 # parameters:
 #   - name: projectId
 #     in: path
-#     description: The id of the project to add the user too
+#     description: The id of the project to remove the users from
 #   - name: groupType
 #     in: path
 #     description: Either 1 - Admin, 2 - Write, 3 - Read
 #   - name: body
 #     in: body
 #     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#                  If using OSM user ids, then the isOSMUserId query parameter must be
+#                  set to true
 #     required: true
 #     schema:
 #       type: array
 #       items:
 #         type: integer
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
 ###
-DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.removeUsersFromProject(projectId:Long, groupType:Int)
+DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers.api.UserController.removeUsersFromProject(projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
 ###
 # tags: [ Changes ]
 # summary: Test Changes
@@ -4137,7 +4426,7 @@ DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers
 #     description: delta to return a delta version of the changes that would be applied. osmchange for the actual OSMChange value that would be applied to the OSM servers
 #   - name: body
 #     in: body
-#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     description: The tag changes
 #     required: true
 #     schema:
 #       type: array
@@ -4148,7 +4437,7 @@ DELETE  /user/project/:projectId/:groupType         @org.maproulette.controllers
 POST    /change/tag/test                            @org.maproulette.controllers.OSMChangesetController.testTagChange(changeType:String ?= "delta")
 ###
 # tags: [ Changes ]
-# summary: Submit Changes
+# summary: Apply Tag Changes for task
 # description: Submit a group of changes to OSM. Will return a standard OSMChange XML that has been applied to the OSM servers
 # responses:
 #   '200':
@@ -4156,15 +4445,61 @@ POST    /change/tag/test                            @org.maproulette.controllers
 #   '401':
 #     description: The user is not authorized to make this request
 # parameters:
+#   - name: taskId
+#     in: query
+#     description: The task id that should be marked as fixed after this tag change has been applied.
+#   - name: comment
+#     in: query
+#     description: A task comment to be stored in map roulette with this change.
+#   - name: requestReview
+#     in: query
+#     description: Boolean indicating if a review is requested on this task. (Will override user settings if provided)
+#   - name: tags
+#     in: query
+#     description: A list of mrTags to be stored with the task
 #   - name: body
 #     in: body
-#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#     description: The TagChangeSubmission
 #     required: true
 #     schema:
 #       type: object
 #       $ref: '#/definitions/org.maproulette.services.osm.ChangeObjects.TagChangeSubmission'
 ###
-POST    /change/tag/submit                          @org.maproulette.controllers.OSMChangesetController.submitTagChange
+POST    /task/:taskId/fix/apply                     @org.maproulette.controllers.api.TaskController.applyTagFix(taskId:Long, comment:String ?= "", tags:String ?= "")
+
+###
+# tags: [ Bundle ]
+# summary: Create a task bundle
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Create a new task bundle with the task ids in the supplied JSON body.
+# responses:
+#   '200':
+#     description: The newly created bundle with a unique id.
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.TaskBundle'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the bundle body.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.TaskBundle'
+###
+POST    /taskBundle                                 @org.maproulette.controllers.api.TaskBundleController.createTaskBundle
+### NoDocs ###
+GET     /taskBundle/:id                             @org.maproulette.controllers.api.TaskBundleController.getTaskBundle(id:Long)
+### NoDocs ###
+DELETE     /taskBundle/:id                          @org.maproulette.controllers.api.TaskBundleController.deleteTaskBundle(id:Long, primaryId:Option[Long])
+### NoDocs ###
+GET        /taskBundle/:id/unbundle                 @org.maproulette.controllers.api.TaskBundleController.unbundleTasks(id:Long, taskIds:List[Long])
 ### NoDocs ###
 POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
 ### NoDocs ###

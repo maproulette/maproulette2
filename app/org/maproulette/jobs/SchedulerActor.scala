@@ -5,15 +5,22 @@ package org.maproulette.jobs
 import akka.actor.{Actor, Props}
 import anorm.JodaParameterMetaData._
 import anorm._
+import anorm.SqlParser._
 import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.jobs.SchedulerActor.RunJob
 import org.maproulette.jobs.utils.LeaderboardHelper
 import org.maproulette.metrics.Metrics
-import org.maproulette.models.{Task, UserNotification, UserNotificationEmail, UserNotificationEmailDigest}
+import org.maproulette.models.{
+  Task,
+  UserNotification,
+  UserNotificationEmail,
+  UserNotificationEmailDigest
+}
 import org.maproulette.models.Task.STATUS_CREATED
 import org.maproulette.models.dal.DALManager
+import org.maproulette.data.SnapshotManager
 import org.maproulette.provider.{KeepRightBox, KeepRightError, KeepRightProvider, EmailProvider}
 import org.maproulette.session.User
 import org.maproulette.utils.BoundingBoxFinder
@@ -30,39 +37,46 @@ import scala.util.{Failure, Success}
   * @author davis_20
   */
 @Singleton
-class SchedulerActor @Inject()(config: Config,
-                               application: Application,
-                               db: Database,
-                               dALManager: DALManager,
-                               keepRightProvider: KeepRightProvider,
-                               boundingBoxFinder: BoundingBoxFinder,
-                               emailProvider: EmailProvider) extends Actor {
+class SchedulerActor @Inject() (
+    config: Config,
+    application: Application,
+    db: Database,
+    dALManager: DALManager,
+    keepRightProvider: KeepRightProvider,
+    boundingBoxFinder: BoundingBoxFinder,
+    emailProvider: EmailProvider,
+    implicit val snapshotManager: SnapshotManager
+) extends Actor {
   // cleanOldTasks configuration
-  lazy val oldTasksStatusFilter = appConfig.getOptional[Seq[Int]](Config.KEY_SCHEDULER_CLEAN_TASKS_STATUS_FILTER).getOrElse(
-    Seq[Int](new Integer(STATUS_CREATED))
-  )
+  lazy val oldTasksStatusFilter = appConfig
+    .getOptional[Seq[Int]](Config.KEY_SCHEDULER_CLEAN_TASKS_STATUS_FILTER)
+    .getOrElse(
+      Seq[Int](STATUS_CREATED)
+    )
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  val appConfig = application.configuration
+  val appConfig      = application.configuration
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   override def receive: Receive = {
     case RunJob("rebuildChallengesLeaderboard", action) => this.rebuildChallengesLeaderboard(action)
-    case RunJob("rebuildCountryLeaderboard", action) => this.rebuildCountryLeaderboard(action)
-    case RunJob("cleanLocks", action) => this.cleanLocks(action)
-    case RunJob("cleanClaimLocks", action) => this.cleanClaimLocks(action)
-    case RunJob("runChallengeSchedules", action) => this.runChallengeSchedules(action)
-    case RunJob("updateLocations", action) => this.updateLocations(action)
-    case RunJob("cleanOldTasks", action) => this.cleanOldTasks(action)
-    case RunJob("updateTaskLocations", action) => this.updateTaskLocations(action.toLong)
-    case RunJob("cleanExpiredVirtualChallenges", action) => this.cleanExpiredVirtualChallenges(action)
-    case RunJob("FindChangeSets", action) => this.findChangeSets(action)
+    case RunJob("rebuildCountryLeaderboard", action)    => this.rebuildCountryLeaderboard(action)
+    case RunJob("cleanLocks", action)                   => this.cleanLocks(action)
+    case RunJob("cleanClaimLocks", action)              => this.cleanClaimLocks(action)
+    case RunJob("runChallengeSchedules", action)        => this.runChallengeSchedules(action)
+    case RunJob("updateLocations", action)              => this.updateLocations(action)
+    case RunJob("cleanOldTasks", action)                => this.cleanOldTasks(action)
+    case RunJob("cleanExpiredVirtualChallenges", action) =>
+      this.cleanExpiredVirtualChallenges(action)
+    case RunJob("FindChangeSets", action)      => this.findChangeSets(action)
     case RunJob("OSMChangesetMatcher", action) => this.matchChangeSets(action)
-    case RunJob("cleanDeleted", action) => this.cleanDeleted(action)
-    case RunJob("KeepRightUpdate", action) => this.keepRightUpdate(action)
+    case RunJob("cleanDeleted", action)        => this.cleanDeleted(action)
+    case RunJob("KeepRightUpdate", action)     => this.keepRightUpdate(action)
     case RunJob("snapshotUserMetrics", action) => this.snapshotUserMetrics(action)
-    case RunJob("sendImmediateNotificationEmails", action) => this.sendImmediateNotificationEmails(action)
+    case RunJob("snapshotChallenges", action)  => this.snapshotChallenges(action)
+    case RunJob("sendImmediateNotificationEmails", action) =>
+      this.sendImmediateNotificationEmails(action)
     case RunJob("sendDigestNotificationEmails", action) => this.sendDigestNotificationEmails(action)
   }
 
@@ -74,7 +88,8 @@ class SchedulerActor @Inject()(config: Config,
   def cleanLocks(action: String): Unit = {
     logger.info(action)
     this.db.withTransaction { implicit c =>
-      val locksDeleted = SQL"""DELETE FROM locked WHERE AGE(NOW(), locked_time) > '1 hour'""".executeUpdate()
+      val query        = s"DELETE FROM locked WHERE AGE(NOW(), locked_time) > '${config.taskLockExpiry}'"
+      val locksDeleted = SQL(query).executeUpdate()
       logger.info(s"$locksDeleted were found and deleted.")
     }
   }
@@ -82,7 +97,7 @@ class SchedulerActor @Inject()(config: Config,
   /**
     * This job will remove all stale (older than 1 day) review claim locks from the system
     */
-  def cleanClaimLocks(action:String) : Unit = {
+  def cleanClaimLocks(action: String): Unit = {
     logger.info(action)
     this.db.withTransaction { implicit c =>
       val claimsRemoved = SQL"""UPDATE task_review
@@ -100,7 +115,6 @@ class SchedulerActor @Inject()(config: Config,
   def runChallengeSchedules(action: String): Unit = {
     logger.info(action)
   }
-
 
   /**
     * This job will update the locations of all the challenges periodically. To enable, set:
@@ -139,7 +153,7 @@ class SchedulerActor @Inject()(config: Config,
 
     db.withTransaction { implicit c =>
       SQL("SELECT id FROM challenges WHERE last_updated > {currentTime}")
-        .on('currentTime -> ToParameterValue.apply[DateTime].apply(currentTime))
+        .on(Symbol("currentTime") -> ToParameterValue.apply[DateTime].apply(currentTime))
         .as(SqlParser.long("id").*)
         .foreach(id => {
           logger.debug(s"Flushing challenge cache of challenge with id $id")
@@ -147,16 +161,6 @@ class SchedulerActor @Inject()(config: Config,
         })
     }
     logger.info("Completed updating challenge locations.")
-  }
-
-  /**
-    * Makes sure that all the tasks for a particular challenge are updated
-    *
-    * @param challengeId The id of the challenge you want updated
-    */
-  def updateTaskLocations(challengeId: Long): Unit = {
-    logger.info(s"Updating tasks for challenge $challengeId")
-    this.dALManager.task.updateTaskLocations(challengeId)
   }
 
   /**
@@ -168,16 +172,21 @@ class SchedulerActor @Inject()(config: Config,
     config.withFiniteDuration(Config.KEY_SCHEDULER_CLEAN_TASKS_OLDER_THAN) { duration =>
       Metrics.timer("Cleaning old challenge tasks") { () =>
         db.withTransaction { implicit c =>
-          logger.info(s"Cleaning old challenge tasks older than $duration with status [$oldTasksStatusFilter]...")
+          logger.info(
+            s"Cleaning old challenge tasks older than $duration with status [$oldTasksStatusFilter]..."
+          )
           val tasksDeleted =
-            SQL(
-              """DELETE FROM tasks t USING challenges c
+            SQL("""DELETE FROM tasks t USING challenges c
                     WHERE t.parent_id = c.id AND c.updateTasks = true AND t.status IN ({statuses})
                      AND AGE(NOW(), c.modified) > {duration}::INTERVAL
-                     AND AGE(NOW(), t.modified) > {duration}::INTERVAL""").on(
-              'duration -> ToParameterValue.apply[String].apply(String.valueOf(duration)),
-              'statuses -> ToParameterValue.apply[Seq[Int]].apply(oldTasksStatusFilter)
-            ).executeUpdate()
+                     AND AGE(NOW(), t.modified) > {duration}::INTERVAL""")
+              .on(
+                Symbol("duration") -> ToParameterValue
+                  .apply[String]
+                  .apply(String.valueOf(duration)),
+                Symbol("statuses") -> ToParameterValue.apply[Seq[Int]].apply(oldTasksStatusFilter)
+              )
+              .executeUpdate()
           logger.info(s"$tasksDeleted old challenge tasks were found and deleted.")
           // Clear the task cache if any were deleted
           if (tasksDeleted > 0) {
@@ -194,7 +203,8 @@ class SchedulerActor @Inject()(config: Config,
     */
   def cleanExpiredVirtualChallenges(str: String): Unit = {
     db.withConnection { implicit c =>
-      val numberOfDeleted = SQL"""DELETE FROM virtual_challenges WHERE expired < NOW()""".executeUpdate()
+      val numberOfDeleted =
+        SQL"""DELETE FROM virtual_challenges WHERE expired < NOW()""".executeUpdate()
       logger.info(s"$numberOfDeleted Virtual Challenges expired and removed from database")
       // Clear the task cache if any were deleted
       if (numberOfDeleted > 0) {
@@ -220,9 +230,11 @@ class SchedulerActor @Inject()(config: Config,
              |WHERE status = 1 AND changeset_id = -1
              |LIMIT ${config.osmMatcherBatchSize}
          """.stripMargin
-        SQL(query).as(dALManager.task.parser.*).foreach(t => {
-          dALManager.task.matchToOSMChangeSet(t, User.superUser)
-        })
+        SQL(query)
+          .as(dALManager.task.parser.*)
+          .foreach(t => {
+            dALManager.task.matchToOSMChangeSet(t, User.superUser)
+          })
       }
     }
   }
@@ -239,19 +251,24 @@ class SchedulerActor @Inject()(config: Config,
         implicit val id = values(1).toLong
         values(0) match {
           case "p" =>
-            dALManager.project.listChildren(-1).foreach(c => {
-              dALManager.challenge.listChildren(-1)(c.id).filter(_.status.contains(Task.STATUS_FIXED)).foreach(t =>
-                dALManager.task.matchToOSMChangeSet(t, User.superUser, false)
-              )
-            })
+            dALManager.project
+              .listChildren(-1)
+              .foreach(c => {
+                dALManager.challenge
+                  .listChildren(-1)(c.id)
+                  .filter(_.status.contains(Task.STATUS_FIXED))
+                  .foreach(t => dALManager.task.matchToOSMChangeSet(t, User.superUser, false))
+              })
           case "c" =>
-            dALManager.challenge.listChildren(-1).foreach(t => {
-              dALManager.task.matchToOSMChangeSet(t, User.superUser, false)
-            })
+            dALManager.challenge
+              .listChildren(-1)
+              .foreach(t => {
+                dALManager.task.matchToOSMChangeSet(t, User.superUser, false)
+              })
           case "t" =>
             dALManager.task.retrieveById match {
               case Some(t) => dALManager.task.matchToOSMChangeSet(t, User.superUser, false)
-              case None =>
+              case None    =>
             }
           case _ => // Do nothing because there is nothing to do
         }
@@ -262,20 +279,26 @@ class SchedulerActor @Inject()(config: Config,
   def cleanDeleted(action: String): Unit = {
     logger.info(action)
     db.withConnection { implicit c =>
-      val deletedProjects = SQL"DELETE FROM projects WHERE deleted = true RETURNING id".as(SqlParser.int("id").*)
+      val deletedProjects =
+        SQL"DELETE FROM projects WHERE deleted = true RETURNING id".as(SqlParser.int("id").*)
       if (deletedProjects.nonEmpty) {
         logger.debug(s"Finalized deletion of projects with id [${deletedProjects.mkString(",")}]")
       }
-      val deletedChallenges = SQL"DELETE FROM challenges WHERE deleted = true RETURNING id".as(SqlParser.int("id").*)
+      val deletedChallenges =
+        SQL"DELETE FROM challenges WHERE deleted = true RETURNING id".as(SqlParser.int("id").*)
       if (deletedChallenges.nonEmpty) {
-        logger.debug(s"Finalized deletion of challenges with id [${deletedChallenges.mkString(",")}]")
+        logger.debug(
+          s"Finalized deletion of challenges with id [${deletedChallenges.mkString(",")}]"
+        )
       }
     }
   }
 
   def keepRightUpdate(action: String): Unit = {
     logger.info(action)
-    val slidingValue = this.config.config.getOptional[Int](KeepRightProvider.KEY_SLIDING).getOrElse(KeepRightProvider.DEFAULT_SLIDING)
+    val slidingValue = this.config.config
+      .getOptional[Int](KeepRightProvider.KEY_SLIDING)
+      .getOrElse(KeepRightProvider.DEFAULT_SLIDING)
     val slidingErrors = keepRightProvider.errorList.sliding(slidingValue, slidingValue).toList
 
     val integrationList: List[(List[KeepRightError], KeepRightBox)] =
@@ -294,7 +317,7 @@ class SchedulerActor @Inject()(config: Config,
       }
     integrationList.headOption match {
       case Some(h) => this.integrateKeepRight(h, integrationList.tail)
-      case None => //just do nothing
+      case None    => //just do nothing
     }
   }
 
@@ -313,24 +336,34 @@ class SchedulerActor @Inject()(config: Config,
       SQL("DELETE FROM user_top_challenges WHERE country_code IS NULL").executeUpdate()
 
       // Past Month
-      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.ONE_MONTH, config)).executeUpdate()
-      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.ONE_MONTH, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.ONE_MONTH, config))
+        .executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.ONE_MONTH, config))
+        .executeUpdate()
 
       // Past 3 Months
-      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.THREE_MONTHS, config)).executeUpdate()
-      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.THREE_MONTHS, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.THREE_MONTHS, config))
+        .executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.THREE_MONTHS, config))
+        .executeUpdate()
 
       // Past 6 Months
-      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.SIX_MONTHS, config)).executeUpdate()
-      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.SIX_MONTHS, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.SIX_MONTHS, config))
+        .executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.SIX_MONTHS, config))
+        .executeUpdate()
 
       // Past Year
-      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.TWELVE_MONTHS, config)).executeUpdate()
-      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.TWELVE_MONTHS, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.TWELVE_MONTHS, config))
+        .executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.TWELVE_MONTHS, config))
+        .executeUpdate()
 
       // All Time
-      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.ALL_TIME, config)).executeUpdate()
-      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.ALL_TIME, config)).executeUpdate()
+      SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQL(SchedulerActor.ALL_TIME, config))
+        .executeUpdate()
+      SQL(LeaderboardHelper.rebuildTopChallengesSQL(SchedulerActor.ALL_TIME, config))
+        .executeUpdate()
 
       logger.info(s"Rebuilt Challenges Leaderboard succesfully.")
       val totalTime = System.currentTimeMillis - start
@@ -354,13 +387,62 @@ class SchedulerActor @Inject()(config: Config,
 
       val countryCodeMap = boundingBoxFinder.boundingBoxforAll()
       for ((countryCode, boundingBox) <- countryCodeMap) {
-        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(SchedulerActor.ONE_MONTH, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(SchedulerActor.THREE_MONTHS, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(SchedulerActor.SIX_MONTHS, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(SchedulerActor.TWELVE_MONTHS, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(SchedulerActor.ALL_TIME, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildTopChallengesSQLCountry(SchedulerActor.TWELVE_MONTHS, countryCode, boundingBox, config)).executeUpdate()
-        SQL(LeaderboardHelper.rebuildTopChallengesSQLCountry(SchedulerActor.ALL_TIME, countryCode, boundingBox, config)).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(
+            SchedulerActor.ONE_MONTH,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(
+            SchedulerActor.THREE_MONTHS,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(
+            SchedulerActor.SIX_MONTHS,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(
+            SchedulerActor.TWELVE_MONTHS,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildChallengesLeaderboardSQLCountry(
+            SchedulerActor.ALL_TIME,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildTopChallengesSQLCountry(
+            SchedulerActor.TWELVE_MONTHS,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
+        SQL(
+          LeaderboardHelper.rebuildTopChallengesSQLCountry(
+            SchedulerActor.ALL_TIME,
+            countryCode,
+            boundingBox,
+            config
+          )
+        ).executeUpdate()
       }
 
       logger.info(s"Rebuilt Country Leaderboard succesfully.")
@@ -383,22 +465,24 @@ class SchedulerActor @Inject()(config: Config,
         |  ORDER BY created ASC
         |  LIMIT ${config.notificationImmediateEmailBatchSize}
         |) RETURNING *
-      """.stripMargin).as(dALManager.notification.userNotificationEmailParser.*).foreach(notification => {
-        // Send email if user has an email address on file
-        try {
-          dALManager.user.retrieveById(notification.userId) match {
-            case Some(user) =>
-              user.settings.email match {
-                case Some(address) if (!address.isEmpty) =>
-                  this.emailProvider.emailNotification(address, notification)
-                case _ => None
-              }
-            case None => None
+      """.stripMargin)
+        .as(dALManager.notification.userNotificationEmailParser.*)
+        .foreach(notification => {
+          // Send email if user has an email address on file
+          try {
+            dALManager.user.retrieveById(notification.userId) match {
+              case Some(user) =>
+                user.settings.email match {
+                  case Some(address) if (!address.isEmpty) =>
+                    this.emailProvider.emailNotification(address, notification)
+                  case _ => None
+                }
+              case None => None
+            }
+          } catch {
+            case e: Exception => logger.error("Failed to send immediate email: " + e)
           }
-        } catch {
-          case e: Exception => logger.error("Failed to send immediate email: " + e)
-        }
-      })
+        })
     }
   }
 
@@ -411,8 +495,10 @@ class SchedulerActor @Inject()(config: Config,
       digests = SQL(s"""
         |SELECT distinct(user_id) from user_notifications
         |WHERE email_status = ${UserNotification.NOTIFICATION_EMAIL_DIGEST}
-      """.stripMargin).as(SqlParser.int("user_id").*).map(recipientId => {
-        val digestNotifications = SQL(s"""
+      """.stripMargin)
+        .as(SqlParser.int("user_id").*)
+        .map(recipientId => {
+          val digestNotifications = SQL(s"""
             |UPDATE user_notifications
             |SET email_status = ${UserNotification.NOTIFICATION_EMAIL_SENT}
             |WHERE id in (
@@ -422,8 +508,8 @@ class SchedulerActor @Inject()(config: Config,
             |) RETURNING *
         """.stripMargin).as(dALManager.notification.userNotificationEmailParser.*)
 
-        UserNotificationEmailDigest(recipientId, digestNotifications)
-      })
+          UserNotificationEmailDigest(recipientId, digestNotifications)
+        })
     }
 
     // Email each digest if recipient has an email address on file
@@ -451,8 +537,10 @@ class SchedulerActor @Inject()(config: Config,
     * @param head The head of the list, which is a tuple containing a KeepRightError and a KeepRightBox
     * @param tail The tail list of box objects
     */
-  private def integrateKeepRight(head: (List[KeepRightError], KeepRightBox),
-                                 tail: List[(List[KeepRightError], KeepRightBox)]): Unit = {
+  private def integrateKeepRight(
+      head: (List[KeepRightError], KeepRightBox),
+      tail: List[(List[KeepRightError], KeepRightBox)]
+  ): Unit = {
     keepRightProvider.integrate(head._1.map(_.id), head._2) onComplete {
       case Success(x) =>
         if (!x) {
@@ -460,7 +548,7 @@ class SchedulerActor @Inject()(config: Config,
         }
         tail.headOption match {
           case Some(head) => this.integrateKeepRight(head, tail.tail)
-          case None => // just do nothing because we are finished
+          case None       => // just do nothing because we are finished
         }
       case Failure(f) =>
         // something went wrong, we should bail out immediately
@@ -469,11 +557,11 @@ class SchedulerActor @Inject()(config: Config,
   }
 
   /**
-   * Snapshots the user_metrics table and stores in in user_metrics_history
-   *
-   * @param action - action string
-   */
-  def snapshotUserMetrics(action:String) : Unit = {
+    * Snapshots the user_metrics table and stores in in user_metrics_history
+    *
+    * @param action - action string
+    */
+  def snapshotUserMetrics(action: String): Unit = {
     logger.info(action)
 
     db.withConnection { implicit c =>
@@ -512,19 +600,34 @@ class SchedulerActor @Inject()(config: Config,
               FROM user_metrics
            """).executeUpdate()
 
-
       logger.info(s"Succesfully created snapshot of user metrics.")
     }
   }
 
+  /**
+    * Records snaphshots for all challenges.
+    *
+    * @param action - action string
+    */
+  def snapshotChallenges(action: String): Unit = {
+    logger.info(action)
+
+    db.withConnection { implicit c =>
+      val ids = SQL(s"""SELECT id FROM challenges""").as(long("id").*)
+      ids.foreach(id => {
+        this.snapshotManager.recordChallengeSnapshot(id, false)
+      })
+      logger.info(s"Succesfully created snapshots of challenges.")
+    }
+  }
 }
 
 object SchedulerActor {
-  private val ONE_MONTH = 1
-  private val THREE_MONTHS = 3
-  private val SIX_MONTHS = 6
+  private val ONE_MONTH     = 1
+  private val THREE_MONTHS  = 3
+  private val SIX_MONTHS    = 6
   private val TWELVE_MONTHS = 12
-  private val ALL_TIME = -1
+  private val ALL_TIME      = -1
 
   def props = Props[SchedulerActor]
 

@@ -32,7 +32,13 @@ case class TagChangeSubmission(comment: String, changes: List[TagChange])
   * @param osmType The type of object (node, way or relation)
   * @param updates The tag updates that are being requested
   */
-case class TagChange(osmId: Long, osmType: OSMType, updates: Map[String, String], deletes: List[String], version: Option[Int] = None)
+case class TagChange(
+    osmId: Long,
+    osmType: OSMType,
+    updates: Map[String, String],
+    deletes: List[String],
+    version: Option[Int] = None
+)
 
 /**
   * The results from making the requested changes to the object.
@@ -43,11 +49,18 @@ case class TagChange(osmId: Long, osmType: OSMType, updates: Map[String, String]
   * @param updates A map of all updated tags with the original value and the new value
   * @param deletes A map of all deleted tags and the value
   */
-case class TagChangeResult(osmId: Long, osmType: OSMType, creates: Map[String, String], updates: Map[String, (String, String)], deletes: Map[String, String])
+case class TagChangeResult(
+    osmId: Long,
+    osmType: OSMType,
+    creates: Map[String, String],
+    updates: Map[String, (String, String)],
+    deletes: Map[String, String]
+)
 
 object ChangeObjects {
-  implicit val enumReads = Utils.enumReads(OSMType)
-  implicit val tagChangeReads: Reads[TagChange] = Json.reads[TagChange]
+  implicit val enumReads                                      = Utils.enumReads(OSMType)
+  implicit val tagChangeReads: Reads[TagChange]               = Json.reads[TagChange]
   implicit val tagChangeResultWrites: Writes[TagChangeResult] = Json.writes[TagChangeResult]
-  implicit val tagChangeSubmissionReads: Reads[TagChangeSubmission] = Json.reads[TagChangeSubmission]
+  implicit val tagChangeSubmissionReads: Reads[TagChangeSubmission] =
+    Json.reads[TagChangeSubmission]
 }

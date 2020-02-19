@@ -15,7 +15,6 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success, Try}
 
-
 /**
   * Some random utliity helper functions
   *
@@ -23,9 +22,55 @@ import scala.util.{Failure, Success, Try}
   */
 object Utils extends DefaultWrites {
 
-  def tryOptional[T](func: () => T) : Option[T] = {
+  def getProperties(value: JsValue, key: String): JsValue = {
+    (value \ key).asOpt[JsObject] match {
+      case Some(JsObject(p)) =>
+        val idMap = (value \ "id").toOption match {
+          case Some(idValue) => p + ("osmid" -> idValue)
+          case None          => p
+        }
+        val updatedMap = idMap.map { kv =>
+          if (kv._1 == "maproulette") {
+            val fix = kv._2 match {
+              case sf: JsValue => Json.stringify(sf)
+              case _           => ""
+            }
+            kv._1 -> fix
+          } else {
+            try {
+              val strValue = kv._2 match {
+                case v: JsNumber => v.toString
+                case v: JsArray  => v.as[Seq[String]].mkString(",")
+                case v           => v.as[String]
+              }
+              kv._1 -> strValue
+            } catch {
+              // if we can't convert it into a string, then just use the toString method and hope we get something sensible
+              // other option could be just to ignore it.
+              case e: Throwable =>
+                kv._1 -> kv._2.toString
+            }
+          }
+        }.toMap
+        Json.toJson(updatedMap).as[JsObject]
+      case _ => Json.obj()
+    }
+  }
+
+  /**
+    * Unescapes stringified JSON (where the JSON data was surrounded by quotes
+    * and the internal quotes escaped). Removes those surrounding quotes and
+    * unescapes internal quotes, making it suitable for parsing. This is
+    * probably safe to call even on most non-stringified strings that are
+    * intended for JSON parsing
+    */
+  def unescapeStringifiedJSON(j: String): String = {
+    StringUtils.removeStart(StringUtils.removeEnd(j, "\""), "\"").replaceAll("\\\\\"", "\"")
+  }
+
+  def tryOptional[T](func: () => T): Option[T] = {
     Try(func.apply()) match {
-      case Success(value) => Some(value)
+      case Success(value)     => Some(value)
       case Failure(exception) => None
     }
   }
@@ -39,7 +84,10 @@ object Utils extends DefaultWrites {
         try {
           JsSuccess(enum.withName(s))
         } catch {
-          case _: NoSuchElementException => JsError(s"Enumeration expected of type: '${enum.getClass}', but it does not appear to contain the value: '$s'")
+          case _: NoSuchElementException =>
+            JsError(
+              s"Enumeration expected of type: '${enum.getClass}', but it does not appear to contain the value: '$s'"
+            )
         }
       }
       case _ => JsError("String value expected")
@@ -81,14 +129,15 @@ object Utils extends DefaultWrites {
   def insertJsonID(json: JsValue, overwrite: Boolean = false): JsValue =
     insertIntoJson(json, "id", -1L)(LongWrites)
 
-  def insertIntoJson[Value](json: JsValue, key: String, value: Value, overwrite: Boolean = false)
-                           (implicit writes: Writes[Value]): JsValue = {
+  def insertIntoJson[Value](json: JsValue, key: String, value: Value, overwrite: Boolean = false)(
+      implicit writes: Writes[Value]
+  ): JsValue = {
     if (overwrite) {
       json.as[JsObject] + (key -> Json.toJson(value))
     } else {
       (json \ key).toOption match {
         case Some(_) => json
-        case None => json.as[JsObject] + (key -> Json.toJson(value))
+        case None    => json.as[JsObject] + (key -> Json.toJson(value))
       }
     }
   }
@@ -99,80 +148,109 @@ object Utils extends DefaultWrites {
     }.toList
   }
 
-  def getCaseClassValueMappings[T: ClassTag](obj: T)(implicit tag: TypeTag[T]): Map[MethodSymbol, Any] = {
+  def getCaseClassValueMappings[T: ClassTag](
+      obj: T
+  )(implicit tag: TypeTag[T]): Map[MethodSymbol, Any] = {
     implicit val mirror = scala.reflect.runtime.currentMirror
-    val im = mirror.reflect(obj)
+    val im              = mirror.reflect(obj)
     typeOf[T].members.collect {
       case m: MethodSymbol if m.isCaseAccessor => m -> im.reflectMethod(m).apply()
     }.toMap
   }
 
-  def omitEmpty(original: JsObject, strings: Boolean = true, arrays: Boolean = true, objects: Boolean = true): JsObject = {
+  def omitEmpty(
+      original: JsObject,
+      strings: Boolean = true,
+      arrays: Boolean = true,
+      objects: Boolean = true
+  ): JsObject = {
     original.value.foldLeft(original) {
       case (obj, (key, JsString(st))) if strings & st.isEmpty => obj - key
       case (obj, (key, JsArray(arr))) if arrays & arr.isEmpty => obj - key
-      case (obj, (key, JsObject(o))) if objects & o.isEmpty => obj - key
-      case (obj, (_, _)) => obj
+      case (obj, (key, JsObject(o))) if objects & o.isEmpty   => obj - key
+      case (obj, (_, _))                                      => obj
     }
   }
 
   def split(value: String, splitCharacter: String = ","): List[String] = value match {
     case "" => List[String]()
-    case _ => value.split(splitCharacter).toList
+    case _  => value.split(splitCharacter).toList
   }
 
   def optionStringToOptionInt(value: Option[String]): Option[Int] = value match {
     case Some(v) => Some(v.toInt)
-    case None => None
+    case None    => None
   }
 
   def optionStringToOptionLong(value: Option[String]): Option[Long] = value match {
     case Some(v) => Some(v.toLong)
-    case None => None
+    case None    => None
   }
 
   def optionStringToOptionBoolean(value: Option[String]): Option[Boolean] = value match {
     case Some(v) => Some(v.toBoolean)
-    case None => None
+    case None    => None
   }
 
   def optionStringToOptionStringList(value: Option[String]): Option[List[String]] = value match {
     case Some(v) if v.nonEmpty => Some(v.split(",").toList)
-    case None => None
+    case None                  => None
   }
 
-  def toStringList(stringList: String): Option[List[String]] = if (stringList.isEmpty) {
-    None
-  } else {
-    Some(stringList.split(",").toList)
-  }
+  def toStringList(stringList: String): Option[List[String]] =
+    if (stringList.isEmpty) {
+      None
+    } else {
+      Some(stringList.split(",").toList)
+    }
 
-  def toLongList(stringList: String): Option[List[Long]] = if (stringList.isEmpty) {
-    None
-  } else {
-    Some(stringList.split(",").toList.map(_.toLong))
-  }
+  def toLongList(stringList: String): Option[List[Long]] =
+    if (stringList.isEmpty) {
+      None
+    } else {
+      Some(stringList.split(",").toList.map(_.toLong))
+    }
 
-  def toIntList(stringList: String): Option[List[Int]] = if (stringList.isEmpty) {
-    None
-  } else {
-    Some(stringList.split(",").toList.map(_.toInt))
-  }
+  def toIntList(stringList: String): Option[List[Int]] =
+    if (stringList.isEmpty) {
+      None
+    } else {
+      Some(stringList.split(",").toList.map(_.toInt))
+    }
 
-  def getDate(date: String): Option[DateTime] = if (StringUtils.isEmpty(date)) {
-    None
-  } else {
-    Some(DateTime.parse(date))
-  }
+  def toMap(stringMap: String): Option[Map[String, String]] =
+    if (stringMap.isEmpty) {
+      None
+    } else {
+      val resultMap = scala.collection.mutable.Map[String, String]()
+      stringMap.split(",").foreach { r =>
+        {
+          val pair = r.split(":")
+          resultMap += new String(java.util.Base64.getDecoder.decode(pair(0))) ->
+            new String(java.util.Base64.getDecoder.decode(pair(1)))
+        }
+      }
+      Some(resultMap.toMap)
+    }
+
+  def getDate(date: String): Option[DateTime] =
+    if (StringUtils.isEmpty(date)) {
+      None
+    } else {
+      Some(DateTime.parse(date))
+    }
 
   def negativeToOption(value: Long): Option[Long] = value match {
     case v if v < 0 => None
-    case v => Some(v)
+    case v          => Some(v)
   }
 
-  def getResponseJSONNoLock(task: Option[Task], userFunc: (User, Long, Int) => List[User]): JsValue = task match {
+  def getResponseJSONNoLock(
+      task: Option[Task],
+      userFunc: (User, Long, Int) => List[User]
+  ): JsValue = task match {
     case Some(t) => getResponseJSON(Some(t, Lock.emptyLock), userFunc)
-    case None => getResponseJSON(None, userFunc)
+    case None    => getResponseJSON(None, userFunc)
   }
 
   /**
@@ -181,12 +259,15 @@ object Utils extends DefaultWrites {
     * @param task The optional task to check
     * @return If None supplied as Task parameter then will throw NotFoundException
     */
-  def getResponseJSON(task: Option[(Task, Lock)], userFunc: (User, Long, Int) => List[User]): JsValue = task match {
+  def getResponseJSON(
+      task: Option[(Task, Lock)],
+      userFunc: (User, Long, Int) => List[User]
+  ): JsValue = task match {
     case Some(t) =>
       val currentStatus = t._1.status.getOrElse(Task.STATUS_CREATED)
       val locked = t._2.lockedTime match {
         case Some(_) => true
-        case None => false
+        case None    => false
       }
       val userString = userFunc(null, t._1.id, 1).headOption match {
         case Some(user) =>
@@ -197,14 +278,15 @@ object Utils extends DefaultWrites {
            """.stripMargin
         case None => ""
       }
-      Json.parse(
-        s"""
+      Json.parse(s"""
            |{
            |   "id":${t._1.id},
            |   "parentId":${t._1.parent},
            |   "name":"${t._1.name}",
            |   "instruction":"${StringEscapeUtils.escapeJson(t._1.instruction.getOrElse(""))}",
-           |   "statusName":"${Task.getStatusName(currentStatus).getOrElse(Task.STATUS_CREATED_NAME)}",
+           |   "statusName":"${Task
+                      .getStatusName(currentStatus)
+                      .getOrElse(Task.STATUS_CREATED_NAME)}",
            |   "status":$currentStatus, $userString
            |   "geometry":${t._1.geometries},
            |   "locked":$locked,

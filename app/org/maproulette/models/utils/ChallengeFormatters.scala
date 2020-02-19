@@ -9,25 +9,36 @@ import play.api.libs.functional.syntax._
 import play.api.libs.json.JodaReads._
 import play.api.libs.json.JodaWrites._
 import play.api.libs.json._
+import org.maproulette.utils.Utils
 
 /**
   * @author cuthbertm
   */
 trait ChallengeWrites {
-  implicit val challengeGeneralWrites: Writes[ChallengeGeneral] = Json.writes[ChallengeGeneral]
+  implicit val challengeGeneralWrites: Writes[ChallengeGeneral]   = Json.writes[ChallengeGeneral]
   implicit val challengeCreationWrites: Writes[ChallengeCreation] = Json.writes[ChallengeCreation]
 
   implicit object challengePriorityWrites extends Writes[ChallengePriority] {
     override def writes(challengePriority: ChallengePriority): JsValue =
-      JsObject(Seq(
-        "defaultPriority" -> JsNumber(challengePriority.defaultPriority),
-        "highPriorityRule" -> Json.parse(challengePriority.highPriorityRule.getOrElse("{}")),
-        "mediumPriorityRule" -> Json.parse(challengePriority.mediumPriorityRule.getOrElse("{}")),
-        "lowPriorityRule" -> Json.parse(challengePriority.lowPriorityRule.getOrElse("{}"))
-      ))
+      JsObject(
+        Seq(
+          "defaultPriority"    -> JsNumber(challengePriority.defaultPriority),
+          "highPriorityRule"   -> Json.parse(challengePriority.highPriorityRule.getOrElse("{}")),
+          "mediumPriorityRule" -> Json.parse(challengePriority.mediumPriorityRule.getOrElse("{}")),
+          "lowPriorityRule"    -> Json.parse(challengePriority.lowPriorityRule.getOrElse("{}"))
+        )
+      )
   }
 
-  implicit val challengeExtraWrites: Writes[ChallengeExtra] = Json.writes[ChallengeExtra]
+  implicit val challengeExtraWrites = new Writes[ChallengeExtra] {
+    def writes(o: ChallengeExtra): JsValue = {
+      var original = Json.toJson(o)(Json.writes[ChallengeExtra])
+      o.taskStyles match {
+        case Some(ts) => Utils.insertIntoJson(original, "taskStyles", Json.parse(ts), true)
+        case None     => original
+      }
+    }
+  }
 
   implicit val challengeWrites: Writes[Challenge] = (
     (JsPath \ "id").write[Long] and
@@ -44,16 +55,28 @@ trait ChallengeWrites {
       (JsPath \ "status").writeNullable[Int] and
       (JsPath \ "statusMessage").writeNullable[String] and
       (JsPath \ "lastTaskRefresh").writeNullable[DateTime] and
+      (JsPath \ "dataOriginDate").writeNullable[DateTime] and
       (JsPath \ "location").writeNullable[String](new jsonWrites("location")) and
       (JsPath \ "bounding").writeNullable[String](new jsonWrites("bounding"))
-    ) (unlift(Challenge.unapply))
+  )(unlift(Challenge.unapply))
 }
 
 trait ChallengeReads extends DefaultReads {
-  implicit val challengeGeneralReads: Reads[ChallengeGeneral] = Json.reads[ChallengeGeneral]
+  implicit val challengeGeneralReads: Reads[ChallengeGeneral]   = Json.reads[ChallengeGeneral]
   implicit val challengeCreationReads: Reads[ChallengeCreation] = Json.reads[ChallengeCreation]
   implicit val challengePriorityReads: Reads[ChallengePriority] = Json.reads[ChallengePriority]
-  implicit val challengeExtraReads: Reads[ChallengeExtra] = Json.reads[ChallengeExtra]
+
+  implicit val challengeExtraReads = new Reads[ChallengeExtra] {
+    def reads(json: JsValue): JsResult[ChallengeExtra] = {
+      val jsonWithStyles =
+        (json \ "taskStyles").asOpt[JsValue] match {
+          case Some(value) => Utils.insertIntoJson(json, "taskStyles", value.toString(), true)
+          case None        => json
+        }
+
+      Json.fromJson[ChallengeExtra](jsonWithStyles)(Json.reads[ChallengeExtra])
+    }
+  }
 
   implicit val challengeReads: Reads[Challenge] = (
     (JsPath \ "id").read[Long] and
@@ -70,7 +93,8 @@ trait ChallengeReads extends DefaultReads {
       (JsPath \ "status").readNullable[Int] and
       (JsPath \ "statusMessage").readNullable[String] and
       (JsPath \ "lastTaskRefresh").readNullable[DateTime] and
+      (JsPath \ "dataOriginDate").readNullable[DateTime] and
       (JsPath \ "location").readNullable[String](new jsonReads("location")) and
       (JsPath \ "bounding").readNullable[String](new jsonReads("bounding"))
-    ) (Challenge.apply _)
+  )(Challenge.apply _)
 }

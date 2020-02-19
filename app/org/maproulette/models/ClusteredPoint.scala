@@ -12,6 +12,14 @@ import play.api.libs.json.JodaReads._
   */
 case class Point(lat: Double, lng: Double)
 
+case class PointReview(
+    reviewStatus: Option[Int],
+    reviewRequestedBy: Option[Long],
+    reviewedBy: Option[Long],
+    reviewedAt: Option[DateTime],
+    reviewStartedAt: Option[DateTime]
+)
+
 /**
   * This is the clustered point that will be displayed on the map. The popup will contain the title
   * of object with a blurb or description of said object. If the object is a challenge then below
@@ -30,19 +38,37 @@ case class Point(lat: Double, lng: Double)
   * @param type       The type of this ClusteredPoint
   * @param status     The status of the task, only used for task points, ie. not challenge points
   * @param mappedOn   The date this task was mapped
-  * @param reviewStatus  The reviewStatus of the task, only used for task points, ie. not challenge points
-  # @param reviewRequestedBy only used for task points, ie. not challenge points
-  # @param reviewedBy only used for task points, ie. not challenge points
-  # @param reviewdAt  only used for task points, ie. not challenge points
+  * @param pointReview a PointReview instance with review data
+  * @param bundleId id of bundle task is member of, if any
+  * @param isBundlePrimary whether task is primary task in bundle (if a member of a bundle)
   */
-case class ClusteredPoint(id: Long, owner: Long, ownerName: String, title: String, parentId: Long, parentName: String,
-                          point: Point, bounding: JsValue, blurb: String, modified: DateTime, difficulty: Int,
-                          `type`: Int, status: Int, mappedOn: Option[DateTime], reviewStatus: Option[Int], reviewRequestedBy: Option[Int],
-                          reviewedBy: Option[Int], reviewedAt: Option[DateTime], priority: Int)
+case class ClusteredPoint(
+    id: Long,
+    owner: Long,
+    ownerName: String,
+    title: String,
+    parentId: Long,
+    parentName: String,
+    point: Point,
+    bounding: JsValue,
+    blurb: String,
+    modified: DateTime,
+    difficulty: Int,
+    `type`: Int,
+    status: Int,
+    suggestedFix: Option[String] = None,
+    mappedOn: Option[DateTime],
+    pointReview: PointReview,
+    priority: Int,
+    bundleId: Option[Long] = None,
+    isBundlePrimary: Option[Boolean] = None
+)
 
 object ClusteredPoint {
-  implicit val pointWrites: Writes[Point] = Json.writes[Point]
-  implicit val pointReads: Reads[Point] = Json.reads[Point]
+  implicit val pointWrites: Writes[Point]                   = Json.writes[Point]
+  implicit val pointReads: Reads[Point]                     = Json.reads[Point]
+  implicit val pointReviewWrites: Writes[PointReview]       = Json.writes[PointReview]
+  implicit val pointReviewReads: Reads[PointReview]         = Json.reads[PointReview]
   implicit val clusteredPointWrites: Writes[ClusteredPoint] = Json.writes[ClusteredPoint]
-  implicit val clusteredPointReads: Reads[ClusteredPoint] = Json.reads[ClusteredPoint]
+  implicit val clusteredPointReads: Reads[ClusteredPoint]   = Json.reads[ClusteredPoint]
 }

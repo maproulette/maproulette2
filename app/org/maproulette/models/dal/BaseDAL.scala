@@ -14,6 +14,7 @@ import org.maproulette.models.utils.{DALHelper, TransactionManager}
 import org.maproulette.models.{BaseObject, Lock}
 import org.maproulette.permissions.Permission
 import org.maproulette.session.User
+import org.maproulette.utils.{Readers, Writers}
 import org.slf4j.LoggerFactory
 import play.api.db.Database
 import play.api.libs.json.JsValue
@@ -24,7 +25,11 @@ import play.api.libs.json.JsValue
   *
   * @author cuthbertm
   */
-trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManager {
+trait BaseDAL[Key, T <: BaseObject[Key]]
+    extends DALHelper
+    with TransactionManager
+    with Readers
+    with Writers {
   protected val logger = LoggerFactory.getLogger(this.getClass)
 
   // Service that handles all the permissions for the objects
@@ -52,7 +57,7 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
       case locked_time ~ itemType ~ itemId ~ userId =>
         locked_time match {
           case Some(d) => Lock(locked_time, itemType.get, itemId.get, userId.get)
-          case None => Lock.emptyLock
+          case None    => Lock.emptyLock
         }
     }
   }
@@ -76,7 +81,10 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param id      The id of the object that you are updating
     * @return An optional object, it will return None if no object found with a matching id that was supplied
     */
-  def update(updates: JsValue, user: User)(implicit id: Key, c: Option[Connection] = None): Option[T]
+  def update(updates: JsValue, user: User)(
+      implicit id: Key,
+      c: Option[Connection] = None
+  ): Option[T]
 
   /**
     * This is a merge update function that will update the function if it exists otherwise it will
@@ -90,7 +98,10 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param c       A connection to execute against
     * @return
     */
-  def mergeUpdate(element: T, user: User)(implicit id: Key, c: Option[Connection] = None): Option[T] =
+  def mergeUpdate(
+      element: T,
+      user: User
+  )(implicit id: Key, c: Option[Connection] = None): Option[T] =
     Some(this.insert(element, user))
 
   /**
@@ -105,10 +116,13 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param name    The name of the object that you are updating
     * @return An optional object, it will return None if no object found with a matching id that was supplied
     */
-  def updateByName(updates: JsValue, user: User)(implicit name: String, parentId: Long = (-1), c: Option[Connection] = None): Option[T] =
+  def updateByName(
+      updates: JsValue,
+      user: User
+  )(implicit name: String, parentId: Long = (-1), c: Option[Connection] = None): Option[T] =
     this.cacheManager.updateNameCache(String => retrieveByName) match {
       case Some(objID) => this.update(updates, user)(objID)
-      case None => None
+      case None        => None
     }
 
   /**
@@ -121,11 +135,16 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param name The name you are looking up by
     * @return The object that you are looking up, None if not found
     */
-  def retrieveByName(implicit name: String, parentId: Long = (-1), c: Option[Connection] = None): Option[T] = {
+  def retrieveByName(
+      implicit name: String,
+      parentId: Long = (-1),
+      c: Option[Connection] = None
+  ): Option[T] = {
     this.cacheManager.withOptionCaching { () =>
       this.withMRConnection { implicit c =>
-        val query = s"SELECT ${this.retrieveColumns} FROM ${this.tableName} WHERE name = {name} ${this.parentFilter(parentId)}"
-        SQL(query).on('name -> name).as(this.parser.*).headOption
+        val query =
+          s"SELECT ${this.retrieveColumns} FROM ${this.tableName} WHERE name = {name} ${this.parentFilter(parentId)}"
+        SQL(query).on(Symbol("name") -> name).as(this.parser.*).headOption
       }
     }
   }
@@ -138,20 +157,25 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param immediate Ignored for the base function, only used by the ParentDAL which override it and uses it
     * @return Count of deleted row(s)
     */
-  def delete(id: Key, user: User, immediate: Boolean = false)(implicit c: Option[Connection] = None): T = {
+  def delete(id: Key, user: User, immediate: Boolean = false)(
+      implicit c: Option[Connection] = None
+  ): T = {
     implicit val key = id
-    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) { implicit deletedItem =>
-      this.permission.hasObjectAdminAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
-      this.withMRTransaction { implicit c =>
-        val query = s"DELETE FROM ${this.tableName} WHERE id = {id}"
-        SQL(query).on('id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id)).executeUpdate()
-        Some(deletedItem)
-      }
+    val deletedItem = this.cacheManager.withDeletingCache(Long => retrieveById) {
+      implicit deletedItem =>
+        this.permission.hasObjectAdminAccess(deletedItem.asInstanceOf[BaseObject[Long]], user)
+        this.withMRTransaction { implicit c =>
+          val query = s"DELETE FROM ${this.tableName} WHERE id = {id}"
+          SQL(query)
+            .on(Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id))
+            .executeUpdate()
+          Some(deletedItem)
+        }
     }
 
     deletedItem match {
       case Some(item) => item
-      case None => throw new NotFoundException(s"No object with id $id found to delete")
+      case None       => throw new NotFoundException(s"No object with id $id found to delete")
     }
   }
 
@@ -167,29 +191,10 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     this.cacheManager.withCaching { () =>
       this.withMRConnection { implicit c =>
         val query = s"SELECT $retrieveColumns FROM ${this.tableName} WHERE id = {id}"
-        SQL(query).on('id -> ToParameterValue.apply[Key](p = keyToStatement).apply(id)).as(this.parser.singleOpt)
+        SQL(query)
+          .on(Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id))
+          .as(this.parser.singleOpt)
       }
-    }
-  }
-
-  /**
-    * Our key for our objects are current Long, but can support String if need be. This function
-    * handles transforming java objects to SQL for a specific set related to the object key
-    *
-    * @tparam Key The type of Key, this is currently always Long, but could be changed easily enough in the future
-    * @return
-    */
-  def keyToStatement[Key]: ToStatement[Key] = {
-    new ToStatement[Key] {
-      def set(s: PreparedStatement, i: Int, identifier: Key) =
-        identifier match {
-          case id: String => ToStatement.stringToStatement.set(s, i, id)
-          case Some(id: String) => ToStatement.stringToStatement.set(s, i, id)
-          case id: Long => ToStatement.longToStatement.set(s, i, id)
-          case Some(id: Long) => ToStatement.longToStatement.set(s, i, id)
-          case intValue: Integer => ToStatement.integerToStatement.set(s, i, intValue)
-          case list: List[Long@unchecked] => ToStatement.listToStatement[Long].set(s, i, list)
-        }
     }
   }
 
@@ -202,9 +207,11 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param c   The connection if any
     * @return The object that it is retrieving
     */
-  def retrieveRootObject(obj: Either[Key, T], user: User)(implicit c: Option[Connection] = None): Option[_ <: BaseObject[Key]] = {
+  def retrieveRootObject(obj: Either[Key, T], user: User)(
+      implicit c: Option[Connection] = None
+  ): Option[_ <: BaseObject[Key]] = {
     obj match {
-      case Left(id) => this.retrieveById(id, c)
+      case Left(id)     => this.retrieveById(id, c)
       case Right(value) => Some(value)
     }
   }
@@ -220,7 +227,10 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param ids    The list of ids to be retrieved
     * @return A list of objects, empty list if none found
     */
-  def retrieveListById(limit: Int = -1, offset: Int = 0)(implicit ids: List[Key], c: Option[Connection] = None): List[T] = {
+  def retrieveListById(
+      limit: Int = -1,
+      offset: Int = 0
+  )(implicit ids: List[Key], c: Option[Connection] = None): List[T] = {
     if (ids.isEmpty) {
       List.empty
     } else {
@@ -230,8 +240,14 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
             s"""SELECT ${this.retrieveColumns} FROM ${this.tableName}
                           WHERE id IN ({inString})
                           LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-          SQL(query).on('inString -> ToParameterValue.apply[List[Key]](s = keyToSQL, p = keyToStatement).apply(uncachedIDs),
-            'offset -> offset).as(this.parser.*)
+          SQL(query)
+            .on(
+              Symbol("inString") -> ToParameterValue
+                .apply[List[Key]](s = keyToSQL, p = keyToStatement)
+                .apply(uncachedIDs),
+              Symbol("offset") -> offset
+            )
+            .as(this.parser.*)
         }
       }
     }
@@ -241,8 +257,11 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     new ToSql[Key] {
       override def fragment(value: Key): (String, Int) =
         value match {
-          case v: List[Long@unchecked] => ToSql.listToSql[Long].fragment(v)
-          case _ => throw new Exception("Invalid use of function keyToSQL, should only be used for List[Long]] type")
+          case v: List[Long @unchecked] => ToSql.listToSql[Long].fragment(v)
+          case _ =>
+            throw new Exception(
+              "Invalid use of function keyToSQL, should only be used for List[Long]] type"
+            )
         }
     }
   }
@@ -254,14 +273,22 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param names The names to be retrieved
     * @return List of objects, empty list if none found
     */
-  def retrieveListByName(implicit names: List[String], parentId: Long = -1, c: Option[Connection] = None): List[T] = {
+  def retrieveListByName(
+      implicit names: List[String],
+      parentId: Long = -1,
+      c: Option[Connection] = None
+  ): List[T] = {
     if (names.isEmpty) {
       List.empty
     } else {
       this.cacheManager.withNameListCaching { implicit uncachedNames =>
         this.withMRConnection { implicit c =>
-          val query = s"SELECT ${this.retrieveColumns} FROM ${this.tableName} WHERE name IN ({inString}) ${this.parentFilter(parentId)}"
-          SQL(query).on('inString -> ToParameterValue.apply[List[String]].apply(uncachedNames)).as(this.parser.*)
+          val query =
+            s"SELECT ${this.retrieveColumns} FROM ${this.tableName} WHERE name IN ({inString}) ${this
+              .parentFilter(parentId)}"
+          SQL(query)
+            .on(Symbol("inString") -> ToParameterValue.apply[List[String]].apply(uncachedNames))
+            .as(this.parser.*)
         }
       }
     }
@@ -277,9 +304,14 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param limit  Limit the number of results to be returned
     * @return A list of tags that contain the supplied prefix
     */
-  def retrieveListByPrefix(prefix: String, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false,
-                           orderColumn: String = "id", orderDirection: String = "ASC")
-                          (implicit parentId: Long = -1, c: Option[Connection] = None): List[T] =
+  def retrieveListByPrefix(
+      prefix: String,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0,
+      onlyEnabled: Boolean = false,
+      orderColumn: String = "id",
+      orderDirection: String = "ASC"
+  )(implicit parentId: Long = -1, c: Option[Connection] = None): List[T] =
     this.find(s"$prefix%", limit, offset, onlyEnabled, orderColumn, orderDirection)
 
   /**
@@ -291,17 +323,26 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param offset       For paging, ie. the page number starting at 0
     * @return A list of tags that contain the supplied prefix
     */
-  def find(searchString: String, limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false,
-           orderColumn: String = "id", orderDirection: String = "ASC")
-          (implicit parentId: Long = -1, c: Option[Connection] = None): List[T] = {
+  def find(
+      searchString: String,
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0,
+      onlyEnabled: Boolean = false,
+      orderColumn: String = "id",
+      orderDirection: String = "ASC"
+  )(implicit parentId: Long = -1, c: Option[Connection] = None): List[T] = {
     this.withMRConnection { implicit c =>
       val query =
         s"""SELECT ${this.retrieveColumns} FROM ${this.tableName}
                       WHERE ${this.searchField("name")(None)} ${this.enabled(onlyEnabled)}
                       ${this.parentFilter(parentId)}
-                      ${this.order(orderColumn = Some(orderColumn), orderDirection = orderDirection, nameFix = true)}
+                      ${this.order(
+          orderColumn = Some(orderColumn),
+          orderDirection = orderDirection,
+          nameFix = true
+        )}
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-      SQL(query).on('ss -> searchString, 'offset -> offset).as(this.parser.*)
+      SQL(query).on(Symbol("ss") -> searchString, Symbol("offset") -> offset).as(this.parser.*)
     }
   }
 
@@ -318,9 +359,14 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
     * @param c              The implicit connection to use for the quer
     * @return A list of objects
     */
-  def list(limit: Int = Config.DEFAULT_LIST_SIZE, offset: Int = 0, onlyEnabled: Boolean = false, searchString: String = "",
-           orderColumn: String = "id", orderDirection: String = "ASC")
-          (implicit parentId: Long = -1, c: Option[Connection] = None): List[T] = {
+  def list(
+      limit: Int = Config.DEFAULT_LIST_SIZE,
+      offset: Int = 0,
+      onlyEnabled: Boolean = false,
+      searchString: String = "",
+      orderColumn: String = "id",
+      orderDirection: String = "ASC"
+  )(implicit parentId: Long = -1, c: Option[Connection] = None): List[T] = {
     implicit val ids = List.empty
     this.cacheManager.withIDListCaching { implicit uncachedIDs =>
       this.withMRConnection { implicit c =>
@@ -328,14 +374,19 @@ trait BaseDAL[Key, T <: BaseObject[Key]] extends DALHelper with TransactionManag
           s"""SELECT ${this.retrieveColumns} FROM ${this.tableName}
                         WHERE ${this.searchField("name")(None)}
                         ${this.enabled(onlyEnabled)} ${this.parentFilter(parentId)}
-                        ${
-            this.order(orderColumn = Some(orderColumn), orderDirection = orderDirection, nameFix = true,
-              ignoreCase = (orderColumn == "name" || orderColumn == "display_name"))
-          }
+                        ${this.order(
+            orderColumn = Some(orderColumn),
+            orderDirection = orderDirection,
+            nameFix = true,
+            ignoreCase = (orderColumn == "name" || orderColumn == "display_name")
+          )}
                         LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-        SQL(query).on('ss -> this.search(searchString),
-          'offset -> ToParameterValue.apply[Int].apply(offset)
-        ).as(this.parser.*)
+        SQL(query)
+          .on(
+            Symbol("ss")     -> this.search(searchString),
+            Symbol("offset") -> ToParameterValue.apply[Int].apply(offset)
+          )
+          .as(this.parser.*)
       }
     }
   }

@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 package controllers
 
+import java.util.Calendar
+
 import akka.actor.ActorRef
 import javax.inject.{Inject, Named}
 import org.maproulette.exception.{StatusMessage, StatusMessages}
@@ -11,12 +13,16 @@ import org.maproulette.session.SessionManager
 import play.api.libs.json.{JsString, Json}
 import play.api.mvc._
 
-class Application @Inject()(components: ControllerComponents,
-                            sessionManager: SessionManager,
-                            dalManager: DALManager,
-                            @Named("scheduler-actor") schedulerActor: ActorRef
-                           ) extends AbstractController(components) with StatusMessages {
-  def untrail(path: String) : Action[AnyContent] = Action {
+import scala.concurrent.{ExecutionContext, Future}
+
+class Application @Inject() (
+    components: ControllerComponents,
+    sessionManager: SessionManager,
+    dalManager: DALManager,
+    @Named("scheduler-actor") schedulerActor: ActorRef
+) extends AbstractController(components)
+    with StatusMessages {
+  def untrail(path: String): Action[AnyContent] = Action {
     MovedPermanently(s"/$path")
   }
 
@@ -38,6 +44,13 @@ class Application @Inject()(components: ControllerComponents,
     sessionManager.authenticatedRequest { implicit user =>
       schedulerActor ! RunJob(name, action)
       Ok
+    }
+  }
+
+  def ping(): Action[AnyContent] = Action.async { implicit request =>
+    import ExecutionContext.Implicits.global
+    Future {
+      Ok(s"Pong - ${Calendar.getInstance().getTime()}")
     }
   }
 }

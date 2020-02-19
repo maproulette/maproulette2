@@ -12,18 +12,24 @@ import org.maproulette.session.dal.{UserDAL, UserGroupDAL}
   * @author cuthbertm
   */
 @Singleton
-class DALManager @Inject()(tagDAL: TagDAL,
-                           taskDAL: TaskDAL,
-                           challengeDAL: ChallengeDAL,
-                           virtualChallengeDAL: VirtualChallengeDAL,
-                           surveyDAL: SurveyDAL,
-                           projectDAL: ProjectDAL,
-                           userDAL: UserDAL,
-                           userGroupDAL: UserGroupDAL,
-                           notificationDAL: NotificationDAL,
-                           actionManager: ActionManager,
-                           dataManager: DataManager,
-                           statusActionManager: StatusActionManager) {
+class DALManager @Inject() (
+    tagDAL: TagDAL,
+    taskDAL: TaskDAL,
+    challengeDAL: ChallengeDAL,
+    virtualChallengeDAL: VirtualChallengeDAL,
+    surveyDAL: SurveyDAL,
+    projectDAL: ProjectDAL,
+    userDAL: UserDAL,
+    userGroupDAL: UserGroupDAL,
+    notificationDAL: NotificationDAL,
+    actionManager: ActionManager,
+    dataManager: DataManager,
+    commentDAL: CommentDAL,
+    taskBundleDAL: TaskBundleDAL,
+    taskReviewDAL: TaskReviewDAL,
+    taskClusterDAL: TaskClusterDAL,
+    statusActionManager: StatusActionManager
+) {
   def tag: TagDAL = tagDAL
 
   def task: TaskDAL = taskDAL
@@ -48,15 +54,23 @@ class DALManager @Inject()(tagDAL: TagDAL,
 
   def statusAction: StatusActionManager = statusActionManager
 
+  def comment: CommentDAL = commentDAL
+
+  def taskBundle: TaskBundleDAL = taskBundleDAL
+
+  def taskReview: TaskReviewDAL = taskReviewDAL
+
+  def taskCluster: TaskClusterDAL = taskClusterDAL
+
   def getManager(itemType: ItemType): BaseDAL[Long, _] = {
     itemType match {
-      case ProjectType() => projectDAL
-      case ChallengeType() => challengeDAL
+      case ProjectType()          => projectDAL
+      case ChallengeType()        => challengeDAL
       case VirtualChallengeType() => virtualChallengeDAL
-      case SurveyType() => surveyDAL
-      case TaskType() => taskDAL
-      case UserType() => userDAL
-      case TagType() => tagDAL
+      case SurveyType()           => surveyDAL
+      case TaskType()             => taskDAL
+      case UserType()             => userDAL
+      case TagType()              => tagDAL
     }
   }
 }

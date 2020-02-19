@@ -61,10 +61,11 @@ object MPExceptionUtil {
   def internalAsyncExceptionCatcher(block: () => Future[Result]): Future[Result] = {
     val p = Promise[Result]
     Try(block()) match {
-      case Success(f) => f onComplete {
-        case Success(result) => p success result
-        case Failure(e) => p success manageException(e)
-      }
+      case Success(f) =>
+        f onComplete {
+          case Success(result) => p success result
+          case Failure(e)      => p success manageException(e)
+        }
       case Failure(e) => p success manageException(e)
     }
     p.future
@@ -95,6 +96,7 @@ object MPExceptionUtil {
 
   private def manageUIException(e: Throwable): Result = {
     logger.debug(e.getMessage, e)
-    Redirect(s"/mr3/error", Map("errormsg" -> Seq(e.getMessage)), PERMANENT_REDIRECT).withHeaders(("Cache-Control", "no-cache"))
+    Redirect(s"/mr3/error", Map("errormsg" -> Seq(e.getMessage)), PERMANENT_REDIRECT)
+      .withHeaders(("Cache-Control", "no-cache"))
   }
 }

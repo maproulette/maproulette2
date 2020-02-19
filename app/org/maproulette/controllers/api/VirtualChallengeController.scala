@@ -11,7 +11,14 @@ import org.maproulette.data.{ActionManager, TaskViewed, VirtualChallengeType}
 import org.maproulette.exception.NotFoundException
 import org.maproulette.models.dal.{TaskDAL, VirtualChallengeDAL}
 import org.maproulette.models.{ClusteredPoint, Task, VirtualChallenge}
-import org.maproulette.session.{SearchLocation, SearchParameters, SessionManager, User}
+import org.maproulette.session.{
+  SearchLocation,
+  SearchParameters,
+  SearchChallengeParameters,
+  SessionManager,
+  User,
+  TaskPropertySearch
+}
 import org.maproulette.utils.Utils
 import play.api.libs.json._
 import play.api.mvc._
@@ -21,28 +28,33 @@ import scala.concurrent.duration.Duration
 /**
   * @author mcuthbert
   */
-class VirtualChallengeController @Inject()(override val sessionManager: SessionManager,
-                                           override val actionManager: ActionManager,
-                                           override val dal: VirtualChallengeDAL,
-                                           taskDAL: TaskDAL,
-                                           config: Config,
-                                           components: ControllerComponents,
-                                           override val bodyParsers: PlayBodyParsers)
-  extends AbstractController(components) with CRUDController[VirtualChallenge] {
+class VirtualChallengeController @Inject() (
+    override val sessionManager: SessionManager,
+    override val actionManager: ActionManager,
+    override val dal: VirtualChallengeDAL,
+    taskDAL: TaskDAL,
+    config: Config,
+    components: ControllerComponents,
+    override val bodyParsers: PlayBodyParsers
+) extends AbstractController(components)
+    with CRUDController[VirtualChallenge] {
 
-  override implicit val tReads: Reads[VirtualChallenge] = VirtualChallenge.virtualChallengeReads
+  override implicit val tReads: Reads[VirtualChallenge]   = VirtualChallenge.virtualChallengeReads
   override implicit val tWrites: Writes[VirtualChallenge] = VirtualChallenge.virtualChallengeWrites
-  override implicit val itemType = VirtualChallengeType()
+  override implicit val itemType                          = VirtualChallengeType()
 
   //writes for tasks
   implicit val taskWrites: Writes[Task] = Task.TaskFormat
-  implicit val taskReads: Reads[Task] = Task.TaskFormat
+  implicit val taskReads: Reads[Task]   = Task.TaskFormat
   //reads and writes for Search Parameters
-  implicit val locationWrites = Json.writes[SearchLocation]
-  implicit val locationReads = Json.reads[SearchLocation]
-  implicit val paramsWrites = Json.writes[SearchParameters]
-  implicit val paramsReads = Json.reads[SearchParameters]
-
+  implicit val locationWrites           = Json.writes[SearchLocation]
+  implicit val locationReads            = Json.reads[SearchLocation]
+  implicit val taskPropertySearchWrites = Json.writes[TaskPropertySearch]
+  implicit val taskPropertySearchReads  = Json.reads[TaskPropertySearch]
+  implicit val challengeParamsWrites    = Json.writes[SearchChallengeParameters]
+  implicit val challengeParamsReads     = Json.reads[SearchChallengeParameters]
+  implicit val paramsWrites             = Json.writes[SearchParameters]
+  implicit val paramsReads              = Json.reads[SearchParameters]
 
   /**
     * This function allows sub classes to modify the body, primarily this would be used for inserting
@@ -57,9 +69,12 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     // if expiry is set as a hours from now, pull it out and convert to timestamp.
     val expiryValue = (jsonBody \ "expiry").asOpt[String] match {
       case Some(ex) => Duration(ex).toMillis.toInt
-      case None => config.virtualChallengeExpiry.toMillis.toInt
+      case None     => config.virtualChallengeExpiry.toMillis.toInt
     }
-    val expiryUpdate = Utils.insertIntoJson(jsonBody, "expiry", DateTime.now().plusMillis(expiryValue), true)(JodaWrites.JodaDateTimeNumberWrites)
+    val expiryUpdate =
+      Utils.insertIntoJson(jsonBody, "expiry", DateTime.now().plusMillis(expiryValue), true)(
+        JodaWrites.JodaDateTimeNumberWrites
+      )
     val searchUpdate = Utils.insertIntoJson(expiryUpdate, "searchParameters", SearchParameters())
     Utils.insertIntoJson(searchUpdate, "ownerId", user.osmProfile.id)
   }
@@ -72,10 +87,11 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param offset paging offset
     * @return
     */
-  def listTasks(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Json.toJson(this.dal.listTasks(id, User.userOrMocked(user), limit, offset)))
-    }
+  def listTasks(id: Long, limit: Int, offset: Int): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        Ok(Json.toJson(this.dal.listTasks(id, User.userOrMocked(user), limit, offset)))
+      }
   }
 
   /**
@@ -100,17 +116,18 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param id
     * @return
     */
-  def getRandomTask(id: Long, proximity: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      SearchParameters.withSearch { p =>
-        val proximityOption = if (proximity < 0) {
-          None
-        } else {
-          Some(proximity)
+  def getRandomTask(id: Long, proximity: Long): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        SearchParameters.withSearch { p =>
+          val proximityOption = if (proximity < 0) {
+            None
+          } else {
+            Some(proximity)
+          }
+          Ok(Json.toJson(this.getRandomTask(id, p, user, proximityOption)))
         }
-        Ok(Json.toJson(this.getRandomTask(id, p, user, proximityOption)))
       }
-    }
   }
 
   /**
@@ -119,26 +136,35 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param name
     * @return
     */
-  def getRandomTask(name: String, proximity: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      SearchParameters.withSearch { p =>
-        this.dal.retrieveByName(name) match {
-          case Some(vc) =>
-            val proximityOption = if (proximity < 0) {
-              None
-            } else {
-              Some(proximity)
-            }
-            Ok(Json.toJson(this.getRandomTask(vc.id, p, user, proximityOption)))
-          case None => throw new NotFoundException("No Virtual Challenge found with that challenge name.")
+  def getRandomTask(name: String, proximity: Long): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        SearchParameters.withSearch { p =>
+          this.dal.retrieveByName(name) match {
+            case Some(vc) =>
+              val proximityOption = if (proximity < 0) {
+                None
+              } else {
+                Some(proximity)
+              }
+              Ok(Json.toJson(this.getRandomTask(vc.id, p, user, proximityOption)))
+            case None =>
+              throw new NotFoundException("No Virtual Challenge found with that challenge name.")
+          }
         }
       }
-    }
   }
 
-  private def getRandomTask(id: Long, params: SearchParameters, user: Option[User], proximity: Option[Long] = None): Option[Task] = {
+  private def getRandomTask(
+      id: Long,
+      params: SearchParameters,
+      user: Option[User],
+      proximity: Option[Long] = None
+  ): Option[Task] = {
     val results = this.dal.getRandomTask(id, params, User.userOrMocked(user), proximity)
-    results.foreach(task => this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), ""))
+    results.foreach(task =>
+      this.actionManager.setAction(user, this.itemType.convertToItem(task.id), TaskViewed(), "")
+    )
     results
   }
 
@@ -149,11 +175,17 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param currentTaskId The current task id that is being viewed
     * @return The next task in the list
     */
-  def getSequentialNextTask(challengeId: Long, currentTaskId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Utils.getResponseJSON(this.dal.getSequentialNextTask(challengeId, currentTaskId), this.taskDAL.getLastModifiedUser));
+  def getSequentialNextTask(challengeId: Long, currentTaskId: Long): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        Ok(
+          Utils.getResponseJSON(
+            this.dal.getSequentialNextTask(challengeId, currentTaskId),
+            this.taskDAL.getLastModifiedUser
+          )
+        );
+      }
     }
-  }
 
   /**
     * Gets the previous task in sequential order for the specified challenge
@@ -162,11 +194,17 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param currentTaskId The current task id that is being viewed
     * @return The previous task in the list
     */
-  def getSequentialPreviousTask(challengeId: Long, currentTaskId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      Ok(Utils.getResponseJSON(this.dal.getSequentialPreviousTask(challengeId, currentTaskId), this.taskDAL.getLastModifiedUser));
+  def getSequentialPreviousTask(challengeId: Long, currentTaskId: Long): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        Ok(
+          Utils.getResponseJSON(
+            this.dal.getSequentialPreviousTask(challengeId, currentTaskId),
+            this.taskDAL.getLastModifiedUser
+          )
+        );
+      }
     }
-  }
 
   /**
     * Gets tasks near the given task id within the given virtual challenge
@@ -176,12 +214,14 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param limit        The maximum number of nearby tasks to return
     * @return
     */
-  def getNearbyTasks(challengeId: Long, proximityId: Long, limit: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      val results = this.dal.getNearbyTasks(User.userOrMocked(user), challengeId, proximityId, limit)
-      Ok(Json.toJson(results))
+  def getNearbyTasks(challengeId: Long, proximityId: Long, limit: Int): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        val results =
+          this.dal.getNearbyTasks(User.userOrMocked(user), challengeId, proximityId, limit)
+        Ok(Json.toJson(results))
+      }
     }
-  }
 
   /**
     * Gets the geo json for all the tasks associated with the challenge
@@ -190,30 +230,33 @@ class VirtualChallengeController @Inject()(override val sessionManager: SessionM
     * @param statusFilter Filtering by status of the tasks
     * @return
     */
-  def getVirtualChallengeGeoJSON(challengeId: Long, statusFilter: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      this.dal.retrieveById(challengeId) match {
-        case Some(c) =>
-          val filter = if (StringUtils.isEmpty(statusFilter)) {
-            None
-          } else {
-            Some(Utils.split(statusFilter).map(_.toInt))
-          }
-          Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, filter)))
-        case None => throw new NotFoundException(s"No virtual challenge with id $challengeId found.")
+  def getVirtualChallengeGeoJSON(challengeId: Long, statusFilter: String): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        this.dal.retrieveById(challengeId) match {
+          case Some(c) =>
+            val filter = if (StringUtils.isEmpty(statusFilter)) {
+              None
+            } else {
+              Some(Utils.split(statusFilter).map(_.toInt))
+            }
+            Ok(Json.parse(this.dal.getChallengeGeometry(challengeId, filter)))
+          case None =>
+            throw new NotFoundException(s"No virtual challenge with id $challengeId found.")
+        }
       }
     }
-  }
 
-  def getClusteredPoints(challengeId: Long, statusFilter: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      implicit val writes = ClusteredPoint.clusteredPointWrites
-      val filter = if (StringUtils.isEmpty(statusFilter)) {
-        None
-      } else {
-        Some(Utils.split(statusFilter).map(_.toInt))
+  def getClusteredPoints(challengeId: Long, statusFilter: String): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        implicit val writes = ClusteredPoint.clusteredPointWrites
+        val filter = if (StringUtils.isEmpty(statusFilter)) {
+          None
+        } else {
+          Some(Utils.split(statusFilter).map(_.toInt))
+        }
+        Ok(Json.toJson(this.dal.getClusteredPoints(challengeId, filter)))
       }
-      Ok(Json.toJson(this.dal.getClusteredPoints(challengeId, filter)))
     }
-  }
 }

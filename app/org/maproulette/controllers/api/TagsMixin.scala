@@ -3,10 +3,11 @@
 package org.maproulette.controllers.api
 
 import org.apache.commons.lang3.StringUtils
-import org.maproulette.controllers.CRUDController
+import org.maproulette.controllers.SessionController
 import org.maproulette.data._
 import org.maproulette.exception.MPExceptionUtil
-import org.maproulette.models.dal.{TagDAL, TagDALMixin}
+import org.maproulette.models.dal.TagDAL
+import org.maproulette.models.dal.mixin.TagDALMixin
 import org.maproulette.models.{BaseObject, Tag}
 import org.maproulette.session.User
 import org.maproulette.utils.Utils
@@ -17,12 +18,20 @@ import play.api.mvc.{Action, AnyContent}
   * @author cuthbertm
   */
 trait TagsMixin[T <: BaseObject[Long]] {
+  this: SessionController =>
 
-  this: CRUDController[T] =>
+  // The default reads that allows the class to read the json from a posted json body
+  implicit val tReads: Reads[T]
+  // The default writes that allows the class to write the object as json to a response body
+  implicit val tWrites: Writes[T]
 
   def tagDAL: TagDAL
-
   def dalWithTags: TagDALMixin[T]
+
+  // the type of object that the controller is executing against
+  implicit val itemType: ItemType
+  // The name of the base table that the tags would be pulling from ie. Task table
+  implicit val tableName: String
 
   /**
     * Gets tasks based on tags, this is regardless of the project or challenge parents.
@@ -32,15 +41,20 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param offset The paging offset, incrementing will take you to the next set in the list
     * @return The html Result containing a json array of the found tasks
     */
-  def getItemsBasedOnTags(tags: String, limit: Int, offset: Int): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      if (StringUtils.isEmpty(tags)) {
-        Utils.badRequest("A comma separated list of tags need to be provided via the query string. Example: ?tags=tag1,tag2")
-      } else {
-        Ok(Json.toJson(this.dalWithTags.getItemsBasedOnTags(tags.split(",").toList, limit, offset)))
+  def getItemsBasedOnTags(tags: String, limit: Int, offset: Int): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.userAwareRequest { implicit user =>
+        if (StringUtils.isEmpty(tags)) {
+          Utils.badRequest(
+            "A comma separated list of tags need to be provided via the query string. Example: ?tags=tag1,tag2"
+          )
+        } else {
+          Ok(
+            Json.toJson(this.dalWithTags.getItemsBasedOnTags(tags.split(",").toList, limit, offset))
+          )
+        }
       }
     }
-  }
 
   /**
     * Deletes tags from a given item.
@@ -50,20 +64,55 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param tags A comma separated list of tags to delete
     * @return
     */
-  def deleteTagsFromItem(id: Long, tags: String): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedRequest { implicit user =>
-      if (StringUtils.isEmpty(tags)) {
-        Utils.badRequest("A comma separated list of tags need to be provided via the query string. Example: ?tags=tag1,tag2")
-      } else {
-        MPExceptionUtil.internalExceptionCatcher { () =>
-          val tagList = tags.split(",").toList
-          if (tagList.nonEmpty) {
-            this.dalWithTags.deleteItemStringTags(id, tagList, user)
-            this.actionManager.setAction(Some(user), this.itemType.convertToItem(id), TagRemoved(), tags)
+  def deleteTagsFromItem(id: Long, tags: String): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        if (StringUtils.isEmpty(tags)) {
+          Utils.badRequest(
+            "A comma separated list of tags need to be provided via the query string. Example: ?tags=tag1,tag2"
+          )
+        } else {
+          MPExceptionUtil.internalExceptionCatcher { () =>
+            val tagList = tags.split(",").toList
+            if (tagList.nonEmpty) {
+              this.dalWithTags.deleteItemStringTags(id, tagList, user)
+              this.actionManager
+                .setAction(Some(user), this.itemType.convertToItem(id), TagRemoved(), tags)
+            }
+            NoContent
           }
-          NoContent
         }
       }
+  }
+
+  def updateItemTags(id: Long, tags: String): Action[AnyContent] = Action.async {
+    implicit request =>
+      this.sessionManager.authenticatedRequest { implicit user =>
+        val tagList    = tags.split(",").toList
+        val tagObjects = tagList.map((tag) => new Tag(-1, tag.trim, tagType = this.tableName))
+        val tagIds     = this.tagDAL.updateTagList(tagObjects, user).map(_.id)
+
+        // now we have the ids for the supplied tags, then lets map them to the item created
+        this.dalWithTags.updateItemTags(id, tagIds, user, true)
+        this.actionManager
+          .setAction(Some(user), this.itemType.convertToItem(id), TagAdded(), tagIds.mkString(","))
+
+        Ok(Json.toJson(this.getTags(id)))
+      }
+  }
+
+  /**
+    * Gets the tags for either the challenge or the task depending on what controller is using the mixin
+    *
+    * @param id The id of the object you are looking for
+    * @return A list of tags associated with the item
+    */
+  def getTags(id: Long): List[Tag] = {
+    this.itemType match {
+      case ChallengeType() => this.tagDAL.listByChallenge(id)
+      case SurveyType()    => this.tagDAL.listByChallenge(id)
+      case TaskType()      => this.tagDAL.listByTask(id)
+      case _               => List.empty
     }
   }
 
@@ -75,13 +124,18 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param tags A comma separated list of tags to add
     * @param user the user executing the request
     */
-  def addTagstoItem(id:Long, tags:List[Tag], user:User): Unit = {
+  def addTagstoItem(id: Long, tags: List[Tag], user: User): Unit = {
     val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
 
     if (tagIds.nonEmpty) {
       // now we have the ids for the supplied tags, then lets map them to the item created
       this.dalWithTags.updateItemTags(id, tagIds, user)
-      this.actionManager.setAction(Some(user), this.itemType.convertToItem(id), TagAdded(), tagIds.mkString(","))
+      this.actionManager.setAction(
+        Some(user),
+        this.itemType.convertToItem(id),
+        TagAdded(),
+        tagIds.mkString(",")
+      )
     }
   }
 
@@ -97,58 +151,72 @@ trait TagsMixin[T <: BaseObject[Long]] {
     * @param createdObject The Task that was created by the create function
     * @param user          the user executing the request
     */
-  def extractTags(body: JsValue, createdObject: T, user: User, completeList: Boolean = false): Unit = {
-    val tags: List[Tag] = body \ "tags" match {
+  def extractTags(
+      body: JsValue,
+      createdObject: T,
+      user: User,
+      completeList: Boolean = false
+  ): Unit = {
+    val tags: Option[List[Tag]] = body \ "tags" match {
       case tags: JsDefined =>
         // this case is for a comma separated list, either of ints or strings
-        tags.as[String].split(",").toList.map(tag => {
+        if (!tags.isEmpty) {
           try {
-            Tag(tag.toLong, "")
-          } catch {
-            case e: NumberFormatException =>
-              // this is the case where a name is supplied, so we will either search for a tag with
-              // the same name or create a new tag with the current name
-              this.tagDAL.retrieveByName(tag) match {
-                case Some(t) => t.asInstanceOf[Tag]
-                case None =>
-                  Tag(-1, tag, tagType = this.dal.tableName)
+            val tagList = tags.validate[List[String]] match {
+              case s: JsSuccess[List[String]] => tags.as[List[String]]
+              case e: JsError                 => tags.as[String].split(",").toList
+            }
+
+            Some(tagList.map(tag => {
+              try {
+                Tag(tag.toLong, "")
+              } catch {
+                case e: NumberFormatException =>
+                  // this is the case where a name is supplied, so we will either search for a tag with
+                  // the same name or create a new tag with the current name
+                  this.tagDAL.retrieveByName(tag) match {
+                    case Some(t) => t.asInstanceOf[Tag]
+                    case None =>
+                      Tag(-1, tag, tagType = this.tableName)
+                  }
               }
+            }))
+          } catch {
+            case e: Throwable =>
+              None
           }
-        })
+        } else {
+          Some(List.empty)
+        }
       case tags: JsUndefined =>
         (body \ "fulltags").asOpt[List[JsValue]] match {
           case Some(tagList) =>
-            tagList.map(value => {
-              val identifier = (value \ "id").asOpt[Long].getOrElse(-1L)
-              val name = (value \ "name").asOpt[String].getOrElse("")
+            Some(tagList.map(value => {
+              val identifier  = (value \ "id").asOpt[Long].getOrElse(-1L)
+              val name        = (value \ "name").asOpt[String].getOrElse("")
               val description = (value \ "description").asOpt[String]
               Tag(identifier, name, description)
-            })
-          case None => List.empty
+            }))
+          case None => None
         }
-      case _ => List.empty
+      case _ => None
     }
-    val tagIds = this.tagDAL.updateTagList(tags, user).map(_.id)
 
-    if (tagIds.nonEmpty || completeList) {
-      // now we have the ids for the supplied tags, then lets map them to the item created
-      this.dalWithTags.updateItemTags(createdObject.id, tagIds, user, completeList)
-      this.actionManager.setAction(Some(user), this.itemType.convertToItem(createdObject.id), TagAdded(), tagIds.mkString(","))
-    }
-  }
+    tags match {
+      case Some(tagList) =>
+        val tagIds = this.tagDAL.updateTagList(tagList, user).map(_.id)
 
-  /**
-    * Gets the tags for either the challenge or the task depending on what controller is using the mixin
-    *
-    * @param id The id of the object you are looking for
-    * @return A list of tags associated with the item
-    */
-  def getTags(id: Long): List[Tag] = {
-    this.itemType match {
-      case ChallengeType() => this.tagDAL.listByChallenge(id)
-      case SurveyType() => this.tagDAL.listByChallenge(id)
-      case TaskType() => this.tagDAL.listByTask(id)
-      case _ => List.empty
+        if (tagIds.nonEmpty || completeList) {
+          // now we have the ids for the supplied tags, then lets map them to the item created
+          this.dalWithTags.updateItemTags(createdObject.id, tagIds, user, completeList)
+          this.actionManager.setAction(
+            Some(user),
+            this.itemType.convertToItem(createdObject.id),
+            TagAdded(),
+            tagIds.mkString(",")
+          )
+        }
+      case _ =>
     }
   }
 }

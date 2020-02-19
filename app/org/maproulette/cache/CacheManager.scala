@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 package org.maproulette.cache
 
+import org.maproulette.Config
+import play.api.libs.json.{Reads, Writes}
+
 import scala.collection.mutable
 
 /**
@@ -14,9 +17,12 @@ import scala.collection.mutable
   *
   * @author cuthbertm
   */
-class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DEFAULT_CACHE_LIMIT, cacheExpiry: Int = CacheManager.DEFAULT_CACHE_EXPIRY) {
-  val cache = new CacheStorage[Key, A](cacheLimit, cacheExpiry)
-  val nameCache = mutable.Map[String, Key]()
+class CacheManager[Key, A <: CacheObject[Key]](config: Config, prefix: String = "")(
+    implicit r: Reads[A],
+    w: Writes[A]
+) {
+  val cache: Cache[Key, A] = CacheManager(config, prefix)
+  val nameCache            = mutable.Map[String, Key]()
 
   def clearCaches: Unit = {
     this.cache.clear()
@@ -30,7 +36,9 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param name The name of the object you are looking for
     * @return An optional key for the object, None if not found
     */
-  def updateNameCache(block: String => Option[A])(implicit name: String, caching: Boolean = true): Option[Key] = {
+  def updateNameCache(
+      block: String => Option[A]
+  )(implicit name: String, caching: Boolean = true): Option[Key] = {
     if (caching) {
       if (this.nameCache.contains(name)) {
         this.nameCache.get(name)
@@ -38,23 +46,23 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
         // check the cache
         this.cache.find(name) match {
           case Some(obj) => Some(obj.id)
-          case None => block(name) match {
-            case Some(obj) =>
-              this.cache.addObject(obj)
-              this.nameCache.put(name, obj.id)
-              Some(obj.id)
-            case None => None
-          }
+          case None =>
+            block(name) match {
+              case Some(obj) =>
+                this.cache.addObject(obj)
+                this.nameCache.put(name, obj.id)
+                Some(obj.id)
+              case None => None
+            }
         }
       }
     } else {
       block(name) match {
         case Some(value) => Some(value.id)
-        case None => None
+        case None        => None
       }
     }
   }
-
 
   /**
     * Helper function for withOptionCaching, the only difference is that it takes a non optional
@@ -78,13 +86,14 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param caching default true, if false will skip checking the cache
     * @return An optional base object that is cached
     */
-  def withOptionCaching(block: () => Option[A])
-                       (implicit id: Option[Key] = None, caching: Boolean = true): Option[A] = {
+  def withOptionCaching(
+      block: () => Option[A]
+  )(implicit id: Option[Key] = None, caching: Boolean = true): Option[A] = {
     caching match {
       case true =>
         val cached = id match {
           case Some(key) => this.cache.get(key)
-          case None => None
+          case None      => None
         }
 
         cached match {
@@ -110,8 +119,10 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param caching  Whether caching is enabled or not
     * @return
     */
-  def withDeletingCache(retrieve: Key => Option[A])(block: A => Option[A])
-                       (implicit id: Key, caching: Boolean = true): Option[A] = withUpdatingCache(retrieve)(block)(id, caching, true)
+  def withDeletingCache(
+      retrieve: Key => Option[A]
+  )(block: A => Option[A])(implicit id: Key, caching: Boolean = true): Option[A] =
+    withUpdatingCache(retrieve)(block)(id, caching, true)
 
   /**
     * This will pull the items out of the cache that have been cached, and send the rest of the id's
@@ -122,11 +133,12 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param caching If false, then caching will be completely ignored
     * @return A list of objects
     */
-  def withIDListCaching(block: List[Key] => List[A])
-                       (implicit ids: List[Key] = List(), caching: Boolean = true): List[A] = {
+  def withIDListCaching(
+      block: List[Key] => List[A]
+  )(implicit ids: List[Key] = List(), caching: Boolean = true): List[A] = {
     caching match {
       case true =>
-        val connected = ids.map(id => (id, this.cache.get(id)))
+        val connected   = ids.map(id => (id, this.cache.get(id)))
         val unCachedIDs = connected.filter(value => value._2.isEmpty).map(_._1)
         // we execute the block if there are uncachedID's or if the original ids passed in is empty
         val cachedItems = if (unCachedIDs.nonEmpty || ids.isEmpty) {
@@ -136,7 +148,9 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
         } else {
           connected.flatMap(_._2)
         }
-        cachedItems.filter(entry => ids.isEmpty || unCachedIDs.contains(entry.id)).foreach(this.cache.addObject(_))
+        cachedItems
+          .filter(entry => ids.isEmpty || unCachedIDs.contains(entry.id))
+          .foreach(this.cache.addObject(_))
         cachedItems
       case false => block(ids)
     }
@@ -151,7 +165,9 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @tparam B This type of return object
     * @return The result of the inner block of code
     */
-  def withCacheIDDeletion[B](block: () => B)(implicit ids: List[Key], caching: Boolean = true): B = {
+  def withCacheIDDeletion[B](
+      block: () => B
+  )(implicit ids: List[Key], caching: Boolean = true): B = {
     if (caching) ids.foreach(this.cache.remove)
     block()
   }
@@ -173,7 +189,7 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     */
   def deleteByName(name: String): Option[A] = this.cache.find(name) match {
     case Some(obj) => this.cache.remove(obj.id)
-    case None => None
+    case None      => None
   }
 
   /**
@@ -187,11 +203,12 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param caching Whether caching is enabled or not, default is enabled.
     * @return A list of objects returned from cache and primary storage
     */
-  def withNameListCaching(block: List[String] => List[A])
-                         (implicit names: List[String] = List(), caching: Boolean = true): List[A] = {
+  def withNameListCaching(
+      block: List[String] => List[A]
+  )(implicit names: List[String] = List(), caching: Boolean = true): List[A] = {
     caching match {
       case true =>
-        val connected = names.map(name => (name, this.cache.find(name)))
+        val connected   = names.map(name => (name, this.cache.find(name)))
         val unCachedIDs = connected.filter(value => value._2.isEmpty).map(_._1)
         if (unCachedIDs.nonEmpty) {
           val list = block(unCachedIDs)
@@ -214,8 +231,9 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @tparam B The type of return object from the inner block
     * @return The return object from the inner block
     */
-  def withCacheNameDeletion[B](block: () => B)
-                              (implicit names: List[String], caching: Boolean = true): B = {
+  def withCacheNameDeletion[B](
+      block: () => B
+  )(implicit names: List[String], caching: Boolean = true): B = {
     if (caching) names.foreach(this.cache.remove)
     block()
   }
@@ -230,7 +248,10 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     * @param caching  Whether caching is turned on or off
     * @return The item that was potentially created and then retrieved from cache
     */
-  def withCreatingCache(retrieve: Key => Option[A], create: A => A)(implicit item: A, caching: Boolean = true): A = {
+  def withCreatingCache(
+      retrieve: Key => Option[A],
+      create: A => A
+  )(implicit item: A, caching: Boolean = true): A = {
     implicit val id = item.id
     withUpdatingCache(retrieve) { implicit cached =>
       Some(cached)
@@ -260,16 +281,18 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
     *                 against the primary storage
     * @return An optional base object that has been updated and cached.
     */
-  def withUpdatingCache(retrieve: Key => Option[A])(block: A => Option[A])
-                       (implicit id: Key, caching: Boolean = true, delete: Boolean = false): Option[A] = {
+  def withUpdatingCache(retrieve: Key => Option[A])(
+      block: A => Option[A]
+  )(implicit id: Key, caching: Boolean = true, delete: Boolean = false): Option[A] = {
     val cachedItem = caching match {
       case true =>
         this.cache.get(id) match {
           case Some(hit) => Some(hit)
-          case None => retrieve(id) match {
-            case Some(value) => Some(value)
-            case None => None
-          }
+          case None =>
+            retrieve(id) match {
+              case Some(value) => Some(value)
+              case None        => None
+            }
         }
       case false => retrieve(id)
     }
@@ -292,6 +315,24 @@ class CacheManager[Key, A <: CacheObject[Key]](cacheLimit: Int = CacheManager.DE
 }
 
 object CacheManager {
-  val DEFAULT_CACHE_LIMIT = 10000
+
+  val DEFAULT_CACHE_LIMIT  = 10000
   val DEFAULT_CACHE_EXPIRY = 900
+  val BASIC_CACHE          = "basic"
+  val REDIS_CACHE          = "redis"
+
+  def apply[Key, Value <: CacheObject[Key]](
+      config: Config,
+      prefix: String = ""
+  )(implicit r: Reads[Value], w: Writes[Value]): Cache[Key, Value] = {
+    config.cacheType.toLowerCase match {
+      case REDIS_CACHE =>
+        val cache: Cache[Key, Value] = new RedisCache(config, prefix)
+        if (config.redisResetOnStart) {
+          cache.clear()
+        }
+        cache
+      case _ | BASIC_CACHE => new BasicCache(config)
+    }
+  }
 }

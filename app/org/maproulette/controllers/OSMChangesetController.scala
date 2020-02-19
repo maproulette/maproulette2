@@ -17,15 +17,18 @@ import scala.xml.Elem
   * @author mcuthbert
   */
 @Singleton
-class OSMChangesetController @Inject()(components: ControllerComponents,
-                                       sessionManager: SessionManager,
-                                       changeService: ChangesetProvider,
-                                       bodyParsers: PlayBodyParsers) extends AbstractController(components) with StatusMessages {
+class OSMChangesetController @Inject() (
+    components: ControllerComponents,
+    sessionManager: SessionManager,
+    changeService: ChangesetProvider,
+    bodyParsers: PlayBodyParsers
+) extends AbstractController(components)
+    with StatusMessages {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  implicit val tagChangeReads = ChangeObjects.tagChangeReads
-  implicit val tagChangeResultWrites = ChangeObjects.tagChangeResultWrites
+  implicit val tagChangeReads           = ChangeObjects.tagChangeReads
+  implicit val tagChangeResultWrites    = ChangeObjects.tagChangeResultWrites
   implicit val tagChangeSubmissionReads = ChangeObjects.tagChangeSubmissionReads
 
   /**
@@ -34,33 +37,36 @@ class OSMChangesetController @Inject()(components: ControllerComponents,
     *
     * @return
     */
-  def testTagChange(changeType: String) : Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
-    this.sessionManager.authenticatedFutureRequest { implicit user =>
-      val result = request.body.validate[List[TagChange]]
-      result.fold(
-        errors => {
-          Future {
-            BadRequest(Json.toJson(StatusMessage("KO", JsError.toJson(errors))))
+  def testTagChange(changeType: String): Action[JsValue] = Action.async(bodyParsers.json) {
+    implicit request =>
+      this.sessionManager.authenticatedFutureRequest { implicit user =>
+        val result = request.body.validate[List[TagChange]]
+        result.fold(
+          errors => {
+            Future {
+              BadRequest(Json.toJson(StatusMessage("KO", JsError.toJson(errors))))
+            }
+          },
+          element => {
+            val p = Promise[Result]
+            val future = changeType match {
+              case OSMChangesetController.CHANGETYPE_OSMCHANGE =>
+                changeService.getOsmChange(element)
+              case _ => changeService.testTagChange(element)
+            }
+            future onComplete {
+              case Success(res) =>
+                changeType match {
+                  case OSMChangesetController.CHANGETYPE_OSMCHANGE =>
+                    p success Ok(res.asInstanceOf[Elem]).as("text/xml")
+                  case _ => p success Ok(Json.toJson(res.asInstanceOf[List[TagChangeResult]]))
+                }
+              case Failure(f) => p failure f
+            }
+            p.future
           }
-        },
-        element => {
-          val p = Promise[Result]
-          val future = changeType match {
-            case OSMChangesetController.CHANGETYPE_OSMCHANGE => changeService.getOsmChange(element)
-            case _ => changeService.testTagChange(element)
-          }
-          future onComplete {
-            case Success(res) =>
-              changeType match {
-                case OSMChangesetController.CHANGETYPE_OSMCHANGE => p success Ok(res.asInstanceOf[Elem]).as("text/xml")
-                case _ => p success Ok(Json.toJson(res.asInstanceOf[List[TagChangeResult]]))
-              }
-            case Failure(f) => p failure f
-          }
-          p.future
-        }
-      )
-    }
+        )
+      }
   }
 
   /**
@@ -68,7 +74,7 @@ class OSMChangesetController @Inject()(components: ControllerComponents,
     *
     * @return
     */
-  def submitTagChange() : Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
+  def submitTagChange(): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
     this.sessionManager.authenticatedFutureRequest { implicit user =>
       val result = request.body.validate[TagChangeSubmission]
       result.fold(
@@ -79,9 +85,13 @@ class OSMChangesetController @Inject()(components: ControllerComponents,
         },
         element => {
           val p = Promise[Result]
-          changeService.submitTagChange(element.changes, element.comment, user.osmProfile.requestToken) onComplete {
+          changeService.submitTagChange(
+            element.changes,
+            element.comment,
+            user.osmProfile.requestToken
+          ) onComplete {
             case Success(res) => p success Ok(res)
-            case Failure(f) => p failure f
+            case Failure(f)   => p failure f
           }
           p.future
         }
@@ -95,5 +105,5 @@ class OSMChangesetController @Inject()(components: ControllerComponents,
 
 object OSMChangesetController {
   val CHANGETYPE_OSMCHANGE = "osmchange"
-  val CHANGETYPE_DELTA = "delta"
+  val CHANGETYPE_DELTA     = "delta"
 }

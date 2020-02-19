@@ -1,11 +1,10 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
-package org.maproulette.models.dal
+package org.maproulette.models.dal.mixin
 
 import java.sql.Connection
 
 import anorm._
 import org.maproulette.models.BaseObject
+import org.maproulette.models.dal.BaseDAL
 import org.maproulette.session.User
 
 /**
@@ -21,7 +20,9 @@ trait OwnerMixin[T <: BaseObject[_]] {
     * @param newUserId The new users id
     * @param user      The user making the request
     */
-  def changeOwner(objectId: Long, newUserId: Long, user: User)(implicit c: Option[Connection] = None): Unit = {
+  def changeOwner(objectId: Long, newUserId: Long, user: User)(
+      implicit c: Option[Connection] = None
+  ): Unit = {
     // for now only super users can change the owners
     this.permission.hasSuperAccess(user)
     this.withMRConnection { implicit c =>

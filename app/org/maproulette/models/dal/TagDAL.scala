@@ -7,9 +7,11 @@ import java.sql.Connection
 import anorm.SqlParser._
 import anorm._
 import javax.inject.{Inject, Provider, Singleton}
+import org.maproulette.Config
 import org.maproulette.cache.{CacheManager, TagCacheManager}
 import org.maproulette.exception.{InvalidException, UniqueViolationException}
 import org.maproulette.models.Tag
+import org.maproulette.models.utils.OR
 import org.maproulette.permissions.Permission
 import org.maproulette.session.User
 import play.api.db.Database
@@ -21,9 +23,11 @@ import play.api.libs.json.JsValue
   * @author cuthbertm
   */
 @Singleton
-class TagDAL @Inject()(override val db: Database,
-                       tagCacheProvider: Provider[TagCacheManager],
-                       override val permission: Permission) extends BaseDAL[Long, Tag] {
+class TagDAL @Inject() (
+    override val db: Database,
+    tagCacheProvider: Provider[TagCacheManager],
+    override val permission: Permission
+) extends BaseDAL[Long, Tag] {
   // the name of the table in the database for tags
   override val tableName: String = "tags"
 
@@ -53,12 +57,22 @@ class TagDAL @Inject()(override val db: Database,
     this.permission.hasObjectWriteAccess(tag, user)
     this.cacheManager.withOptionCaching { () =>
       this.withMRTransaction { implicit c =>
-        SQL("INSERT INTO tags (name, description, tag_type) VALUES ({name}, {description}, {tagType}) ON CONFLICT(LOWER(name)) DO NOTHING RETURNING *")
-          .on('name -> tag.name.toLowerCase, 'description -> tag.description,'tagType -> tag.tagType).as(this.parser.*).headOption
+        SQL(
+          "INSERT INTO tags (name, description, tag_type) VALUES ({name}, {description}, {tagType}) ON CONFLICT(LOWER(name), tag_type) DO NOTHING RETURNING *"
+        ).on(
+            Symbol("name")        -> tag.name.toLowerCase,
+            Symbol("description") -> tag.description,
+            Symbol("tagType")     -> tag.tagType
+          )
+          .as(this.parser.*)
+          .headOption
       }
     } match {
       case Some(t) => t
-      case None => throw new UniqueViolationException(s"Tag with name ${tag.name} already exists in the database")
+      case None =>
+        throw new UniqueViolationException(
+          s"Tag with name ${tag.name} already exists in the database"
+        )
     }
   }
 
@@ -69,7 +83,10 @@ class TagDAL @Inject()(override val db: Database,
     * @param id  The id of the object that you are updating
     * @return An optional object, it will return None if no object found with a matching id that was supplied
     */
-  override def update(tag: JsValue, user: User)(implicit id: Long, c: Option[Connection] = None): Option[Tag] = {
+  override def update(
+      tag: JsValue,
+      user: User
+  )(implicit id: Long, c: Option[Connection] = None): Option[Tag] = {
 
     this.cacheManager.withUpdatingCache(Long => retrieveById) { implicit cachedItem =>
       this.permission.hasObjectWriteAccess(cachedItem, user)
@@ -79,7 +96,8 @@ class TagDAL @Inject()(override val db: Database,
           // do not allow empty tags
           throw new InvalidException(s"Tags cannot be empty strings")
         }
-        val description = (tag \ "description").asOpt[String].getOrElse(cachedItem.description.getOrElse(""))
+        val description =
+          (tag \ "description").asOpt[String].getOrElse(cachedItem.description.getOrElse(""))
         val updatedTag = Tag(id, name, Some(description))
 
         SQL"""UPDATE tags SET name = ${updatedTag.name.toLowerCase}, description = ${updatedTag.description}
@@ -88,8 +106,9 @@ class TagDAL @Inject()(override val db: Database,
     }
   }
 
-  def findTags(prefix: String, tagType: String = "challenges", limit: Int, offset: Int)
-              (implicit c: Option[Connection] = None): List[Tag] = {
+  def findTags(prefix: String, tagType: String = "challenges", limit: Int, offset: Int)(
+      implicit c: Option[Connection] = None
+  ): List[Tag] = {
     this.withMRConnection { implicit c =>
       var tagTypeSearch = ""
       if (tagType.trim.nonEmpty) {
@@ -99,7 +118,13 @@ class TagDAL @Inject()(override val db: Database,
         s"""SELECT * FROM tags
                       WHERE ${this.searchField("name")(None)} ${tagTypeSearch}
                       LIMIT ${this.sqlLimit(limit)} OFFSET {offset}"""
-      SQL(query).on('ss -> s"$prefix%", 'offset -> offset, 'tagType -> tagType.trim).as(this.parser.*)
+      SQL(query)
+        .on(
+          Symbol("ss")      -> s"$prefix%",
+          Symbol("offset")  -> offset,
+          Symbol("tagType") -> tagType.trim
+        )
+        .as(this.parser.*)
     }
   }
 
@@ -107,25 +132,46 @@ class TagDAL @Inject()(override val db: Database,
     * We override the retrieveByName function so that we make sure that we test against a lower case version
     * of the name
     */
-  override def retrieveByName(implicit name: String, parentId: Long, c: Option[Connection] = None): Option[Tag] = {
+  override def retrieveByName(
+      implicit name: String,
+      parentId: Long,
+      c: Option[Connection] = None
+  ): Option[Tag] = {
     super.retrieveByName(name.toLowerCase, parentId, c)
   }
 
   /**
     * Need to make sure that the prefix is lowercase
     */
-  override def retrieveListByPrefix(prefix: String, limit: Int, offset: Int, onlyEnabled: Boolean,
-                                    orderColumn: String, orderDirection: String)
-                                   (implicit parentId: Long, c: Option[Connection] = None): List[Tag] = {
-    super.retrieveListByPrefix(prefix.toLowerCase, limit, offset, onlyEnabled, orderColumn, orderDirection)
+  override def retrieveListByPrefix(
+      prefix: String,
+      limit: Int,
+      offset: Int,
+      onlyEnabled: Boolean,
+      orderColumn: String,
+      orderDirection: String
+  )(implicit parentId: Long, c: Option[Connection] = None): List[Tag] = {
+    super.retrieveListByPrefix(
+      prefix.toLowerCase,
+      limit,
+      offset,
+      onlyEnabled,
+      orderColumn,
+      orderDirection
+    )
   }
 
   /**
     * Make sure the searchString is lower case
     */
-  override def find(searchString: String, limit: Int, offset: Int, onlyEnabled: Boolean,
-                    orderColumn: String, orderDirection: String)
-                   (implicit parentId: Long, c: Option[Connection] = None): List[Tag] = {
+  override def find(
+      searchString: String,
+      limit: Int,
+      offset: Int,
+      onlyEnabled: Boolean,
+      orderColumn: String,
+      orderDirection: String
+  )(implicit parentId: Long, c: Option[Connection] = None): List[Tag] = {
     super.find(searchString.toLowerCase, limit, offset, onlyEnabled, orderColumn, orderDirection)
   }
 
@@ -162,7 +208,9 @@ class TagDAL @Inject()(override val db: Database,
     * @param id The id list of the challenges
     * @return Map of challenge ids to tags associated with challenge
     */
-  def listByChallenges(id: List[Long])(implicit c: Option[Connection] = None): Map[Long, List[Tag]] = {
+  def listByChallenges(
+      id: List[Long]
+  )(implicit c: Option[Connection] = None): Map[Long, List[Tag]] = {
     implicit val ids: List[Long] = List()
     this.withMRConnection { implicit c =>
       val challengeTagParser: RowParser[(Long, Tag)] = {
@@ -192,27 +240,41 @@ class TagDAL @Inject()(override val db: Database,
     * @return Returns the list of tags that were inserted, this would include any newly created
     *         ids of tags.
     */
-  def updateTagList(tags: List[Tag], user: User)(implicit c: Option[Connection] = None): List[Tag] = {
+  def updateTagList(tags: List[Tag], user: User)(
+      implicit c: Option[Connection] = None
+  ): List[Tag] = {
     if (tags.nonEmpty) {
-      this.permission.hasSuperAccess(user)
       implicit val names = tags.filter(_.name.nonEmpty).map(_.name)
       this.cacheManager.withCacheNameDeletion { () =>
         this.withMRTransaction { implicit c =>
           val sqlQuery =
             s"""WITH upsert AS (UPDATE tags SET description = {description}
-                                              WHERE id = {id} OR name = {name} RETURNING *)
+                                              WHERE id = {id} OR (name = {name} AND tag_type = {tagType}) RETURNING *)
                               INSERT INTO tags (name, description, tag_type) SELECT {name}, {description}, {tagType}
                               WHERE NOT EXISTS (SELECT * FROM upsert)"""
           val parameters = tags.map(tag => {
             val descriptionString = tag.description match {
               case Some(d) => d
-              case None => ""
+              case None    => ""
             }
-            Seq[NamedParameter]("name" -> tag.name.toLowerCase, "description" -> descriptionString,
-                                "id" -> tag.id, "tagType" -> tag.tagType)
+            Seq[NamedParameter](
+              "name"        -> tag.name.toLowerCase,
+              "description" -> descriptionString,
+              "id"          -> tag.id,
+              "tagType"     -> tag.tagType
+            )
           })
           BatchSql(sqlQuery, parameters.head, parameters.tail: _*).execute()
-          this.retrieveListByName(names, -1, Some(c))
+
+          val fetchWhere = new StringBuilder()
+          tags.foreach(t => {
+            // Look for each tag in the database by name/tagType. (Sanitize by removing any ' characters)
+            appendInWhereClause(
+              fetchWhere,
+              s"(name = '${t.name.replaceAll("'", "")}' AND tag_type = '${t.tagType}')"
+            )(Some(OR()))
+          })
+          SQL("SELECT * from tags WHERE " + fetchWhere.toString).as(this.parser.*)
         }
       }
     } else {
@@ -223,7 +285,11 @@ class TagDAL @Inject()(override val db: Database,
   /**
     * Need to make sure all the names in the list are lowercase
     */
-  override def retrieveListByName(implicit names: List[String], parentId: Long, c: Option[Connection] = None): List[Tag] = {
+  override def retrieveListByName(
+      implicit names: List[String],
+      parentId: Long,
+      c: Option[Connection] = None
+  ): List[Tag] = {
     super.retrieveListByName(names.map(_.toLowerCase), parentId, c)
   }
 }
