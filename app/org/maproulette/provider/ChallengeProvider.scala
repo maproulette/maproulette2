@@ -297,7 +297,13 @@ class ChallengeProvider @Inject() (
     } else {
       val nameKeys = List.apply("id", "@id", "osmid", "osm_id", "name")
       nameKeys.collectFirst {
-        case x if (value \ x).asOpt[JsValue].isDefined => (value \ x).asOpt[JsValue].get.toString
+        case x if (value \ x).asOpt[JsValue].isDefined =>
+          // Support both string and numeric ids. If it's a string, use it.
+          // Otherwise convert the value to a string
+          (value \ x).asOpt[String] match {
+            case Some(stringValue) => stringValue
+            case None              => (value \ x).asOpt[JsValue].get.toString
+          }
       } match {
         case Some(n) => n
         case None =>

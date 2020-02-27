@@ -5,6 +5,8 @@ package org.maproulette.services.osm
 import javax.inject.{Inject, Singleton}
 import org.maproulette.Config
 import org.maproulette.models._
+import org.maproulette.session.User
+import org.maproulette.models.dal.DALManager
 import org.maproulette.exception.ChangeConflictException
 import play.shaded.oauth.oauth.signpost.exception.OAuthNotAuthorizedException
 import org.maproulette.services.osm.objects._
@@ -19,7 +21,7 @@ import org.maproulette.models.utils.TransactionManager
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success}
-import scala.xml.Elem
+import scala.xml.{Elem, NodeSeq}
 
 /**
   * @author mcuthbert
@@ -31,6 +33,7 @@ class ChangesetProvider @Inject() (
     wayService: WayProvider,
     relationService: RelationProvider,
     config: Config,
+    dalManager: DALManager,
     val db: Database
 ) extends TransactionManager {
 
@@ -62,14 +65,14 @@ class ChangesetProvider @Inject() (
   }
 
   /**
-    * Submit a set of tag changes to the OSM servers
+    * Submit a set of changes to the OSM servers
     *
-    * @param tagChanges       A list of TagChange objects to test changes with OSM objects
+    * @param changes       The changes to be submitted to OSM
     * @param changeSetComment The changeset comment to be associated with the change
     * @return future that will return the OSMChange that was submitted to the OSM servers
     */
-  def submitTagChange(
-      tagChanges: List[TagChange],
+  def submitOsmChange(
+      changes: OSMChange,
       changeSetComment: String,
       accessToken: RequestToken,
       taskId: Option[Long] = None
@@ -79,8 +82,8 @@ class ChangesetProvider @Inject() (
     this.createChangeset(changeSetComment, accessToken) onComplete {
       case Success(changesetId) =>
         // retrieve the current version of the osm feature
-        // conflate the current tags with the provided tags
-        this.getOsmChange(tagChanges, Some(changesetId)) onComplete {
+        // conflate the current tags with provided tags
+        this.getOsmChange(changes, Some(changesetId)) onComplete {
           case Success(res) =>
             // submit the conflated changes
             val url = s"${config.getOSMServer}/api/0.6/changeset/$changesetId/upload"
@@ -91,10 +94,15 @@ class ChangesetProvider @Inject() (
                 uploadResult.status match {
                   case ChangesetProvider.STATUS_OK => {
                     taskId match {
-                      case Some(id) =>
-                        this.withMRTransaction { implicit c =>
-                          SQL("UPDATE TASKS SET changeset_id= " + changesetId + " WHERE id=" + id)
-                            .execute()
+                      case Some(tid) =>
+                        implicit val id: Long = tid
+                        dalManager.task.retrieveById(id) match {
+                          case Some(task) =>
+                            dalManager.task.mergeUpdate(
+                              task.copy(changesetId = Some(changesetId)),
+                              User.superUser
+                            )
+                          case _ => // do nothing
                         }
                       case _ => // do nothing
                     }
@@ -122,25 +130,57 @@ class ChangesetProvider @Inject() (
   }
 
   /**
-    * Retrieves all the requested changes and returns a OsmChange XML object
+    * Returns a osmChange XML object for geometry changes
     *
-    * @param tagChanges A list of changes to process
-    * @return The OsmChange
+    * @param geometryChanges The geometry changes to process
+    * @return The osmChange XML
     */
-  def getOsmChange(tagChanges: List[TagChange], changeSetId: Option[Int] = None): Future[Elem] = {
-    val p = Promise[Elem]
-    this.conflateTagChanges(tagChanges) onComplete {
-      case Success(res) =>
-        val osmChange =
-          <osmChange version="0.6" generator="MapRoulette">
-            <modify>
+  def getOsmChange(change: OSMChange, changeSetId: Option[Int]): Future[Elem] = {
+    val changePromise = Promise[Elem]
+    val osmCreates = change.creates match {
+      case Some(creates) =>
+        <create>
+          {for (create <- creates) yield create.toCreateElement(changeSetId.getOrElse(-1))}
+        </create>
+      case None => NodeSeq.Empty
+    }
+
+    val updatesPromise = Promise[NodeSeq]
+    val osmUpdates = change.updates match {
+      case Some(updates) =>
+        // Only support tag changes for now
+        val tagChanges = updates.map(update => {
+          TagChange(
+            update.osmId,
+            update.osmType,
+            update.tags.updates,
+            update.tags.deletes,
+            update.version
+          )
+        })
+
+        this.conflateTagChanges(tagChanges) onComplete {
+          case Success(res) =>
+            updatesPromise success
+              <modify>
               {for (entity <- res) yield entity._1.toChangeElement(changeSetId.getOrElse(-1))}
             </modify>
-          </osmChange>
-        p success osmChange
-      case Failure(f) => p failure f
+          case Failure(f) => updatesPromise failure f
+        }
+      case None => updatesPromise success NodeSeq.Empty
     }
-    p.future
+
+    updatesPromise.future onComplete {
+      case Success(osmUpdates) =>
+        changePromise success
+          <osmChange version="0.6" generator="MapRoulette">
+          {osmCreates}
+          {osmUpdates}
+        </osmChange>
+      case Failure(f) => changePromise failure f
+    }
+
+    changePromise.future
   }
 
   private def conflateTagChanges(

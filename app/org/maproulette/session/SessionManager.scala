@@ -250,7 +250,7 @@ class SessionManager @Inject() (
         if (impersonateUserId < 0) {
           p success Some(User.superUser)
         } else {
-          this.dalManager.user.retrieveByOSMID(impersonateUserId, User.superUser) match {
+          this.dalManager.user.retrieveByOSMID(impersonateUserId) match {
             case Some(user) => p success Some(user)
             case None       => p success Some(User.superUser)
           }

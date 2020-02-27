@@ -50,6 +50,8 @@ case class TaskPropertySearch(
         searchType.get match {
           case SearchParameters.TASK_PROP_SEARCH_TYPE_CONTAINS =>
             where ++= "'%" + value.getOrElse("").replaceAll("\'", "\'\'") + "%' "
+          case SearchParameters.TASK_PROP_SEARCH_TYPE_EXISTS  => // do nothing
+          case SearchParameters.TASK_PROP_SEARCH_TYPE_MISSING => // do nothing
           case _ =>
             where ++= " '" + value.getOrElse("").replaceAll("\'", "\'\'") + "'"
         }
@@ -65,6 +67,8 @@ case class TaskPropertySearch(
       case SearchParameters.TASK_PROP_SEARCH_TYPE_EQUALS       => "="
       case SearchParameters.TASK_PROP_SEARCH_TYPE_NOT_EQUAL    => "!="
       case SearchParameters.TASK_PROP_SEARCH_TYPE_CONTAINS     => " LIKE "
+      case SearchParameters.TASK_PROP_SEARCH_TYPE_EXISTS       => " IS NOT NULL "
+      case SearchParameters.TASK_PROP_SEARCH_TYPE_MISSING      => " IS NULL "
       case SearchParameters.TASK_PROP_SEARCH_TYPE_LESS_THAN    => "<"
       case SearchParameters.TASK_PROP_SEARCH_TYPE_GREATER_THAN => ">"
       case e                                                   => throw new InvalidException("Search Type: '" + e + "' not supported.")
@@ -142,6 +146,8 @@ case class TaskPropertySearch(
                 case SearchParameters.TASK_PROP_SEARCH_TYPE_EQUALS    => true
                 case SearchParameters.TASK_PROP_SEARCH_TYPE_NOT_EQUAL => true
                 case SearchParameters.TASK_PROP_SEARCH_TYPE_CONTAINS  => true
+                case SearchParameters.TASK_PROP_SEARCH_TYPE_EXISTS    => true
+                case SearchParameters.TASK_PROP_SEARCH_TYPE_MISSING   => true
                 case e =>
                   throw new InvalidException(
                     "Search Type: '" + e + "' not supported when comparing strings."

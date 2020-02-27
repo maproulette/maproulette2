@@ -81,6 +81,8 @@ class TaskController @Inject() (
   implicit val tagChangeReads           = ChangeObjects.tagChangeReads
   implicit val tagChangeResultWrites    = ChangeObjects.tagChangeResultWrites
   implicit val tagChangeSubmissionReads = ChangeObjects.tagChangeSubmissionReads
+  implicit val changeReads              = ChangeObjects.changeReads
+  implicit val changeSubmissionReads    = ChangeObjects.changeSubmissionReads
 
   implicit val taskBundleWrites: Writes[TaskBundle] = TaskBundle.taskBundleWrites
 
@@ -603,6 +605,17 @@ class TaskController @Inject() (
               case None    => None
             }
 
+            // Convert tag changes to OSMChange object
+            val updates = element.changes.map(tagChange => {
+              ElementUpdate(
+                tagChange.osmId,
+                tagChange.osmType,
+                tagChange.version,
+                ElementTagChange(tagChange.updates, tagChange.deletes)
+              )
+            })
+            val change = OSMChange(None, Some(updates))
+
             config.skipOSMChangesetSubmission match {
               // If we are skipping the OSM submission then we don't actually do the tag change on OSM
               case true =>
@@ -617,8 +630,8 @@ class TaskController @Inject() (
                 p success Ok(Json.toJson(true))
               case _ =>
                 None
-                changeService.submitTagChange(
-                  element.changes,
+                changeService.submitOsmChange(
+                  change,
                   element.comment,
                   user.osmProfile.requestToken,
                   Some(taskId)
@@ -642,6 +655,67 @@ class TaskController @Inject() (
         )
       }
     }
+
+  def applySuggestedFix(
+      taskId: Long,
+      comment: String = "",
+      tags: String = ""
+  ): Action[JsValue] = Action.async(bodyParsers.json) { implicit request =>
+    this.sessionManager.authenticatedFutureRequest { implicit user =>
+      val result = request.body.validate[OSMChangeSubmission]
+      result.fold(
+        errors => {
+          Future {
+            BadRequest(Json.toJson(StatusMessage("KO", JsError.toJson(errors))))
+          }
+        },
+        element => {
+          val p = Promise[Result]
+
+          val requestReview = request.getQueryString("requestReview") match {
+            case Some(v) => Some(v.toBoolean)
+            case None    => None
+          }
+
+          config.skipOSMChangesetSubmission match {
+            // If we are skipping the OSM submission then we don't actually do the tag change on OSM
+            case true =>
+              this.customTaskStatus(
+                taskId,
+                TaskStatusSet(Task.STATUS_FIXED),
+                user,
+                comment,
+                tags,
+                requestReview
+              )
+              p success Ok(Json.toJson(true))
+            case _ =>
+              None
+              changeService.submitOsmChange(
+                element.changes,
+                element.comment,
+                user.osmProfile.requestToken,
+                Some(taskId)
+              ) onComplete {
+                case Success(res) => {
+                  this.customTaskStatus(
+                    taskId,
+                    TaskStatusSet(Task.STATUS_FIXED),
+                    user,
+                    comment,
+                    tags,
+                    requestReview
+                  )
+                  p success Ok(res)
+                }
+                case Failure(f) => p failure f
+              }
+          }
+          p.future
+        }
+      )
+    }
+  }
 
   /**
     * Fetches and inserts usernames for 'reviewRequestedBy' and 'reviewBy' into

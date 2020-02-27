@@ -73,7 +73,7 @@ class UserController @Inject() (
       if (userId == user.id || userId == user.osmProfile.id) {
         Ok(Json.toJson(User.withDecryptedAPIKey(user)(crypto)))
       } else if (user.isSuperUser) {
-        this.userDAL.retrieveByOSMID(userId, user) match {
+        this.userDAL.retrieveByOSMID(userId) match {
           case Some(u) => Ok(Json.toJson(User.withDecryptedAPIKey(u)(crypto)))
           case None =>
             this.userDAL.retrieveById(userId) match {
@@ -107,7 +107,7 @@ class UserController @Inject() (
 
   def getPublicUser(userId: Long): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.userAwareRequest { implicit user =>
-      val target = this.userDAL.retrieveByOSMID(userId, User.superUser) match {
+      val target = this.userDAL.retrieveByOSMID(userId) match {
         case Some(u) => u
         case None =>
           this.userDAL.retrieveById(userId) match {
@@ -178,7 +178,7 @@ class UserController @Inject() (
   def refreshProfile(osmUserId: Long): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedFutureRequest { implicit user =>
       val p = Promise[Result]
-      this.userDAL.retrieveByOSMID(osmUserId, user) match {
+      this.userDAL.retrieveByOSMID(osmUserId) match {
         case Some(u) =>
           sessionManager.refreshProfile(u.osmProfile.requestToken, user) onComplete {
             case Success(result) => p success Ok
@@ -309,7 +309,7 @@ class UserController @Inject() (
       groupType: Int,
       user: User
   ): Unit = {
-    val addUser = this.retrieveUser(userId, isOSMUserId, user)
+    val addUser = this.retrieveUser(userId, isOSMUserId)
 
     if (addUser.groups.exists(g => g.projectId == projectId && g.groupType == groupType)) {
       throw new InvalidException(s"User ${addUser.name} is already part of project $projectId")
@@ -322,10 +322,10 @@ class UserController @Inject() (
     this.userDAL.addUserToProject(addUser.osmProfile.id, projectId, groupType, user)
   }
 
-  private def retrieveUser(userId: Long, isOSMUserId: Boolean, user: User): User = {
+  private def retrieveUser(userId: Long, isOSMUserId: Boolean): User = {
     isOSMUserId match {
       case true =>
-        this.userDAL.retrieveByOSMID(userId, user) match {
+        this.userDAL.retrieveByOSMID(userId) match {
           case Some(u) => u
           case None    => throw new NotFoundException(s"Could not find user with OSM ID $userId")
         }
@@ -353,7 +353,7 @@ class UserController @Inject() (
       isOSMUserId: Boolean
   ): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
-      val addUser = retrieveUser(userId, isOSMUserId, user)
+      val addUser = retrieveUser(userId, isOSMUserId)
       this.userDAL.setUserProjectGroup(addUser.osmProfile.id, projectId, groupType, user)
       // clear group caches
       this.userGroupDAL.clearCache()
@@ -393,7 +393,7 @@ class UserController @Inject() (
       groupType: Int,
       user: User
   ): Unit = {
-    val addUser = this.retrieveUser(userId, isOSMUserId, user)
+    val addUser = this.retrieveUser(userId, isOSMUserId)
     // just check to make sure that the project exists
     this.projectDAL.retrieveById(projectId) match {
       case Some(_) => // just ignore
@@ -444,7 +444,7 @@ class UserController @Inject() (
         this.userDAL.retrieveById(userId) match {
           case Some(u) => u
           case None => // look for the user under the OSM_ID
-            this.userDAL.retrieveByOSMID(userId, user) match {
+            this.userDAL.retrieveByOSMID(userId) match {
               case Some(u) => u
               case None =>
                 throw new NotFoundException(

@@ -89,6 +89,8 @@ object SearchParameters {
   val TASK_PROP_SEARCH_TYPE_EQUALS       = "equals"
   val TASK_PROP_SEARCH_TYPE_NOT_EQUAL    = "not_equal"
   val TASK_PROP_SEARCH_TYPE_CONTAINS     = "contains"
+  val TASK_PROP_SEARCH_TYPE_EXISTS       = "exists"
+  val TASK_PROP_SEARCH_TYPE_MISSING      = "missing"
   val TASK_PROP_SEARCH_TYPE_LESS_THAN    = "less_than"
   val TASK_PROP_SEARCH_TYPE_GREATER_THAN = "greater_than"
 

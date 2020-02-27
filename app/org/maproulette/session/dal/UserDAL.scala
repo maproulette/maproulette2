@@ -160,22 +160,16 @@ class UserDAL @Inject() (
     * instead of hitting the database
     *
     * @param id   The user's osm ID
-    * @param user The user making the request
     * @return The matched user, None if User not found
     */
-  def retrieveByOSMID(implicit id: Long, user: User): Option[User] =
+  def retrieveByOSMID(implicit id: Long): Option[User] =
     this.cacheManager.withOptionCaching { () =>
       this.db.withConnection { implicit c =>
         val query =
           s"""SELECT ${this.retrieveColumns}, score FROM users
                       LEFT JOIN user_metrics ON users.id = user_metrics.user_id
                       WHERE osm_id = {id}"""
-        SQL(query).on(Symbol("id") -> id).as(this.parser.*).headOption match {
-          case Some(u) =>
-            this.permission.hasObjectReadAccess(u, user)
-            Some(u)
-          case None => None
-        }
+        SQL(query).on(Symbol("id") -> id).as(this.parser.*).headOption
       }
     }
 

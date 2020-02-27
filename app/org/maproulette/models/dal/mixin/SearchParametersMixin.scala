@@ -256,6 +256,10 @@ trait SearchParametersMixin extends DALHelper {
                     query ++= s" AND features->'properties'->>'${k}' != '${v}' "
                   } else if (searchType == SearchParameters.TASK_PROP_SEARCH_TYPE_CONTAINS) {
                     query ++= s" AND features->'properties'->>'${k}' LIKE '%${v}%' "
+                  } else if (searchType == SearchParameters.TASK_PROP_SEARCH_TYPE_EXISTS) {
+                    query ++= s" AND features->'properties'->>'${k}' IS NOT NULL "
+                  } else if (searchType == SearchParameters.TASK_PROP_SEARCH_TYPE_MISSING) {
+                    query ++= s" AND features->'properties'->>'${k}' IS NULL "
                   }
                 }
                 query ++= "))"
