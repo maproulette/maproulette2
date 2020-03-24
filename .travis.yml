@@ -1,7 +1,25 @@
 language: scala
-
 jdk: openjdk11
-
+addons:
+  postgresql: "10"
+  apt:
+    packages:
+    - postgresql-10
+    - postgresql-client-10
+    - postgresql-10-postgis-2.4
+  sonarcloud:
+    organization: maproulette
+    token:
+      secure: Bv8GZeVScZ99gHrhO915o6wnBAVv0GAJ4K1x7XTlhaubare47AfqOtdj0hDH9cmZ42l/YaCu1eq1ZnW27uv4vJtbP0N0CTG6ASbI6JIymrm26ei+OHk2ttyQbnPcQS9GG82QH7ZXGqZd4WvrHRL2NTkG1CAaTIoktE5xtCoW46wW7vOth+QU9BcjaRAD5HUgCu6lw0UJUQmTretDIVyD0jjOi3kwdmzXGZEnqX52iolJTi/HBEl/DJeLqc3HdG7Cj9HJGkuRbz1WpUJGqs/VIvsINWjeBGJIFUUtIWAJTpeZizFK2h8Oh3Ratt0OPONLoI8kFH1uBZhJPJPQPODCss0mG89KO8TMBfuriAfI2vqWRscFBF0RqY0ZswQNFCa08D7T2OwMqRmbbO+8Py7C+qLL72k5h36NUG8f1IP3wbbfGwQt7Z/4breAPwoEPlzTOc1AGHHmlaa9GwZ4brsGcDMO+avC5Des8UQYYI+JM4mBOSFFtdv+S+Dt5YdOqkhHOgPgJd3LAafuL8OtHW5V3Af2uz+xOqjKdgqy42t/XZCa6JgdvoD/5F7iBzAsFG+JghS1iyWKCYXlw5tSVoC0309Rj2r3ePZNSyFToNJGBTydJ/j3RPH0+XAuOhPbH8HZgGiPWZH6kEUmAAOk/9uyQvCoZXYdaFMrTlzxFa1Vmk0=
+env:
+  global:
+  - PGPORT=5432
+services:
+  - postgresql
+before_script:
+- psql -c "create database mr_test;" -U postgres
+- psql -c "CREATE USER osm WITH PASSWORD 'osm';" -U postgres
+- psql -c "CREATE EXTENSION postgis;" -U postgres -d mr_test
 script:
-  - sbt clean scalafmtCheckAll compile test
-
+- sbt clean scalafmtCheckAll compile test
+- sonar-scanner
