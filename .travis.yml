@@ -21,4 +21,3 @@ before_script:
 - psql -c "CREATE EXTENSION postgis;" -U postgres -d mr_test
 script:
 - sbt clean scalafmtCheckAll compile test
-- sonar-scanner
