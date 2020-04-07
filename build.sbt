@@ -131,5 +131,7 @@ deleteRoutesFile := {
   }
 }
 
+cleanFiles := (baseDirectory.value / "conf" / "generated.routes") +: cleanFiles.value
+
 lazy val regenerateRoutesFile = taskKey[Unit]("Regenerates the routes file")
 regenerateRoutesFile := Def.sequential(deleteRoutesFile, generateRoutesFile).value

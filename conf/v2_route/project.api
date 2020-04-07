@@ -282,9 +282,7 @@ GET     /project/clustered/:id                      @org.maproulette.framework.c
 # parameters:
 #   - name: search
 #     in: cookie
-#     description: The challenge search parameters. This is a URL encoded JSON object containing multiple different search parameters.
-#     schema:
-#      $ref: '#/definitions/org.maproulette.session.SearchParameter'
+#     description: The challenge search parameters. This is a URL encoded JSON object containing multiple different search parameters. See SearchParameter model.
 ###
 GET     /project/search/clustered                   @org.maproulette.framework.controller.ProjectController.getSearchedClusteredPoints(search ?= "")
 ###
@@ -381,9 +379,7 @@ GET     /project/:projectId/tasks/extract             @org.maproulette.controlle
 #     description: Id of task that you wish to find the next task based on the proximity of that task
 #   - name: search
 #     in: cookie
-#     description: A search parameter object stored in a cookie
-#     schema:
-#       $ref: '#/definitions/org.maproulette.session.SearchParameters'
+#     description: A search parameter object stored in a cookie. See SearchParameter model.
 ###
 GET     /project/:id/tasks                          @org.maproulette.framework.controller.ProjectController.getRandomTasks(id:Long, limit:Int ?= 1, proximity:Long ?= -1)
 ###

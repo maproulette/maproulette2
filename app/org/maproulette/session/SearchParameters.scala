@@ -39,7 +39,7 @@ case class SearchParameters(
     projectIds: Option[List[Long]] = None,
     projectSearch: Option[String] = None,
     projectEnabled: Option[Boolean] = None,
-    challengeParams: SearchChallengeParameters = new SearchChallengeParameters(),
+    challengeParams: SearchChallengeParameters = SearchChallengeParameters(),
     taskTags: Option[List[String]] = None,
     taskTagConjunction: Option[Boolean] = None,
     taskSearch: Option[String] = None,
