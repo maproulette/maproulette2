@@ -1,5 +1,7 @@
-// Copyright (C) 2016 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.provider.websockets
 
 import javax.inject.{Inject, Singleton}

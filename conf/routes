@@ -13,12 +13,14 @@ GET     /auth/addUser/:userId/toProject/:projectId                      @control
 # Random functionality routes
 GET     /clearCaches                                                    @controllers.Application.clearCaches
 PUT     /runJob/:name                                                   @controllers.Application.runJob(name:String, action:String ?= "")
-GET     /ws                                                             @controllers.WebSocketController.socket
+GET     /ws                                                             @org.maproulette.framework.controller.WebSocketController.socket
+GET     /graphql/ide                                                    @org.maproulette.framework.controller.GraphQLController.graphiql
+POST    /graphql                                                        @org.maproulette.framework.controller.GraphQLController.graphqlBody
 # Swagger route
 GET     /docs/swagger-ui/*file                                          @controllers.Assets.at(path:String="/public/lib/swagger-ui", file:String)
 ### NoDocs ###
-GET   /assets/*file                                                     @controllers.Assets.versioned(path="/public", file: Asset)
+GET     /assets/*file                                                   @controllers.Assets.versioned(path="/public", file: Asset)
 
-->  /api/v2     apiv2.Routes
+->      /api/v2                                                         generated.Routes
 
 GET     /*path/                                                         @controllers.Application.untrail(path:String)

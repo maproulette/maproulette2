@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.session
 
 import javax.inject.{Inject, Singleton}
@@ -7,10 +9,11 @@ import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.exception.MPExceptionUtil
+import org.maproulette.framework.model.User
+import org.maproulette.framework.service.ServiceManager
 import org.maproulette.models.dal.DALManager
 import org.maproulette.utils.Crypto
 import org.slf4j.LoggerFactory
-import play.api.Logger
 import play.api.db.Database
 import play.api.libs.oauth._
 import play.api.libs.ws.WSClient
@@ -31,6 +34,7 @@ import scala.util.{Failure, Success, Try}
 class SessionManager @Inject() (
     ws: WSClient,
     dalManager: DALManager,
+    serviceManager: ServiceManager,
     config: Config,
     db: Database,
     crypto: Crypto
@@ -92,7 +96,7 @@ class SessionManager @Inject() (
   def retrieveUser(username: String, apiKey: String): Option[User] = {
     val apiSplit        = apiKey.split("\\|")
     val encryptedApiKey = crypto.encrypt(apiSplit(1))
-    dalManager.user.retrieveByUsernameAndAPIKey(username, encryptedApiKey)
+    this.serviceManager.user.retrieveByUsernameAndAPIKey(username, encryptedApiKey)
   }
 
   /**
@@ -250,44 +254,13 @@ class SessionManager @Inject() (
         if (impersonateUserId < 0) {
           p success Some(User.superUser)
         } else {
-          this.dalManager.user.retrieveByOSMID(impersonateUserId) match {
+          this.serviceManager.user.retrieveByOSMId(impersonateUserId) match {
             case Some(user) => p success Some(user)
             case None       => p success Some(User.superUser)
           }
         }
       case false =>
-        val apiUser = request.headers.get(SessionManager.KEY_API) match {
-          case Some(apiKey) =>
-            // The super key gives complete access to everything. By default the super key is not
-            // enabled, but if it is anybody with that key can do anything in the system. This is
-            // generally not a good idea to have it enabled, but useful for internal systems or
-            // dev testing.
-            if (this.config.superKey.nonEmpty && StringUtils.equals(
-                  this.config.superKey.get,
-                  apiKey
-                )) {
-              Some(User.superUser)
-            } else {
-              try {
-                val apiSplit        = apiKey.split("\\|")
-                val encryptedApiKey = crypto.encrypt(apiSplit(1))
-                this.dalManager.user
-                  .retrieveByAPIKey(encryptedApiKey, User.superUser)(apiSplit(0).toLong) match {
-                  case Some(user) => Some(user)
-                  case None       => None
-                }
-              } catch {
-                case ne: NumberFormatException =>
-                  logger.warn("Could not decrypt user key, generally this is not an issue")
-                  None
-                case e: Exception =>
-                  logger.error(e.getMessage, e)
-                  None
-              }
-            }
-          case None => None
-        }
-        apiUser match {
+        this.getSessionByApiKey(request.headers.get(SessionManager.KEY_API)) match {
           case Some(user) => p success Some(user)
           case None =>
             tokenPair match {
@@ -298,8 +271,9 @@ class SessionManager @Inject() (
                     optionUser match {
                       case Some(u) =>
                         u.apiKey match {
-                          case None | Some("") => dalManager.user.generateAPIKey(u, User.superUser)
-                          case _               => // ignore
+                          case None | Some("") =>
+                            this.serviceManager.user.generateAPIKey(u, User.superUser)
+                          case _ => // ignore
                         }
                       case None => // just ignore, we don't need to do anything if no user was found
                     }
@@ -311,6 +285,40 @@ class SessionManager @Inject() (
         }
     }
     p.future
+  }
+
+  def getSessionByApiKey(apiKey: Option[String]): Option[User] = {
+    apiKey match {
+      case Some(apiKey) =>
+        // The super key gives complete access to everything. By default the super key is not
+        // enabled, but if it is anybody with that key can do anything in the system. This is
+        // generally not a good idea to have it enabled, but useful for internal systems or
+        // dev testing.
+        if (this.config.superKey.nonEmpty && StringUtils.equals(
+              this.config.superKey.get,
+              apiKey
+            )) {
+          Some(User.superUser)
+        } else {
+          try {
+            val apiSplit        = apiKey.split("\\|")
+            val encryptedApiKey = crypto.encrypt(apiSplit(1))
+            this.serviceManager.user
+              .retrieveByAPIKey(apiSplit(0).toLong, encryptedApiKey, User.superUser) match {
+              case Some(user) => Some(user)
+              case None       => None
+            }
+          } catch {
+            case _: NumberFormatException =>
+              logger.warn("Could not decrypt user key, generally this is not an issue")
+              None
+            case e: Exception =>
+              logger.error(e.getMessage, e)
+              None
+          }
+        }
+      case None => None
+    }
   }
 
   /**
@@ -332,8 +340,9 @@ class SessionManager @Inject() (
     // in a particular session will it have to hit the database.
     val storedUser = userId match {
       case Some(sessionId) if StringUtils.isNotEmpty(sessionId) =>
-        this.dalManager.user.matchByRequestTokenAndId(accessToken, User.superUser)(sessionId.toLong)
-      case None => dalManager.user.matchByRequestToken(accessToken, User.superUser)
+        this.serviceManager.user
+          .matchByRequestToken(sessionId.toLong, accessToken, User.superUser)
+      case None => this.serviceManager.user.matchByRequestToken(-1, accessToken, User.superUser)
     }
     storedUser match {
       case Some(u) =>
@@ -373,8 +382,8 @@ class SessionManager @Inject() (
       case Success(detailsResponse) if detailsResponse.status == HttpResponseStatus.OK.code() =>
         try {
           val newUser = User.generate(detailsResponse.body, accessToken, config)
-          val osmUser = this.dalManager.user.insert(newUser, user)
-          p success Some(this.dalManager.user.initializeHomeProject(osmUser))
+          val osmUser = this.serviceManager.user.create(newUser, user)
+          p success Some(this.serviceManager.user.initializeHomeProject(osmUser))
         } catch {
           case e: Exception => p failure e
         }

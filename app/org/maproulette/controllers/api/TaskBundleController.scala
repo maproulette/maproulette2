@@ -1,9 +1,15 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
-import org.maproulette.controllers.SessionController
 import org.maproulette.data._
 import org.maproulette.exception.InvalidException
+import org.maproulette.framework.controller.SessionController
+import org.maproulette.framework.service.CommentService
 import org.maproulette.models.dal.mixin.TagDALMixin
 import org.maproulette.models.dal.{DALManager, TagDAL}
 import org.maproulette.models.{Tag, Task}
@@ -18,6 +24,7 @@ class TaskBundleController @Inject() (
     override val sessionManager: SessionManager,
     override val actionManager: ActionManager,
     override val bodyParsers: PlayBodyParsers,
+    commentService: CommentService,
     dalManager: DALManager,
     components: ControllerComponents
 ) extends AbstractController(components)
@@ -86,7 +93,7 @@ class TaskBundleController @Inject() (
             case Some(a) => Some(a.id)
             case None    => None
           }
-          this.dalManager.comment.add(user, task, comment, actionId)
+          this.commentService.create(user, task.id, comment, actionId)
         }
 
         // Add tags to each task

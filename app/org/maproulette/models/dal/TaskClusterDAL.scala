@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
 import java.sql.Connection
@@ -11,10 +13,12 @@ import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.data.Actions
 import org.maproulette.exception.InvalidException
+import org.maproulette.framework.model.User
+import org.maproulette.framework.psql.TransactionManager
 import org.maproulette.models.dal.mixin.SearchParametersMixin
-import org.maproulette.models.utils.{DALHelper, TransactionManager}
+import org.maproulette.models.utils.DALHelper
 import org.maproulette.models.{ClusteredPoint, Point, PointReview, TaskCluster}
-import org.maproulette.session.{SearchParameters, User}
+import org.maproulette.session.SearchParameters
 import play.api.db.Database
 import play.api.libs.json.{JsString, Json}
 
@@ -231,6 +235,12 @@ class TaskClusterDAL @Inject() (override val db: Database, challengeDAL: Challen
             sortClause = this.order(Some("reviewed_at"), order, "task_review")
           case "mappedOn" =>
             sortClause = this.order(Some("mapped_on"), order, "tasks")
+          case "completedBy" =>
+            sortClause = this.order(Some("completed_by"), order, "tasks")
+          case "completedTimeSpent" =>
+            sortClause = this.order(Some("completed_time_spent"), order, "tasks")
+          case "reviewDuration" =>
+            sortClause = this.order(Some("reviewDuration"), order, "")
           case _ =>
             sortClause = this.order(Some(sort), order, "tasks")
         }
@@ -254,34 +264,44 @@ class TaskClusterDAL @Inject() (override val db: Database, challengeDAL: Challen
       val query =
         s"""
           SELECT tasks.id, tasks.name, tasks.parent_id, c.name, tasks.instruction, tasks.status, tasks.mapped_on,
+                 tasks.completed_time_spent, tasks.completed_by,
                  tasks.bundle_id, tasks.is_bundle_primary, tasks.suggestedfix_geojson::TEXT as suggested_fix,
                  task_review.review_status, task_review.review_requested_by, task_review.reviewed_by, task_review.reviewed_at,
                  task_review.review_started_at,
-                 ST_AsGeoJSON(tasks.location) AS location, priority FROM tasks
+                 ST_AsGeoJSON(tasks.location) AS location, priority,
+                 CASE WHEN task_review.review_started_at IS NULL
+                       THEN 0
+                       ELSE EXTRACT(epoch FROM (task_review.reviewed_at - task_review.review_started_at)) END
+                 AS reviewDuration
+          FROM tasks
           ${joinClause.toString()}
           ${whereClause.toString()}
           ${sortClause}
           LIMIT ${sqlLimit(limit)} OFFSET $offset
         """
 
-      val pointParser = long("tasks.id") ~ str("tasks.name") ~ int("tasks.parent_id") ~ str(
-        "challenges.name"
-      ) ~
-        str("tasks.instruction") ~ str("location") ~ int("tasks.status") ~ get[Option[String]](
-        "suggested_fix"
-      ) ~
-        get[Option[DateTime]]("tasks.mapped_on") ~ get[Option[Int]]("task_review.review_status") ~
-        get[Option[Long]]("task_review.review_requested_by") ~ get[Option[Long]](
-        "task_review.reviewed_by"
-      ) ~
-        get[Option[DateTime]]("task_review.reviewed_at") ~ get[Option[DateTime]](
-        "task_review.review_started_at"
-      ) ~
-        int("tasks.priority") ~ get[Option[Long]]("tasks.bundle_id") ~
+      val pointParser = long("tasks.id") ~
+        str("tasks.name") ~
+        int("tasks.parent_id") ~
+        str("challenges.name") ~
+        str("tasks.instruction") ~
+        str("location") ~
+        int("tasks.status") ~
+        get[Option[String]]("suggested_fix") ~
+        get[Option[DateTime]]("tasks.mapped_on") ~
+        get[Option[Long]]("tasks.completed_time_spent") ~
+        get[Option[Long]]("tasks.completed_by") ~
+        get[Option[Int]]("task_review.review_status") ~
+        get[Option[Long]]("task_review.review_requested_by") ~
+        get[Option[Long]]("task_review.reviewed_by") ~
+        get[Option[DateTime]]("task_review.reviewed_at") ~
+        get[Option[DateTime]]("task_review.review_started_at") ~
+        int("tasks.priority") ~
+        get[Option[Long]]("tasks.bundle_id") ~
         get[Option[Boolean]]("tasks.is_bundle_primary") map {
         case id ~ name ~ parentId ~ parentName ~ instruction ~ location ~ status ~ suggestedFix ~ mappedOn ~
-              reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~ reviewStartedAt ~ priority ~
-              bundleId ~ isBundlePrimary =>
+              completedTimeSpent ~ completedBy ~ reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~
+              reviewStartedAt ~ priority ~ bundleId ~ isBundlePrimary =>
           val locationJSON = Json.parse(location)
           val coordinates  = (locationJSON \ "coordinates").as[List[Double]]
           val point        = Point(coordinates(1), coordinates.head)
@@ -303,6 +323,8 @@ class TaskClusterDAL @Inject() (override val db: Database, challengeDAL: Challen
             status,
             suggestedFix,
             mappedOn,
+            completedTimeSpent,
+            completedBy,
             pointReview,
             priority,
             bundleId,

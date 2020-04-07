@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package controllers
 
 import com.google.inject.Inject
@@ -7,8 +9,11 @@ import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.exception._
+import org.maproulette.framework.model.{Group, User}
+import org.maproulette.framework.psql.{Order, Query}
+import org.maproulette.framework.service.UserService
 import org.maproulette.models.dal.DALManager
-import org.maproulette.session.{Group, SessionManager, User}
+import org.maproulette.session.SessionManager
 import play.api.libs.json.{JsString, Json}
 import play.api.mvc._
 import play.shaded.oauth.oauth.signpost.exception.OAuthNotAuthorizedException
@@ -25,6 +30,7 @@ import scala.util.{Failure, Success}
 class AuthController @Inject() (
     components: ControllerComponents,
     sessionManager: SessionManager,
+    userService: UserService,
     dalManager: DALManager,
     val config: Config
 ) extends AbstractController(components)
@@ -72,30 +78,6 @@ class AuthController @Inject() (
     }
   }
 
-  def signIn(redirect: String): Action[AnyContent] = Action.async { implicit request =>
-    MPExceptionUtil.internalAsyncExceptionCatcher { () =>
-      val p = Promise[Result]
-      request.body.asFormUrlEncoded match {
-        case Some(data) =>
-          val username = data.getOrElse("signInUsername", ArrayBuffer("")).mkString
-          val apiKey   = data.getOrElse("signInAPIKey", ArrayBuffer("")).mkString
-          this.sessionManager.retrieveUser(username, apiKey) match {
-            case Some(user) =>
-              p success this.withOSMSession(
-                user,
-                Redirect(getRedirectURL(request, redirect))
-                  .withHeaders(("Cache-Control", "no-chache"))
-              )
-            case None =>
-              p failure new OAuthNotAuthorizedException("Invalid username or apiKey provided")
-          }
-        case None =>
-          p failure new OAuthNotAuthorizedException("Invalid username or apiKey provided")
-      }
-      p.future
-    }
-  }
-
   def withOSMSession(user: User, result: Result): Result = {
     result.withSession(
       SessionManager.KEY_TOKEN     -> user.osmProfile.requestToken.token,
@@ -133,6 +115,30 @@ class AuthController @Inject() (
     }
   }
 
+  def signIn(redirect: String): Action[AnyContent] = Action.async { implicit request =>
+    MPExceptionUtil.internalAsyncExceptionCatcher { () =>
+      val p = Promise[Result]
+      request.body.asFormUrlEncoded match {
+        case Some(data) =>
+          val username = data.getOrElse("signInUsername", ArrayBuffer("")).mkString
+          val apiKey   = data.getOrElse("signInAPIKey", ArrayBuffer("")).mkString
+          this.sessionManager.retrieveUser(username, apiKey) match {
+            case Some(user) =>
+              p success this.withOSMSession(
+                user,
+                Redirect(getRedirectURL(request, redirect))
+                  .withHeaders(("Cache-Control", "no-chache"))
+              )
+            case None =>
+              p failure new OAuthNotAuthorizedException("Invalid username or apiKey provided")
+          }
+        case None =>
+          p failure new OAuthNotAuthorizedException("Invalid username or apiKey provided")
+      }
+      p.future
+    }
+  }
+
   /**
     * Signs out the user, creating essentially a blank new session and responds with a 200 OK
     *
@@ -143,14 +149,14 @@ class AuthController @Inject() (
   }
 
   def deleteUser(userId: Long): Action[AnyContent] = Action.async { implicit request =>
-    implicit val requireSuperUser = true
+    implicit val requireSuperUser: Boolean = true
     sessionManager.authenticatedRequest { implicit user =>
       Ok(
         Json.toJson(
           StatusMessage(
             "OK",
             JsString(
-              s"${dalManager.user.delete(userId, user)} User deleted by super user ${user.name} [${user.id}]."
+              s"${this.userService.delete(userId, user)} User deleted by super user ${user.name} [${user.id}]."
             )
           )
         )
@@ -169,7 +175,7 @@ class AuthController @Inject() (
   def generateAPIKey(userId: Long = -1): Action[AnyContent] = Action.async { implicit request =>
     sessionManager.authenticatedRequest { implicit user =>
       val newAPIUser = if (user.isSuperUser && userId != -1) {
-        dalManager.user.retrieveById(userId) match {
+        this.userService.retrieve(userId) match {
           case Some(u) => u
           case None =>
             throw new NotFoundException(
@@ -179,7 +185,7 @@ class AuthController @Inject() (
       } else {
         user
       }
-      dalManager.user.generateAPIKey(newAPIUser, user) match {
+      this.userService.generateAPIKey(newAPIUser, user) match {
         case Some(updated) =>
           updated.apiKey match {
             case Some(api) => Ok(api)
@@ -196,11 +202,13 @@ class AuthController @Inject() (
     * @return Simple Ok if succeeded.
     */
   def resetAllAPIKeys(): Action[AnyContent] = Action.async { implicit request =>
-    implicit val requireSuperUser = true
+    implicit val requireSuperUser: Boolean = true
     sessionManager.authenticatedRequest { implicit user =>
-      dalManager.user.list(-1).foreach { apiUser =>
-        dalManager.user.generateAPIKey(apiUser, user)
-      }
+      this.userService
+        .query(Query.simple(List.empty, order = Order.simple(User.FIELD_ID)), user)
+        .foreach { apiUser =>
+          this.userService.generateAPIKey(apiUser, user)
+        }
       Ok
     }
   }
@@ -213,16 +221,16 @@ class AuthController @Inject() (
     */
   def addUserToProject(userId: Long, projectId: Long): Action[AnyContent] = Action.async {
     implicit request =>
-      implicit val requireSuperUser = true
+      implicit val requireSuperUser: Boolean = true
       sessionManager.authenticatedRequest { implicit user =>
-        dalManager.user.retrieveById(userId) match {
+        this.userService.retrieve(userId) match {
           case Some(addUser) =>
             if (addUser.groups.exists(_.projectId == projectId)) {
               throw new InvalidException(
                 s"User ${addUser.name} is already part of project $projectId"
               )
             }
-            dalManager.user
+            this.userService
               .addUserToProject(addUser.osmProfile.id, projectId, Group.TYPE_ADMIN, user)
             Ok(
               Json.toJson(

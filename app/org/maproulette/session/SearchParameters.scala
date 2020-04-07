@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.session
 
 import java.net.URLDecoder
@@ -29,7 +31,8 @@ case class SearchChallengeParameters(
     challengeSearch: Option[String] = None,
     challengeEnabled: Option[Boolean] = None,
     challengeDifficulty: Option[Int] = None,
-    challengeStatus: Option[List[Int]] = None
+    challengeStatus: Option[List[Int]] = None,
+    requiresLocal: Int = SearchParameters.CHALLENGE_REQUIRES_LOCAL_EXCLUDE
 )
 
 case class SearchParameters(
@@ -52,6 +55,7 @@ case class SearchParameters(
     bounding: Option[SearchLocation] = None,
     boundingGeometries: Option[List[JsObject]] = None,
     fuzzySearch: Option[Int] = None,
+    mapper: Option[String] = None,
     owner: Option[String] = None,
     reviewer: Option[String] = None
 ) {
@@ -100,6 +104,10 @@ object SearchParameters {
   val TASK_PROP_OPERATION_TYPE_AND = "and"
   val TASK_PROP_OPERATION_TYPE_OR  = "or"
 
+  val CHALLENGE_REQUIRES_LOCAL_EXCLUDE = 0
+  val CHALLENGE_REQUIRES_LOCAL_INCLUDE = 1
+  val CHALLENGE_REQUIRES_LOCAL_ONLY    = 2
+
   implicit val locationWrites = Json.writes[SearchLocation]
   implicit val locationReads  = Json.reads[SearchLocation]
   implicit val taskPropertySearchWrites: Writes[TaskPropertySearch] =
@@ -146,6 +154,8 @@ object SearchParameters {
         case Some(r) => Utils.insertIntoJson(updated, "challengeStatus", r, true)
         case None    => updated
       }
+      updated =
+        Utils.insertIntoJson(updated, "requiresLocal", o.challengeParams.requiresLocal, true)
 
       updated = updated.as[JsObject] - "challengeParams"
       updated
@@ -188,6 +198,11 @@ object SearchParameters {
 
       (json \ "challengeStatus").toOption match {
         case Some(v) => challengeParams = challengeParams + ("challengeStatus" -> v)
+        case None    => // do nothing
+      }
+
+      (json \ "requiresLocal").toOption match {
+        case Some(v) => challengeParams = challengeParams + ("requiresLocal" -> v)
         case None    => // do nothing
       }
 
@@ -291,7 +306,11 @@ object SearchParameters {
         request.getQueryString("cStatus") match {
           case Some(v) => Utils.toIntList(v)
           case None => params.challengeParams.challengeStatus
-        }),
+        },
+        //requiresLocal
+        this.getIntParameter(request.getQueryString("cLocal"),
+          Some(params.challengeParams.requiresLocal)).getOrElse(SearchParameters.CHALLENGE_REQUIRES_LOCAL_EXCLUDE)
+      ),
       //taskTags
       request.getQueryString("tt") match {
         case Some(v) => Some(v.split(",").toList)
@@ -352,6 +371,8 @@ object SearchParameters {
       None,
       //FuzzySearch
       this.getIntParameter(request.getQueryString("fuzzy"), params.fuzzySearch),
+      //CompletedBy
+      this.getStringParameter(request.getQueryString("m"), params.mapper),
       //Owner
       this.getStringParameter(request.getQueryString("o"), params.owner),
       //Reviewer

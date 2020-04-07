@@ -2,10 +2,10 @@
 
 # --- !Ups
 -- Column to keep track of whether old tasks in the challenge should be
-SELECT add_drop_column('challenges', 'last_updated', 'timestamp without time zone DEFAULT NOW()');
+SELECT add_drop_column('challenges', 'last_updated', 'timestamp without time zone DEFAULT NOW()');;
 -- Add new Column to Challenge to allow users to define the checkin comments for Challenges
-SELECT add_drop_column('challenges', 'checkin_comment', 'character varying');
-UPDATE challenges SET checkin_comment = '#maproulette #' || replace(name, ' ', '_');
+SELECT add_drop_column('challenges', 'checkin_comment', 'character varying');;
+UPDATE challenges SET checkin_comment = '#maproulette #' || replace(name, ' ', '_');;
 
 CREATE TABLE IF NOT EXISTS task_comments
 (
@@ -38,4 +38,6 @@ END$$;;
 UPDATE challenges SET last_updated = NOW() WHERE last_updated IS NULL;;
 
 # --- !Downs
---SELECT add_drop_column('challenges', 'last_updated', '', false);
+SELECT add_drop_column('challenges', 'last_updated', '', false);;
+SELECT add_drop_column('challenges', 'checkin_comment', '', false);;
+DROP TABLE IF EXISTS task_comments;;

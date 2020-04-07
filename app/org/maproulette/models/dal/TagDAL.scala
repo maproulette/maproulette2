@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
 import java.sql.Connection
@@ -10,10 +12,10 @@ import javax.inject.{Inject, Provider, Singleton}
 import org.maproulette.Config
 import org.maproulette.cache.{CacheManager, TagCacheManager}
 import org.maproulette.exception.{InvalidException, UniqueViolationException}
+import org.maproulette.framework.model.User
 import org.maproulette.models.Tag
 import org.maproulette.models.utils.OR
 import org.maproulette.permissions.Permission
-import org.maproulette.session.User
 import play.api.db.Database
 import play.api.libs.json.JsValue
 
@@ -271,7 +273,7 @@ class TagDAL @Inject() (
             // Look for each tag in the database by name/tagType. (Sanitize by removing any ' characters)
             appendInWhereClause(
               fetchWhere,
-              s"(name = '${t.name.replaceAll("'", "")}' AND tag_type = '${t.tagType}')"
+              s"(name = '${t.name.toLowerCase.replaceAll("'", "")}' AND tag_type = '${t.tagType}')"
             )(Some(OR()))
           })
           SQL("SELECT * from tags WHERE " + fetchWhere.toString).as(this.parser.*)

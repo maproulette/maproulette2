@@ -1,20 +1,29 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.utils
 
 import org.joda.time.DateTime
+import org.maproulette.framework.model.{
+  Challenge,
+  ChallengeCreation,
+  ChallengeExtra,
+  ChallengeGeneral,
+  ChallengePriority
+}
 import org.maproulette.models._
+import org.maproulette.utils.Utils
 import org.maproulette.utils.Utils.{jsonReads, jsonWrites}
 import play.api.libs.functional.syntax._
 import play.api.libs.json.JodaReads._
 import play.api.libs.json.JodaWrites._
 import play.api.libs.json._
-import org.maproulette.utils.Utils
 
 /**
   * @author cuthbertm
   */
-trait ChallengeWrites {
+trait ChallengeWrites extends DefaultWrites {
   implicit val challengeGeneralWrites: Writes[ChallengeGeneral]   = Json.writes[ChallengeGeneral]
   implicit val challengeCreationWrites: Writes[ChallengeCreation] = Json.writes[ChallengeCreation]
 

@@ -1,20 +1,22 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
 import anorm.SqlParser._
 import anorm._
-import javax.inject.{Inject, Provider, Singleton}
+import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.data.UserType
 import org.maproulette.exception.{InvalidException, NotFoundException}
-import org.maproulette.models.utils.DALHelper
+import org.maproulette.framework.model.{Challenge, Comment, User}
+import org.maproulette.framework.service.{ProjectService, UserService}
 import org.maproulette.models._
+import org.maproulette.models.utils.DALHelper
 import org.maproulette.permissions.Permission
 import org.maproulette.provider.websockets.{WebSocketMessages, WebSocketProvider}
-import org.maproulette.session.User
-import org.maproulette.session.dal.UserDAL
 import play.api.db.Database
 
 /**
@@ -23,8 +25,8 @@ import play.api.db.Database
 @Singleton
 class NotificationDAL @Inject() (
     db: Database,
-    userDAL: Provider[UserDAL],
-    projectDAL: Provider[ProjectDAL],
+    userService: UserService,
+    projectService: ProjectService,
     webSocketProvider: WebSocketProvider,
     config: Config,
     permission: Permission
@@ -115,7 +117,7 @@ class NotificationDAL @Inject() (
       val username = m.subgroups.filter(_ != null).head
 
       // Retrieve and notify mentioned user
-      userDAL.get().retrieveByOSMUsername(username, User.superUser) match {
+      this.userService.retrieveByOSMUsername(username, User.superUser) match {
         case Some(mentionedUser) =>
           this.addNotification(
             UserNotification(
@@ -261,9 +263,9 @@ class NotificationDAL @Inject() (
   }
 
   def createChallengeCompletionNotification(challenge: Challenge) = {
-    projectDAL.get().retrieveById(challenge.general.parent) match {
+    this.projectService.retrieve(challenge.general.parent) match {
       case Some(parentProject) =>
-        userDAL.get().getUsersManagingProject(parentProject.id, None, User.superUser).foreach {
+        this.userService.getUsersManagingProject(parentProject.id, None, User.superUser).foreach {
           manager =>
             this.addNotification(
               UserNotification(

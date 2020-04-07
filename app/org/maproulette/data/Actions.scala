@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.data
 
 /**
@@ -37,7 +39,6 @@ class ItemType(id: Int) {
       case t: TaskType              => new TaskItem(itemId)
       case ta: TagType              => new TagItem(itemId)
       case u: UserType              => new UserItem(itemId)
-      case s: SurveyType            => new SurveyItem(itemId)
       case vc: VirtualChallengeType => new VirtualChallengeItem(itemId)
       case b: BundleType            => new BundleItem(itemId)
     }
@@ -51,8 +52,6 @@ trait Item {
 case class ProjectType() extends ItemType(Actions.ITEM_TYPE_PROJECT)
 
 case class ChallengeType() extends ItemType(Actions.ITEM_TYPE_CHALLENGE)
-
-case class SurveyType() extends ItemType(Actions.ITEM_TYPE_SURVEY)
 
 case class TaskType() extends ItemType(Actions.ITEM_TYPE_TASK)
 
@@ -75,8 +74,6 @@ class TaskItem(override val itemId: Long) extends TaskType with Item
 class TagItem(override val itemId: Long) extends TagType with Item
 
 class UserItem(override val itemId: Long) extends UserType with Item
-
-class SurveyItem(override val itemId: Long) extends SurveyType with Item
 
 class VirtualChallengeItem(override val itemId: Long) extends VirtualChallengeType with Item
 
@@ -131,7 +128,6 @@ object Actions {
     ITEM_TYPE_CHALLENGE         -> (ITEM_TYPE_CHALLENGE_NAME, ChallengeType()),
     ITEM_TYPE_TASK              -> (ITEM_TYPE_TASK_NAME, TaskType()),
     ITEM_TYPE_TAG               -> (ITEM_TYPE_TAG_NAME, TagType()),
-    ITEM_TYPE_SURVEY            -> (ITEM_TYPE_SURVEY_NAME, SurveyType()),
     ITEM_TYPE_USER              -> (ITEM_TYPE_USER_NAME, UserType()),
     ITEM_TYPE_GROUP             -> (ITEM_TYPE_GROUP_NAME, GroupType()),
     ITEM_TYPE_VIRTUAL_CHALLENGE -> (ITEM_TYPE_VIRTUAL_CHALLENGE_NAME, VirtualChallengeType()),

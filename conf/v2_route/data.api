@@ -1,0 +1,34 @@
+### NoDocs ###
+GET     /data/challenge/:challengeId/users          @org.maproulette.controllers.api.DataController.getUserChallengeSummary(challengeId:Long, start:String ?= "", end:String ?= "", priority:Int ?= -1)
+### NoDocs ###
+POST    /data/challenge/summary                     @org.maproulette.controllers.api.DataController.getChallengeSummaries(projectList:String ?= "", priority:String ?= "", onlyEnabled:Boolean ?= true)
+### NoDocs ###
+GET     /data/user/activity                         @org.maproulette.controllers.api.DataController.getRecentUserActivity(limit:Int ?= -1, offset:Int ?= 0)
+### NoDocs ###
+GET     /data/user/summary                          @org.maproulette.controllers.api.DataController.getUserSummary(projectList:String ?= "", start:String ?= "", end:String ?= "", priority:Int ?= -1)
+### NoDocs ###
+GET     /data/user/leaderboard                      @org.maproulette.controllers.api.DataController.getUserLeaderboard(userIds:String ?= "", projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, limit:Int ?= 20, offset:Int ?= 0)
+### NoDocs ###
+GET     /data/user/:userId/leaderboard              @org.maproulette.controllers.api.DataController.getLeaderboardForUser(userId:Long, projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, bracket:Int ?= 0)
+### NoDocs ###
+GET     /data/user/:userId/topChallenges            @org.maproulette.controllers.api.DataController.getUserTopChallenges(userId:Long, projectIds:String ?= "", challengeIds:String ?= "", countryCodes:String ?= "", monthDuration:String ?= "", start:String ?= "", end:String ?= "", onlyEnabled:Boolean ?= true, limit:Int ?= 20, offset:Int ?= 0)
+### NoDocs ###
+GET     /data/user/:userId/metrics                  @org.maproulette.framework.controller.UserController.getMetricsForUser(userId:Long, monthDuration:Int ?= -1, reviewDuration:Int ?= -1, reviewerDuration:Int ?= -1, start: String ?= null, end: String ?= null, reviewStart: String ?= null, reviewEnd: String ?= null, reviewerStart: String ?= null, reviewerEnd: String ?= null)
+### NoDocs ###
+GET     /data/project/activity                      @org.maproulette.controllers.api.DataController.getProjectActivity(projectList:String ?= "", start:String ?= "", end:String ?= "")
+### NoDocs ###
+GET     /data/project/summary                       @org.maproulette.controllers.api.DataController.getProjectSummary(projectList:String ?= "", onlyEnabled:Boolean ?= true, includeByPriority:Boolean ?= false)
+### NoDocs ###
+GET     /data/challenge/:challengeId/activity       @org.maproulette.controllers.api.DataController.getChallengeActivity(challengeId:Long, start:String ?= "", end:String ?= "", priority:Int ?= -1)
+### NoDocs ###
+GET     /data/raw/activity                          @org.maproulette.controllers.api.DataController.getRawActivity(userIds:String ?= "", projectIds:String ?= "", challengeIds:String ?= "", start:String ?= "", end:String ?= "")
+### NoDocs ###
+GET     /data/status/activity                       @org.maproulette.controllers.api.DataController.getStatusActivity(userIds:String ?= "", projectIds:String ?= "", challengeIds:String ?= "", start:String ?= "", end:String ?= "", newStatus:String ?= "", oldStatus:String ?= "", limit:Int ?= 10, page:Int ?= 0)
+### NoDocs ###
+GET     /data/status/latestActivity                 @org.maproulette.controllers.api.DataController.getLatestChallengeActivity(projectIds:String ?= "", challengeIds:String ?= "", entries:Int ?= 1)
+### NoDocs ###
+GET     /data/status/summary                        @org.maproulette.controllers.api.DataController.getStatusSummary(userIds:String ?= "", projectIds:String ?= "", challengeIds:String ?= "", start:String ?= "", end:String ?= "", limit:Int ?= 10, page:Int ?= 0)
+### NoDocs ###
+GET     /data/challenge/:challengeId/propertyKeys   @org.maproulette.controllers.api.DataController.getPropertyKeys(challengeId:Long)
+### NoDocs ###
+GET     /data/challenge/:challengeId                @org.maproulette.controllers.api.DataController.getChallengeSummary(challengeId:Long, priority:String ?= "", includeByPriority:Boolean ?= false)

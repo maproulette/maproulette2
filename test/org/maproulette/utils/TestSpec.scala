@@ -1,23 +1,30 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.utils
 
 import com.google.inject.util.Providers
 import org.joda.time.DateTime
 import org.maproulette.data.{ActionManager, DataManager, StatusActionManager}
+import org.maproulette.framework.model._
+import org.maproulette.framework.service._
 import org.maproulette.models._
 import org.maproulette.models.dal._
 import org.maproulette.permissions.Permission
 import org.maproulette.session._
-import org.maproulette.session.dal.{UserDAL, UserGroupDAL}
 import org.mockito.ArgumentMatchers.{eq => eqM, _}
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
+import org.scalatestplus.play.PlaySpec
 import play.api.db.Databases
 import play.api.libs.oauth.RequestToken
 
 /**
   * @author mcuthbert
   */
-trait TestSpec extends MockitoSugar {
+trait TestSpec extends PlaySpec with MockitoSugar {
 
   val testDb = Databases.inMemory()
 
@@ -52,21 +59,6 @@ trait TestSpec extends MockitoSugar {
     ChallengeExtra()
   )
 
-  //surveys
-  val survey1 = Challenge(
-    1,
-    "Survey1",
-    DateTime.now(),
-    DateTime.now(),
-    None,
-    false,
-    None,
-    ChallengeGeneral(101, 1, ""),
-    ChallengeCreation(),
-    ChallengePriority(),
-    ChallengeExtra()
-  )
-
   //tasks
   val task1               = Task(1, "Task1", DateTime.now(), DateTime.now(), 1, None, None, "")
   val tagDAL              = mock[TagDAL]
@@ -83,9 +75,8 @@ trait TestSpec extends MockitoSugar {
     SearchParameters(),
     DateTime.now()
   )
-  val surveyDAL  = mock[SurveyDAL]
-  val projectDAL = mock[ProjectDAL]
-  val userDAL    = mock[UserDAL]
+  val projectService = mock[ProjectService]
+  val userService    = mock[UserService]
   val adminUser = User(
     1,
     DateTime.now(),
@@ -93,12 +84,10 @@ trait TestSpec extends MockitoSugar {
     OSMProfile(1, "AdminUser", "", "", Location(0, 0), DateTime.now(), RequestToken("", "")),
     List(adminGroup)
   )
-  val userGroupDAL  = mock[UserGroupDAL]
   val actionManager = mock[ActionManager]
   val dataManager   = mock[DataManager]
 
   val statusActionManager = mock[StatusActionManager]
-  val commentDAL          = mock[CommentDAL]
   val taskBundleDAL       = mock[TaskBundleDAL]
   val taskReviewDAL       = mock[TaskReviewDAL]
   val taskClusterDAL      = mock[TaskClusterDAL]
@@ -107,20 +96,29 @@ trait TestSpec extends MockitoSugar {
     taskDAL,
     challengeDAL,
     virtualChallengeDAL,
-    surveyDAL,
-    projectDAL,
-    userDAL,
-    userGroupDAL,
     notificationDAL,
     actionManager,
     dataManager,
-    commentDAL,
     taskBundleDAL,
     taskReviewDAL,
     taskClusterDAL,
     statusActionManager
   )
-  val permission = new Permission(Providers.of[DALManager](dalManager))
+  val groupService          = mock[GroupService]
+  val commentService        = mock[CommentService]
+  val challengeService      = mock[ChallengeService]
+  val userMetricService     = mock[UserMetricService]
+  val virtualProjectService = mock[VirtualProjectService]
+  val serviceManager = new ServiceManager(
+    Providers.of[ProjectService](projectService),
+    Providers.of[GroupService](groupService),
+    Providers.of[UserService](userService),
+    Providers.of[CommentService](commentService),
+    Providers.of[ChallengeService](challengeService),
+    Providers.of[UserMetricService](userMetricService),
+    Providers.of[VirtualProjectService](virtualProjectService)
+  )
+  val permission = new Permission(Providers.of[DALManager](dalManager), serviceManager)
   var writeUser = User(
     2,
     DateTime.now(),
@@ -157,11 +155,8 @@ trait TestSpec extends MockitoSugar {
       .when(taskDAL.asInstanceOf[BaseDAL[Long, Task]])
       .retrieveById(1L, None)
     when(taskDAL.retrieveRootObject(eqM(Right(task1)), any())(any())).thenReturn(Some(project1))
-    doAnswer(_ => Some(project1))
-      .when(taskDAL.asInstanceOf[BaseDAL[Long, Task]])
-      .retrieveRootObject(eqM(Right(task1)), any())(any())
 
-    // Mocks for Challenges
+    // Mocks for Challenge DAL
     when(challengeDAL.retrieveById(0L, None)).thenReturn(None)
     doAnswer(_ => None)
       .when(challengeDAL.asInstanceOf[BaseDAL[Long, Challenge]])
@@ -172,6 +167,9 @@ trait TestSpec extends MockitoSugar {
       .retrieveById(1L, None)
     when(challengeDAL.retrieveRootObject(eqM(Right(challenge1)), any())(any()))
       .thenReturn(Some(project1))
+    // Mocks for Challenge Service
+    when(challengeService.retrieve(0L)).thenReturn(None)
+    when(challengeService.retrieve(1L)).thenReturn(Some(challenge1))
 
     // Mocks for Virtual Challenges
     when(virtualChallengeDAL.retrieveById(0, None)).thenReturn(None)
@@ -183,52 +181,30 @@ trait TestSpec extends MockitoSugar {
       .when(virtualChallengeDAL.asInstanceOf[BaseDAL[Long, VirtualChallenge]])
       .retrieveById(1L, None)
 
-    // Mocks for Surveys
-    when(surveyDAL.retrieveById(0L, None)).thenReturn(None)
-    doAnswer(_ => None)
-      .when(surveyDAL.asInstanceOf[BaseDAL[Long, Challenge]])
-      .retrieveById(0L, None)
-    when(surveyDAL.retrieveById(1L, None)).thenReturn(Some(survey1))
-    doAnswer(_ => Some(survey1))
-      .when(surveyDAL.asInstanceOf[BaseDAL[Long, Challenge]])
-      .retrieveById(1L, None)
-
     // Mocks for Projects
-    when(projectDAL.retrieveById(0, None)).thenReturn(None)
-    when(projectDAL.retrieveById(1, None)).thenReturn(Some(project1))
+    when(this.projectService.retrieve(0)).thenReturn(None)
+    when(this.projectService.retrieve(1)).thenReturn(Some(project1))
 
     // Mocks for users
-    when(userDAL.retrieveById(-999L, None)).thenReturn(Some(User.superUser))
-    doAnswer(_ => Some(User.superUser))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(-999L, None)
-    when(userDAL.retrieveById(-1L, None)).thenReturn(Some(User.guestUser))
-    doAnswer(_ => Some(User.guestUser))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(-1L, None)
-    when(userDAL.retrieveById(0L, None)).thenReturn(None)
-    doAnswer(_ => None).when(userDAL.asInstanceOf[BaseDAL[Long, User]]).retrieveById(0L, None)
-    when(userDAL.retrieveById(1L, None)).thenReturn(Some(adminUser))
-    doAnswer(_ => Some(adminUser))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(1L, None)
-    when(userDAL.retrieveById(2L, None)).thenReturn(Some(writeUser))
-    doAnswer(_ => Some(writeUser))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(2L, None)
-    when(userDAL.retrieveById(3L, None)).thenReturn(Some(readUser))
-    doAnswer(_ => Some(readUser))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(3L, None)
-    when(userDAL.retrieveById(100L, None)).thenReturn(Some(owner))
-    doAnswer(_ => Some(owner))
-      .when(userDAL.asInstanceOf[BaseDAL[Long, User]])
-      .retrieveById(100L, None)
+    when(this.userService.retrieve(-999L)).thenReturn(Some(User.superUser))
+    doAnswer(_ => Some(User.superUser)).when(this.userService).retrieve(-999L)
+    when(this.userService.retrieve(-1L)).thenReturn(Some(User.guestUser))
+    doAnswer(_ => Some(User.guestUser)).when(this.userService).retrieve(-1L)
+    when(this.userService.retrieve(0L)).thenReturn(None)
+    doAnswer(_ => None).when(this.userService).retrieve(0L)
+    when(this.userService.retrieve(1L)).thenReturn(Some(adminUser))
+    doAnswer(_ => Some(adminUser)).when(this.userService).retrieve(1L)
+    when(this.userService.retrieve(2L)).thenReturn(Some(writeUser))
+    doAnswer(_ => Some(writeUser)).when(this.userService).retrieve(2L)
+    when(this.userService.retrieve(3L)).thenReturn(Some(readUser))
+    doAnswer(_ => Some(readUser)).when(this.userService).retrieve(3L)
+    when(this.userService.retrieve(100L)).thenReturn(Some(owner))
+    doAnswer(_ => Some(owner)).when(this.userService).retrieve(100L)
 
     // Mocks for User Groups
-    when(userGroupDAL.getGroup(0, None)).thenReturn(None)
-    when(userGroupDAL.getGroup(1, None)).thenReturn(Some(adminGroup))
-    when(userGroupDAL.getGroup(2, None)).thenReturn(Some(writeGroup))
-    when(userGroupDAL.getGroup(3, None)).thenReturn(Some(readGroup))
+    when(this.groupService.retrieve(0)).thenReturn(None)
+    when(this.groupService.retrieve(1)).thenReturn(Some(adminGroup))
+    when(this.groupService.retrieve(2)).thenReturn(Some(writeGroup))
+    when(this.groupService.retrieve(3)).thenReturn(Some(readGroup))
   }
 }

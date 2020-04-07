@@ -1,12 +1,14 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
 import org.apache.commons.lang3.StringUtils
 import org.maproulette.exception.{InvalidException, NotFoundException, StatusMessage}
 import org.maproulette.models.dal.{NotificationDAL}
-import org.maproulette.session.{SessionManager, User}
+import org.maproulette.session.SessionManager
 import org.maproulette.models.{NotificationSubscriptions}
 import org.maproulette.utils.{Crypto, Utils}
 import play.api.libs.json._

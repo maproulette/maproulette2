@@ -1,16 +1,19 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.data
 
 import anorm.SqlParser.get
 import anorm._
 import java.sql.Timestamp
+
 import javax.inject.Inject
 import org.joda.time.DateTime
 import org.maproulette.Config
+import org.maproulette.framework.model.User
 import org.maproulette.models.Task
 import org.maproulette.models.utils.{AND, DALHelper}
-import org.maproulette.session.User
 import play.api.Application
 import play.api.db.Database
 import play.api.libs.json.{Json, Reads, Writes}

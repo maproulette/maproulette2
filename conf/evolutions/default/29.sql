@@ -16,7 +16,7 @@ ALTER TABLE "user_metrics_history" ADD COLUMN total_rejected integer DEFAULT 0;;
 ALTER TABLE "user_metrics_history" ADD COLUMN total_approved integer DEFAULT 0;;
 ALTER TABLE "user_metrics_history" ADD COLUMN total_assisted integer DEFAULT 0;;
 
-ALTER TABLE "user_metrics" ADD CONSTRAINT user_metric_primary_key PRIMARY KEY (user_id);
+ALTER TABLE "user_metrics" ADD CONSTRAINT user_metric_primary_key PRIMARY KEY (user_id);;
 
 -- This fixes bug where new users since the original creation of user_metrics where not having
 -- their score tallied.

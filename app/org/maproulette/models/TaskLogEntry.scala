@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models
 
 import org.joda.time.DateTime
@@ -33,4 +35,5 @@ object TaskLogEntry {
   val ACTION_COMMENT       = 0
   val ACTION_STATUS_CHANGE = 1
   val ACTION_REVIEW        = 2
+  val ACTION_UPDATE        = 3
 }

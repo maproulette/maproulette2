@@ -23,5 +23,5 @@ CREATE TABLE IF NOT EXISTS user_top_challenges
 
 
 # --- !Downs
---DROP TABLE IF EXISTS user_leaderboard;;
---DROP TABLE IF EXISTS user_top_challenges;;
+DROP TABLE IF EXISTS user_leaderboard;;
+DROP TABLE IF EXISTS user_top_challenges;;

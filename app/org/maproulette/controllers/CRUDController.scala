@@ -1,5 +1,8 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.controllers
 
 import java.sql.Connection
@@ -7,15 +10,15 @@ import java.sql.Connection
 import com.fasterxml.jackson.databind.JsonMappingException
 import org.joda.time.DateTime
 import org.maproulette.data.{Created => ActionCreated, _}
-import org.maproulette.exception.{MPExceptionUtil, NotFoundException, StatusMessage, StatusMessages}
+import org.maproulette.exception.{MPExceptionUtil, NotFoundException, StatusMessage}
+import org.maproulette.framework.controller.SessionController
+import org.maproulette.framework.model.User
 import org.maproulette.metrics.Metrics
 import org.maproulette.models.BaseObject
 import org.maproulette.models.dal.BaseDAL
-import org.maproulette.session.{SessionManager, User}
 import org.maproulette.utils.Utils
-import org.slf4j.LoggerFactory
 import play.api.libs.json._
-import play.api.mvc._
+import play.api.mvc.{AbstractController, Action, AnyContent, Request}
 
 /**
   * This is the base controller class that handles all the CRUD operations for the objects in MapRoulette.
@@ -34,6 +37,7 @@ trait CRUDController[T <: BaseObject[Long]] extends SessionController {
   // the type of object that the controller is executing against
   implicit val itemType: ItemType
   // Data access layer that has to be instantiated by the class that mixes in the trait
+  @deprecated
   protected val dal: BaseDAL[Long, T]
 
   /**

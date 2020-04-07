@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.utils
 
 import java.sql.{PreparedStatement, SQLException}
@@ -33,6 +35,7 @@ case class WHERE() extends SQLKey {
   *
   * @author cuthbertm
   */
+@deprecated
 trait DALHelper {
   private val dateFormat = DateTimeFormat.forPattern("yyyy-MM-dd")
   // The set of characters that are allowed for column names, so that we can sanitize in unknown input
@@ -43,10 +46,12 @@ trait DALHelper {
   /**
     * Function will return "ALL" if value is 0 otherwise the value itself. Postgres does not allow
     * using 0 for ALL
+    * DEPRECATED: Use PsqlQuery instead
     *
     * @param value The limit used in the query
     * @return ALL if 0 otherwise the value
     */
+  @Deprecated
   def sqlLimit(value: Int): String = if (value <= 0) "ALL" else s"$value"
 
   /**
@@ -60,6 +65,7 @@ trait DALHelper {
 
   /**
     * Creates the ORDER functionality, with the column and direction
+    * DEPRECATED: Use PsqlQuery instead
     *
     * @param orderColumn    The column that you are ordering with (or multiple comma separated columns)
     * @param orderDirection Direction of ordering ASC or DESC
@@ -70,6 +76,7 @@ trait DALHelper {
     *                       not guaranteed.
     * @return
     */
+  @Deprecated
   def order(
       orderColumn: Option[String] = None,
       orderDirection: String = "ASC",
@@ -105,6 +112,7 @@ trait DALHelper {
     case None => ""
   }
 
+  @deprecated
   def sqlWithParameters(query: String, parameters: ListBuffer[NamedParameter]): SimpleSql[Row] = {
     if (parameters.nonEmpty) {
       SQL(query).on(parameters.toSeq: _*)
@@ -271,6 +279,7 @@ trait DALHelper {
     * @param key         Defaulted to "AND"
     * @return
     */
+  @Deprecated
   def enabled(value: Boolean, tablePrefix: String = "")(
       implicit key: Option[SQLKey] = Some(AND())
   ): String = {
@@ -298,6 +307,7 @@ trait DALHelper {
     * @param value       The value that is being appended
     * @param conjunction The conjunction, by default AND
     */
+  @deprecated
   def appendInWhereClause(whereClause: StringBuilder, value: String)(
       implicit conjunction: Option[SQLKey] = Some(AND())
   ): Unit = {

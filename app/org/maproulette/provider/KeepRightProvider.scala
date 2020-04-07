@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.provider
 
 import java.net.URLEncoder
@@ -8,19 +10,20 @@ import javax.inject.{Inject, Singleton}
 import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
 import org.maproulette.Config
+import org.maproulette.framework.model._
+import org.maproulette.framework.psql.TransactionManager
+import org.maproulette.framework.service.ProjectService
 import org.maproulette.models._
-import org.maproulette.models.dal.{ChallengeDAL, ProjectDAL, TaskDAL}
-import org.maproulette.models.utils.TransactionManager
-import org.maproulette.session.User
+import org.maproulette.models.dal.{ChallengeDAL, TaskDAL}
 import org.maproulette.utils.Utils
 import org.slf4j.LoggerFactory
 import play.api.db.Database
 import play.api.http.Status
 import play.api.libs.ws.WSClient
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Future, Promise}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 case class KeepRightError(id: Int, name: String, tags: List[String])
@@ -55,7 +58,7 @@ case class KeepRightTask(
   */
 @Singleton
 class KeepRightProvider @Inject() (
-    projectDAL: ProjectDAL,
+    projectService: ProjectService,
     challengeDAL: ChallengeDAL,
     taskDAL: TaskDAL,
     config: Config,
@@ -65,11 +68,11 @@ class KeepRightProvider @Inject() (
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  lazy val rootProjectId = this.projectDAL.retrieveByName(KeepRightProvider.NAME) match {
+  lazy val rootProjectId = this.projectService.retrieveByName(KeepRightProvider.NAME) match {
     case Some(p) => p.id
     case None =>
-      this.projectDAL
-        .insert(
+      this.projectService
+        .create(
           Project(
             id = -1,
             owner = User.DEFAULT_SUPER_USER_ID,

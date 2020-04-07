@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.models.dal.mixin
 
 import java.sql.Connection
@@ -5,9 +10,9 @@ import java.sql.Connection
 import anorm._
 import org.maproulette.data.{ChallengeType, ItemType, TaskType}
 import org.maproulette.exception.InvalidException
+import org.maproulette.framework.model.User
 import org.maproulette.models.dal.{BaseDAL, TagDAL}
 import org.maproulette.models.{BaseObject, Tag}
-import org.maproulette.session.User
 
 /**
   * @author cuthbertm

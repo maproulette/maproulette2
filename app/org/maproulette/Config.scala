@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette
 
 import javax.inject.{Inject, Singleton}
@@ -213,6 +215,7 @@ class Config @Inject() (implicit val configuration: Configuration) {
   def withFiniteDuration(key: String)(block: (FiniteDuration) => Unit): Unit = {
     configuration
       .getOptional[String](key)
+      .filter(_.nonEmpty)
       .map(Duration(_))
       .filter(_.isFinite)
       .map(duration => FiniteDuration(duration._1, duration._2))

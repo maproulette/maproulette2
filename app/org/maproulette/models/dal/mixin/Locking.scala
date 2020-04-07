@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.models.dal.mixin
 
 import java.sql.Connection
@@ -5,9 +10,10 @@ import java.sql.Connection
 import anorm._
 import org.maproulette.data.ItemType
 import org.maproulette.exception.LockedException
+import org.maproulette.framework.model.User
+import org.maproulette.framework.psql.TransactionManager
 import org.maproulette.models.BaseObject
-import org.maproulette.models.utils.{DALHelper, TransactionManager}
-import org.maproulette.session.User
+import org.maproulette.models.utils.DALHelper
 
 /**
   * @author mcuthbert

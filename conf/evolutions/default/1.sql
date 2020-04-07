@@ -415,38 +415,38 @@ LANGUAGE plpgsql VOLATILE;;
 INSERT INTO projects (id, name, description)
 SELECT 0, 'SuperRootProject', 'Root Project for super users.' WHERE NOT EXISTS (
     SELECT id FROM projects WHERE id = 0
-);
+);;
 INSERT INTO groups (id, project_id, name, group_type)
 SELECT -999, 0, 'SUPERUSERS', -1 WHERE NOT EXISTS (
     SELECT id FROM groups WHERE id = -999
-);
+);;
 INSERT INTO users(id, osm_id, osm_created, name, oauth_token, oauth_secret, theme)
 SELECT -999, -999, NOW(), 'SuperUser', '', '', 0 WHERE NOT EXISTS (
     SELECT id FROM users WHERE id = -999
-);
+);;
 INSERT INTO user_groups (osm_user_id, group_id)
 SELECT -999, -999 WHERE NOT EXISTS (
     SELECT id FROM user_groups WHERE osm_user_id = -999 AND group_id = -999
-);
+);;
 
 # --- !Downs
---DROP FUNCTION IF EXISTS create_index_if_not_exists(t_name text, i_name text, index_sql text, unq boolean);;
---DROP FUNCTION IF EXISTS update_modified();;
---DROP FUNCTION IF EXISTS on_user_delete();;
---DROP TABLE IF EXISTS users CASCADE;;
---DROP TABLE IF EXISTS projects CASCADE;;
---DROP TABLE IF EXISTS groups CASCADE;;
---DROP TABLE IF EXISTS user_groups CASCADE;;
---DROP TABLE IF EXISTS challenges CASCADE;;
---DROP TABLE IF EXISTS answers CASCADE;;
---DROP TABLE IF EXISTS tasks CASCADE;;
---DROP TABLE IF EXISTS survey_answers CASCADE;;
---DROP TABLE IF EXISTS tags CASCADE;;
---DROP TABLE IF EXISTS tags_on_challenges CASCADE;;
---DROP TABLE IF EXISTS tags_on_tasks CASCADE;;
---DROP TABLE IF EXISTS task_geometries CASCADE;;
---DROP TABLE IF EXISTS actions CASCADE;;
---DROP TABLE IF EXISTS status_actions CASCADE;;
---DROP TABLE IF EXISTS locked CASCADE;;
---DROP FUNCTION IF EXISTS create_update_task(task_name text, task_parent_id bigint, task_instruction text, task_status integer, task_id bigint, reset_interval text);;
---DROP FUNCTION IF EXISTS update_task(task_name text, task_parent_id bigint, task_instruction text, task_status integer, task_id bigint, reset_interval text)
+DROP TABLE IF EXISTS users CASCADE;;
+DROP TABLE IF EXISTS projects CASCADE;;
+DROP TABLE IF EXISTS groups CASCADE;;
+DROP TABLE IF EXISTS user_groups CASCADE;;
+DROP TABLE IF EXISTS challenges CASCADE;;
+DROP TABLE IF EXISTS answers CASCADE;;
+DROP TABLE IF EXISTS tasks CASCADE;;
+DROP TABLE IF EXISTS survey_answers CASCADE;;
+DROP TABLE IF EXISTS tags CASCADE;;
+DROP TABLE IF EXISTS tags_on_challenges CASCADE;;
+DROP TABLE IF EXISTS tags_on_tasks CASCADE;;
+DROP TABLE IF EXISTS task_geometries CASCADE;;
+DROP TABLE IF EXISTS actions CASCADE;;
+DROP TABLE IF EXISTS status_actions CASCADE;;
+DROP TABLE IF EXISTS locked CASCADE;;
+DROP FUNCTION IF EXISTS create_update_task(task_name text, task_parent_id bigint, task_instruction text, task_status integer, task_id bigint, reset_interval text);;
+DROP FUNCTION IF EXISTS update_task(task_name text, task_parent_id bigint, task_instruction text, task_status integer, task_id bigint, reset_interval text);;
+DROP FUNCTION IF EXISTS create_index_if_not_exists(t_name text, i_name text, index_sql text, unq boolean);;
+DROP FUNCTION IF EXISTS update_modified();;
+DROP FUNCTION IF EXISTS on_user_delete();;

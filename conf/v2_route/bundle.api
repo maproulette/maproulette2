@@ -1,0 +1,110 @@
+###
+# tags: [ Bundle ]
+# summary: Create a task bundle
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Create a new task bundle with the task ids in the supplied JSON body.
+# responses:
+#   '200':
+#     description: The newly created bundle with a unique id.
+#     schema:
+#       $ref: '#/definitions/TaskBundle'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the bundle body.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/TaskBundle'
+###
+POST    /taskBundle                                 @org.maproulette.controllers.api.TaskBundleController.createTaskBundle
+##
+# tags: [ Bundle ]
+# summary: Gets a Task Bundle
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Gets a task bundle based on the supplied id
+# responses:
+#   '200':
+#     description: The requested task bundle
+#     schema:
+#       $ref: '#/definitions/TaskBundle'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Task Bundle with provided ID found
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: id
+#     in: path
+#     description: The id of the Task Bundle
+#     required: true
+###
+GET     /taskBundle/:id                             @org.maproulette.controllers.api.TaskBundleController.getTaskBundle(id:Long)
+##
+# tags: [ Bundle ]
+# summary: Deletes a Task Bundle
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Deletes a task bundle based on the supplied id
+# responses:
+#   '200':
+#     description: Ok with empty body
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: id
+#     in: path
+#     description: The id of the Task Bundle
+#     required: true
+#   - name: primaryId
+#     in: query
+###
+DELETE     /taskBundle/:id                          @org.maproulette.controllers.api.TaskBundleController.deleteTaskBundle(id:Long, primaryId:Option[Long])
+##
+# tags: [ Bundle ]
+# summary: Unbundles tasks from Task Bundle
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Removes a list of tasks from a bundle of tasks
+# responses:
+#   '200':
+#     description: The task bundle with the new reduced set of tasks
+#     schema:
+#       $ref: '#/definitions/TaskBundle'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Task Bundle with provided ID found
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: id
+#     in: path
+#     description: The id of the Task Bundle
+#     required: true
+#   - name: taskIds
+#     in: query
+#     description: The list of task ids to remove from the bundle
+#     required: true
+###
+GET        /taskBundle/:id/unbundle                 @org.maproulette.controllers.api.TaskBundleController.unbundleTasks(id:Long, taskIds:List[Long])

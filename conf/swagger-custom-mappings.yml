@@ -3,4 +3,7 @@
     specAsParameter: []
     specAsProperty:
       type: string
-
+  - type: play\.api\.libs\.json\.jsobject
+    specAsParameter: []
+    specAsProperty:
+      type: object

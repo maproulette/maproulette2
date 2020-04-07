@@ -1,40 +1,55 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.utils
 
+import org.maproulette.framework.model.{
+  Comment,
+  Group,
+  Location,
+  OSMProfile,
+  Project,
+  TaskReview,
+  TaskWithReview,
+  User,
+  UserSettings
+}
 import org.maproulette.models._
 import org.maproulette.models.utils.ChallengeReads
-import org.maproulette.session.{Group, User}
+import org.maproulette.session._
+import play.api.libs.json.Reads
+import play.api.libs.oauth.RequestToken
 
 /**
   * @author mcuthbert
   */
 trait Readers extends ChallengeReads {
   // User Readers
-  implicit val tokenReads     = User.tokenReads
-  implicit val settingsReads  = User.settingsReads
-  implicit val userGroupReads = User.userGroupReads
-  implicit val locationReads  = User.locationReads
-  implicit val osmReads       = User.osmReads
+  implicit val tokenReads: Reads[RequestToken]    = User.tokenReads
+  implicit val settingsReads: Reads[UserSettings] = User.settingsReads
+  implicit val locationReads: Reads[Location]     = User.locationReads
+  implicit val osmReads: Reads[OSMProfile]        = User.osmReads
   // Group Readers
-  implicit val groupReads = Group.groupReads
-  // Challenge Readers
-  implicit val answerReads = Challenge.answerReads
+  implicit val groupReads: Reads[Group] = Group.reads
   // Point Readers
-  implicit val pointReads          = ClusteredPoint.pointReads
-  implicit val clusteredPointReads = ClusteredPoint.clusteredPointReads
+  implicit val pointReads: Reads[Point]                   = ClusteredPoint.pointReads
+  implicit val clusteredPointReads: Reads[ClusteredPoint] = ClusteredPoint.clusteredPointReads
   // Comment Readers
-  implicit val commentReads = Comment.commentReads
+  implicit val commentReads: Reads[Comment] = Comment.reads
   // Project Readers
-  implicit val projectReads = Project.projectReads
+  implicit val projectReads: Reads[Project] = Project.reads
   // Tag Readers
-  implicit val tagReads = Tag.tagReads
+  implicit val tagReads: Reads[Tag] = Tag.tagReads
   // Task Readers
-  implicit val taskReads           = Task.TaskFormat
-  implicit val taskClusterReads    = TaskCluster.taskClusterReads
-  implicit val taskLogEntryReads   = TaskLogEntry.taskLogEntryReads
-  implicit val taskReviewReads     = TaskReview.reviewReads
-  implicit val taskWithReviewReads = TaskWithReview.taskWithReviewReads
+  implicit val taskReads                                  = Task.TaskFormat
+  implicit val taskClusterReads: Reads[TaskCluster]       = TaskCluster.taskClusterReads
+  implicit val taskLogEntryReads: Reads[TaskLogEntry]     = TaskLogEntry.taskLogEntryReads
+  implicit val taskReviewReads: Reads[TaskReview]         = TaskReview.reads
+  implicit val taskWithReviewReads: Reads[TaskWithReview] = TaskWithReview.taskWithReviewReads
   // UserNotification Readers
-  implicit val userNotificationReads = UserNotification.notificationReads
-  implicit val userNotificationSubscriptionsReads =
+  implicit val userNotificationReads: Reads[UserNotification] = UserNotification.notificationReads
+  implicit val userNotificationSubscriptionsReads: Reads[NotificationSubscriptions] =
     NotificationSubscriptions.notificationSubscriptionReads
 }

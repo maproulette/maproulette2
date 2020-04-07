@@ -1,0 +1,240 @@
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+POST    /tags                                       @org.maproulette.controllers.api.TagController.batchUploadPost
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+POST    /tag                                        @org.maproulette.controllers.api.TagController.create
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+PUT     /tag/:id                                    @org.maproulette.controllers.api.TagController.update(id:Long)
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+PUT     /tags                                       @org.maproulette.controllers.api.TagController.batchUploadPut
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+GET     /tag/:id                                    @org.maproulette.controllers.api.TagController.read(id:Long)
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+DELETE  /tag/:id                                    @org.maproulette.controllers.api.TagController.delete(id:Long, immediate:Boolean ?= true)
+###
+# tags: [ Tag ]
+# deprecated: true
+###
+GET     /tags                                       @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+###
+# tags: [ Keyword ]
+# summary: Create a Keyword
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will create a new Keyword from the supplied JSON in the body. When creating the Task, leave the ID field
+#               out of the body json, if updating (generally use the PUT method) include the ID field.
+# responses:
+#   '200':
+#     description: The newly created Keyword with a unique id.
+#     schema:
+#       $ref: '#/definitions/Keyword'
+#   '304':
+#     description: Not updated responding with empty payload if Survey already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Keyword
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Keyword body.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/Keyword'
+###
+POST    /keyword                                    @org.maproulette.controllers.api.TagController.create
+###
+# tags: [ Keyword ]
+# summary: Create a batch of Keywords
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will create multiple new Keyword from the JSONArray supplied in the body. Each JSON object
+#               is basically a Keyword object that is processed similarly to the singular /keyword POST. If
+#               Keywords already exist with the name, they will simply be skipped, ie. not updated.
+# responses:
+#   '200':
+#     description: A simple OK status message
+#   '304':
+#     description: Not updated responding with empty payload if Keyword already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Keyword
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Keyword body.
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/Keyword'
+###
+POST    /keywords                                   @org.maproulette.controllers.api.TagController.batchUploadPost
+###
+# tags: [ Keyword ]
+# summary: Updates a Keyword
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will update an already existing Keyword from the supplied JSON in the body.
+# responses:
+#   '200':
+#     description: The updated JSON Keyword
+#     schema:
+#       $ref: '#/definitions/Keyword'
+#   '304':
+#     description: Not updated responding with empty payload if Keyword already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Keyword
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the Keyword that is being updated
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Keyword body.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/Keyword'
+###
+PUT     /keyword/:id                                @org.maproulette.controllers.api.TagController.update(id:Long)
+###
+# tags: [ Keyword ]
+# summary: Update a batch of Keywords
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will update multiple already existing Keywords from the JSONArray supplied in the body. Each JSON object
+#               is basically a Keyword object that is processed similarly to the singular /keyword POST. If a Keyword
+#               does not exist it will be created from scratch
+# responses:
+#   '200':
+#     description: A simple OK status message
+#   '304':
+#     description: Not updated responding with empty payload if Keyword already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Keyword
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Keyword body.
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/Keyword'
+###
+PUT     /keywords                                   @org.maproulette.controllers.api.TagController.batchUploadPut
+###
+# tags: [ Keyword ]
+# summary: Retrieves an already existing Keyword
+# produces: [ application/json ]
+# description: Retrieves an already existing Keyword based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The retrieved Keyword
+#     schema:
+#       $ref: '#/definitions/Keyword'
+#   '404':
+#     description: ID field supplied but no Keyword found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Keyword to retrieve
+###
+GET     /keyword/:id                                @org.maproulette.controllers.api.TagController.read(id:Long)
+###
+# tags: [ Keyword ]
+# summary: Deletes an existing Keyword
+# description: Deletes an existing Keyword based on the supplied ID.
+# responses:
+#   '200':
+#     description: A status message containing the ID of the Keyword that was just deleted
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Keyword found matching the provided name
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Keyword being deleted
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /keyword/:id                                @org.maproulette.controllers.api.TagController.delete(id:Long, immediate:Boolean ?= true)
+###
+# tags: [ Keyword ]
+# summary: Finds Keywords
+# produces: [ application/json ]
+# description: Retrieves existing Keywords based on a prefix for the Keyword. So if search for "tes" will retrieve all Keywords that start with "tes", like "tester", "testing", "test". The search string is case insensitive.
+# responses:
+#   '200':
+#     description: The retrieved Keywords
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/Keyword'
+# parameters:
+#   - name: prefix
+#     in: query
+#     description: The prefix for the Keywords you are looking for
+#   - name: tagType
+#     in: query
+#     description: Optional limit tags to a specific tagType ('challenges' or 'tasks')
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /keywords                                   @org.maproulette.controllers.api.TagController.getTags(prefix: String ?= "", tagType: String ?= "", limit: Int ?= 10, page: Int ?= 0)
+

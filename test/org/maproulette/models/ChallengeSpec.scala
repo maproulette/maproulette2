@@ -1,5 +1,11 @@
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+
 package org.maproulette.models
 
+import org.maproulette.framework.model.PriorityRule
 import org.scalatestplus.play.PlaySpec
 
 /**

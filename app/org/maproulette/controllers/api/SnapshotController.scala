@@ -1,20 +1,20 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
-import javax.inject.Inject
 import akka.util.ByteString
+import javax.inject.Inject
 import org.maproulette.Config
 import org.maproulette.data._
-import org.maproulette.models.{Challenge, Task}
-import org.maproulette.models.dal.ChallengeDAL
+import org.maproulette.framework.model.Challenge
+import org.maproulette.models.Task
 import org.maproulette.session.SessionManager
-import org.maproulette.utils.Utils
+import play.api.http.HttpEntity
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json._
 import play.api.mvc._
-import play.api.libs.json.JodaWrites._
-import play.api.http.HttpEntity
 
 /**
   * @author krotstan

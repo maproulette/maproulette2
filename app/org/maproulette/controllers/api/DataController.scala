@@ -1,23 +1,22 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
 import org.maproulette.Config
 import org.maproulette.data._
-import org.maproulette.models.Challenge
-import org.maproulette.models.Challenge
+import org.maproulette.framework.model.Challenge
 import org.maproulette.models.dal.ChallengeDAL
-import org.maproulette.session.SessionManager
-import org.maproulette.session.SearchParameters
+import org.maproulette.session.{SearchParameters, SessionManager}
 import org.maproulette.utils.Utils
 import play.api.libs.json.Json.JsValueWrapper
 import play.api.libs.json._
 import play.api.mvc._
-import play.api.libs.json.JodaWrites._
 
-import scala.util.Try
 import scala.collection.mutable
+import scala.util.Try
 
 /**
   * @author cuthbertm
@@ -35,7 +34,6 @@ class DataController @Inject() (
   implicit val actionWrites               = actionManager.actionItemWrites
   implicit val dateWrites                 = Writes.dateWrites("yyyy-MM-dd")
   implicit val dateTimeWrites             = JodaWrites.jodaDateWrites("yyyy-MM-dd'T'HH:mm:ss")
-  implicit val userSurveySummaryWrites    = Json.writes[UserSurveySummary]
   implicit val actionSummaryWrites        = Json.writes[ActionSummary]
   implicit val userSummaryWrites          = Json.writes[UserSummary]
   implicit val challengeLeaderboardWrites = Json.writes[LeaderboardChallenge]
@@ -45,7 +43,6 @@ class DataController @Inject() (
   implicit val rawActivityWrites          = Json.writes[RawActivity]
   implicit val statusActionItemWrites     = Json.writes[StatusActionItem]
   implicit val statusActionSummaryWrites  = Json.writes[DailyStatusActionSummary]
-  implicit val surveySummaryWrites        = Json.writes[SurveySummary]
 
   implicit val stringIntMap: Writes[Map[String, Int]] = new Writes[Map[String, Int]] {
     def writes(map: Map[String, Int]): JsValue =
@@ -79,35 +76,20 @@ class DataController @Inject() (
       challengeId: Long,
       start: String,
       end: String,
-      survey: Int,
       priority: Int
   ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      if (survey == 1) {
-        Ok(
-          Json.toJson(
-            this.dataManager.getUserSurveySummary(
-              None,
-              Some(challengeId),
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
+      Ok(
+        Json.toJson(
+          this.dataManager.getUserChallengeSummary(
+            None,
+            Some(challengeId),
+            Utils.getDate(start),
+            Utils.getDate(end),
+            this.getPriority(priority)
           )
         )
-      } else {
-        Ok(
-          Json.toJson(
-            this.dataManager.getUserChallengeSummary(
-              None,
-              Some(challengeId),
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
-          )
-        )
-      }
+      )
     }
   }
 
@@ -115,35 +97,20 @@ class DataController @Inject() (
       projects: String,
       start: String,
       end: String,
-      survey: Int,
       priority: Int
   ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      if (survey == 1) {
-        Ok(
-          Json.toJson(
-            this.dataManager.getUserSurveySummary(
-              Utils.toLongList(projects),
-              None,
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
+      Ok(
+        Json.toJson(
+          this.dataManager.getUserChallengeSummary(
+            Utils.toLongList(projects),
+            None,
+            Utils.getDate(start),
+            Utils.getDate(end),
+            this.getPriority(priority)
           )
         )
-      } else {
-        Ok(
-          Json.toJson(
-            this.dataManager.getUserChallengeSummary(
-              Utils.toLongList(projects),
-              None,
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
-          )
-        )
-      }
+      )
     }
   }
 
@@ -291,6 +258,35 @@ class DataController @Inject() (
     }
   }
 
+  def getChallengeSummary(
+      id: Long,
+      priority: String,
+      includeByPriority: Boolean = false
+  ): Action[AnyContent] = Action.async { implicit request =>
+    this.sessionManager.userAwareRequest { implicit user =>
+      SearchParameters.withSearch { implicit params =>
+        val response = this.dataManager.getChallengeSummary(
+          challengeId = Some(id),
+          priority = Utils.toIntList(priority),
+          params = Some(params)
+        )
+
+        if (includeByPriority && response.nonEmpty) {
+          val priorityMap = this._fetchPrioritySummaries(Some(id), Some(params))
+          val updated = Utils.insertIntoJson(
+            Json.toJson(response).as[JsArray].head.as[JsValue],
+            "priorityActions",
+            Json.toJson(priorityMap),
+            false
+          )
+          Ok(Json.toJson(List(updated)))
+        } else {
+          Ok(Json.toJson(response))
+        }
+      }
+    }
+  }
+
   private def _fetchPrioritySummaries(
       challengeId: Option[Long],
       params: Option[SearchParameters],
@@ -308,53 +304,15 @@ class DataController @Inject() (
         params = params,
         onlyEnabled = onlyEnabled
       )
-      if (pResult.length > 0) {
+      if (pResult.nonEmpty) {
         priorityMap.put(p.toString, Json.toJson(pResult.head.actions))
       } else {
-        priorityMap.put(p.toString, Json.toJson(ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+        priorityMap
+          .put(p.toString, Json.toJson(ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
       }
     })
 
     priorityMap
-  }
-
-  def getChallengeSummary(
-      id: Long,
-      survey: Int,
-      priority: String,
-      includeByPriority: Boolean = false
-  ): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.userAwareRequest { implicit user =>
-      if (survey == 1) {
-        val priorityInt = this.getPriority(if (priority == "") -1 else priority.toInt)
-        Ok(
-          Json.toJson(
-            this.dataManager.getSurveySummary(id, priorityInt)
-          )
-        )
-      } else {
-        SearchParameters.withSearch { implicit params =>
-          val response = this.dataManager.getChallengeSummary(
-            challengeId = Some(id),
-            priority = Utils.toIntList(priority),
-            params = Some(params)
-          )
-
-          if (includeByPriority && response.length > 0) {
-            val priorityMap = this._fetchPrioritySummaries(Some(id), Some(params))
-            val updated = Utils.insertIntoJson(
-              Json.toJson(response).as[JsArray].head.as[JsValue],
-              "priorityActions",
-              Json.toJson(priorityMap),
-              false
-            )
-            Ok(Json.toJson(List(updated)))
-          } else {
-            Ok(Json.toJson(response))
-          }
-        }
-      }
-    }
   }
 
   def getProjectSummary(
@@ -384,34 +342,27 @@ class DataController @Inject() (
       challengeId: Long,
       start: String,
       end: String,
-      survey: Int,
       priority: Int
   ): Action[AnyContent] = Action.async { implicit request =>
     this.sessionManager.authenticatedRequest { implicit user =>
-      if (survey == 1) {
-        Ok(
-          Json.toJson(
-            this.dataManager.getSurveyActivity(
-              challengeId,
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
+      Ok(
+        Json.toJson(
+          this.dataManager.getChallengeActivity(
+            None,
+            Some(challengeId),
+            Utils.getDate(start),
+            Utils.getDate(end),
+            this.getPriority(priority)
           )
         )
-      } else {
-        Ok(
-          Json.toJson(
-            this.dataManager.getChallengeActivity(
-              None,
-              Some(challengeId),
-              Utils.getDate(start),
-              Utils.getDate(end),
-              this.getPriority(priority)
-            )
-          )
-        )
-      }
+      )
+    }
+  }
+
+  private def getPriority(priority: Int): Option[Int] = {
+    priority match {
+      case x if x >= Challenge.PRIORITY_HIGH & x <= Challenge.PRIORITY_LOW => Some(x)
+      case _                                                               => None
     }
   }
 
@@ -498,13 +449,6 @@ class DataController @Inject() (
           "data" -> Json.toJson(summaryMap)
         )
       )
-    }
-  }
-
-  private def getPriority(priority: Int): Option[Int] = {
-    priority match {
-      case x if x >= Challenge.PRIORITY_HIGH & x <= Challenge.PRIORITY_LOW => Some(x)
-      case _                                                               => None
     }
   }
 

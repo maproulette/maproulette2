@@ -51,5 +51,5 @@ SELECT users.id,
 
 
 # --- !Downs
---DROP TABLE IF EXISTS user_metrics;;
---DROP TABLE IF EXISTS user_metrics_history;;
+DROP TABLE IF EXISTS user_metrics;;
+DROP TABLE IF EXISTS user_metrics_history;;

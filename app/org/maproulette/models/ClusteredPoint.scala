@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models
 
 import org.joda.time.DateTime
@@ -58,6 +60,8 @@ case class ClusteredPoint(
     status: Int,
     suggestedFix: Option[String] = None,
     mappedOn: Option[DateTime],
+    completedTimeSpent: Option[Long] = None,
+    completedBy: Option[Long] = None,
     pointReview: PointReview,
     priority: Int,
     bundleId: Option[Long] = None,

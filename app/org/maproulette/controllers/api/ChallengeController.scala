@@ -1,15 +1,17 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
 import java.io._
 import java.sql.Connection
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import org.joda.time.DateTime
 import akka.util.ByteString
 import javax.inject.Inject
 import org.apache.commons.lang3.StringUtils
+import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.controllers.ParentController
 import org.maproulette.data._
@@ -19,12 +21,15 @@ import org.maproulette.exception.{
   NotFoundException,
   StatusMessage
 }
+import org.maproulette.framework.model._
+import org.maproulette.framework.psql.Paging
+import org.maproulette.framework.service.ServiceManager
 import org.maproulette.models._
 import org.maproulette.models.dal._
 import org.maproulette.models.dal.mixin.TagDALMixin
 import org.maproulette.permissions.Permission
 import org.maproulette.provider.ChallengeProvider
-import org.maproulette.session.{SearchParameters, SessionManager, User}
+import org.maproulette.session.{SearchParameters, SessionManager}
 import org.maproulette.utils.Utils
 import play.api.http.HttpEntity
 import play.api.libs.Files
@@ -53,6 +58,7 @@ class ChallengeController @Inject() (
     dalManager: DALManager,
     override val tagDAL: TagDAL,
     challengeProvider: ChallengeProvider,
+    serviceManager: ServiceManager,
     wsClient: WSClient,
     permission: Permission,
     config: Config,
@@ -78,8 +84,7 @@ class ChallengeController @Inject() (
   override implicit val tableName: String  = this.dal.tableName
 
   // implicit writes used for various JSON responses
-  implicit val answerWrites                                     = Challenge.answerWrites
-  implicit val commentWrites                                    = Comment.commentWrites
+  implicit val commentWrites                                    = Comment.writes
   implicit val pointWrites                                      = ClusteredPoint.pointWrites
   implicit val clusteredPointWrites                             = ClusteredPoint.clusteredPointWrites
   implicit val taskClusterWrites                                = TaskCluster.taskClusterWrites
@@ -224,15 +229,15 @@ class ChallengeController @Inject() (
       Json.toJson(List[JsValue]())
     } else {
       val mappers = Some(
-        this.dalManager.user
-          .retrieveListById(-1, 0)(tasks.map(t => t.pointReview.reviewRequestedBy.getOrElse(0L)))
+        this.serviceManager.user
+          .retrieveListById(tasks.map(t => t.pointReview.reviewRequestedBy.getOrElse(0L)), Paging())
           .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
           .toMap
       )
 
       val reviewers = Some(
-        this.dalManager.user
-          .retrieveListById(-1, 0)(tasks.map(t => t.pointReview.reviewedBy.getOrElse(0L)))
+        this.serviceManager.user
+          .retrieveListById(tasks.map(t => t.pointReview.reviewedBy.getOrElse(0L)), Paging())
           .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
           .toMap
       )
@@ -241,12 +246,12 @@ class ChallengeController @Inject() (
         var updated = Json.toJson(task)
         if (task.pointReview.reviewRequestedBy.getOrElse(0) != 0) {
           val mapperJson =
-            Json.toJson(mappers.get(task.pointReview.reviewRequestedBy.get.toLong)).as[JsObject]
+            Json.toJson(mappers.get(task.pointReview.reviewRequestedBy.get)).as[JsObject]
           updated = Utils.insertIntoJson(updated, "reviewRequestedBy", mapperJson, true)
         }
         if (task.pointReview.reviewedBy.getOrElse(0) != 0) {
           val reviewerJson =
-            Json.toJson(reviewers.get(task.pointReview.reviewedBy.get.toLong)).as[JsObject]
+            Json.toJson(reviewers.get(task.pointReview.reviewedBy.get)).as[JsObject]
           updated = Utils.insertIntoJson(updated, "reviewedBy", reviewerJson, true)
         }
 
@@ -447,6 +452,57 @@ class ChallengeController @Inject() (
     Future(Ok(Json.toJson(all)))
   }
 
+  /**
+    * Fetches the matching parent object and inserts it into the JSON data returned.
+    *
+    */
+  private def _insertProjectJSON(challenges: List[Challenge]): JsValue = {
+    if (challenges.isEmpty) {
+      Json.toJson(List[JsValue]())
+    } else {
+      val tags = this.tagDAL.listByChallenges(challenges.map(c => c.id))
+      val projects = Some(
+        this.serviceManager.project
+          .list(challenges.map(c => c.general.parent))
+          .map(p => p.id -> p)
+          .toMap
+      )
+
+      var vpIds = scala.collection.mutable.Set[Long]()
+      challenges.map(c => {
+        c.general.virtualParents match {
+          case Some(vps) =>
+            vps.map(vp => vpIds += vp)
+          case _ => // do nothing
+        }
+      })
+      val vpObjects =
+        this.serviceManager.project.list(vpIds.toList).map(p => p.id -> p).toMap
+
+      val jsonList = challenges.map { c =>
+        var updated = Utils.insertIntoJson(
+          Json.toJson(c),
+          Tag.KEY,
+          Json.toJson(tags.getOrElse(c.id, List.empty).map(_.name))
+        )
+        val projectJson = Json
+          .toJson(projects.get(c.general.parent))
+          .as[JsObject] - Project.KEY_GROUPS
+        updated = Utils.insertIntoJson(updated, Challenge.KEY_PARENT, projectJson, true)
+
+        c.general.virtualParents match {
+          case Some(vps) =>
+            val vpJson =
+              Some(vps.map(vp => Json.toJson(vpObjects.get(vp)).as[JsObject] - Project.KEY_GROUPS))
+            updated = Utils.insertIntoJson(updated, Challenge.KEY_VIRTUAL_PARENTS, vpJson, true)
+          case _ => // do nothing
+        }
+        updated
+      }
+      Json.toJson(jsonList)
+    }
+  }
+
   def updateTaskPriorities(challengeId: Long): Action[AnyContent] = Action.async {
     implicit request =>
       implicit val requireSuperUser = true
@@ -534,8 +590,8 @@ class ChallengeController @Inject() (
       this.sessionManager.authenticatedRequest { implicit user =>
         Ok(
           Json.toJson(
-            this.dalManager.comment
-              .retrieveComments(List.empty, List(challengeId), List.empty, limit, page)
+            this.serviceManager.comment
+              .find(List.empty, List(challengeId), List.empty, Paging(limit, page))
           )
         )
       }
@@ -577,12 +633,11 @@ class ChallengeController @Inject() (
       page: Int,
       host: String
   ): Seq[String] = {
-    val comments = this.dalManager.comment.retrieveComments(
+    val comments = this.serviceManager.comment.find(
       List.empty,
       List(challengeId),
       List.empty,
-      limit,
-      page
+      Paging(limit, page)
     )
     val urlPrefix = config.getPublicOrigin match {
       case Some(origin) => s"${origin}/"
@@ -590,7 +645,7 @@ class ChallengeController @Inject() (
     }
     comments.map(comment =>
       s"""${comment.projectId},$challengeId,${comment.taskId},${comment.osm_id},""" +
-        s"""${comment.osm_username},"${comment.comment}",${urlPrefix}map/$challengeId/${comment.taskId}""".stripMargin
+        s"""${comment.osm_username},"${comment.comment}",${urlPrefix}challenge/$challengeId/task/${comment.taskId}""".stripMargin
     )
   }
 
@@ -607,13 +662,13 @@ class ChallengeController @Inject() (
       case Some(c) => Utils.toLongList(c).getOrElse(List())
       case None    => List()
     }
-    if (challengeIds.length == 0) {
-      challengeIds = this.dalManager.project.retrieveById(projectId) match {
-        case Some(p) => this.dalManager.project.listChildren(-1)(projectId).map(c => c.id)
+    if (challengeIds.isEmpty) {
+      challengeIds = this.serviceManager.project.retrieve(projectId) match {
+        case Some(p) => this.serviceManager.project.children(projectId).map(c => c.id)
         case None    => throw new NotFoundException(s"Project with id $projectId not found")
       }
     }
-    this._extractTaskSummaries(challengeIds, -1, 0, "", "", "", s"project_${projectId}_tasks.csv")
+    this._extractTaskSummaries(challengeIds, -1, 0, "-1", "", "", s"project_${projectId}_tasks.csv")
   }
 
   /**
@@ -687,6 +742,12 @@ class ChallengeController @Inject() (
         // Setup all exportable properties
         var propsToExportHeaders = Set[String]()
 
+        // For setting up challenge and task links
+        val urlPrefix = config.getPublicOrigin match {
+          case Some(origin) => s"${origin}/"
+          case None         => s"http://${request.host}/"
+        }
+
         challengeIds.foreach(cId => {
           val challenge = this.dal.retrieveById(cId) match {
             case Some(c) => c
@@ -732,7 +793,7 @@ class ChallengeController @Inject() (
         }
 
         val seqString = tasks.map(task => {
-          var mapper = task.reviewRequestedBy.getOrElse("")
+          var mapper = task.completedBy.getOrElse("")
           if (mapper == "") {
             mapper = task.username.getOrElse("")
           }
@@ -787,14 +848,18 @@ class ChallengeController @Inject() (
               }
           }
 
-          var comments = allComments(task.taskId).replaceAll("\"", "\"\"")
+          var comments      = allComments(task.taskId).replaceAll("\"", "\"\"")
+          var challengeLink = s"[[hyperlink URL link=${urlPrefix}browse/challenges/${task.parent}]]"
+          var taskLink =
+            s"[[hyperlink URL link=${urlPrefix}challenge/${task.parent}/task/${task.taskId}]]"
 
-          s"""${task.taskId},${task.parent},"${task.name}","${Task.statusMap
+          s"""${task.taskId},${taskLink},${task.parent},${challengeLink},"${task.name}","${Task.statusMap
             .get(task.status)
             .get}",""" +
             s""""${Challenge.priorityMap.get(task.priority).get}",${task.mappedOn
               .getOrElse("")},""" +
-            s"""${Task.reviewStatusMap.get(task.reviewStatus.getOrElse(-1)).get},"${mapper}",""" +
+            s"""${task.completedTimeSpent.getOrElse("")},"${mapper}",""" +
+            s"""${Task.reviewStatusMap.get(task.reviewStatus.getOrElse(-1)).get},""" +
             s""""${task.reviewedBy.getOrElse("")}",${task.reviewedAt
               .getOrElse("")},"${reviewTimeSeconds}",""" +
             s""""${comments}","${task.bundleId.getOrElse("")}","${task.isBundlePrimary
@@ -811,7 +876,7 @@ class ChallengeController @Inject() (
             ResponseHeader(OK, Map(CONTENT_DISPOSITION -> s"attachment; filename=${filename}")),
           body = HttpEntity.Strict(
             ByteString(
-              s"""TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,MappedOn,ReviewStatus,Mapper,Reviewer,ReviewedAt,ReviewTimeSeconds,Comments,BundleId,IsBundlePrimary,Tags${propsToExportHeaderString}${responseHeaders}\n"""
+              s"""TaskID,TaskLink,ChallengeID,ChallengeLink,TaskName,TaskStatus,TaskPriority,MappedOn,CompletionTime,Mapper,ReviewStatus,Reviewer,ReviewedAt,ReviewTimeSeconds,Comments,BundleId,IsBundlePrimary,Tags${propsToExportHeaderString}${responseHeaders}\n"""
             ).concat(ByteString(seqString.mkString("\n"))),
             Some("text/csv; header=present")
           )
@@ -836,57 +901,6 @@ class ChallengeController @Inject() (
         }
       }
     }
-
-  /**
-    * Fetches the matching parent object and inserts it into the JSON data returned.
-    *
-    */
-  private def _insertProjectJSON(challenges: List[Challenge]): JsValue = {
-    if (challenges.isEmpty) {
-      Json.toJson(List[JsValue]())
-    } else {
-      val tags = this.tagDAL.listByChallenges(challenges.map(c => c.id))
-      val projects = Some(
-        this.dalManager.project
-          .retrieveListById(-1, 0)(challenges.map(c => c.general.parent))
-          .map(p => p.id -> p)
-          .toMap
-      )
-
-      var vpIds = scala.collection.mutable.Set[Long]()
-      challenges.map(c => {
-        c.general.virtualParents match {
-          case Some(vps) =>
-            vps.map(vp => vpIds += vp)
-          case _ => // do nothing
-        }
-      })
-      val vpObjects =
-        this.dalManager.project.retrieveListById(-1, 0)(vpIds.toList).map(p => p.id -> p).toMap
-
-      val jsonList = challenges.map { c =>
-        var updated = Utils.insertIntoJson(
-          Json.toJson(c),
-          Tag.KEY,
-          Json.toJson(tags.getOrElse(c.id, List.empty).map(_.name))
-        )
-        val projectJson = Json
-          .toJson(projects.get(c.general.parent))
-          .as[JsObject] - Project.KEY_GROUPS
-        updated = Utils.insertIntoJson(updated, Challenge.KEY_PARENT, projectJson, true)
-
-        c.general.virtualParents match {
-          case Some(vps) =>
-            val vpJson =
-              Some(vps.map(vp => Json.toJson(vpObjects.get(vp)).as[JsObject] - Project.KEY_GROUPS))
-            updated = Utils.insertIntoJson(updated, Challenge.KEY_VIRTUAL_PARENTS, vpJson, true)
-          case _ => // do nothing
-        }
-        updated
-      }
-      Json.toJson(jsonList)
-    }
-  }
 
   /**
     * Retrieves a lightweight listing of the challenges in the given project(s).
@@ -1021,18 +1035,7 @@ class ChallengeController @Inject() (
     */
   override def inject(obj: Challenge)(implicit request: Request[Any]): JsValue = {
     val tags = tagDAL.listByChallenge(obj.id)
-    val withTagsJson =
-      Utils.insertIntoJson(Json.toJson(obj), Tag.KEY, Json.toJson(tags.map(_.name)))
-    obj.general.challengeType match {
-      case Actions.ITEM_TYPE_SURVEY =>
-        // if no answers provided with Challenge, then provide the default answers
-        Utils.insertIntoJson(
-          withTagsJson,
-          Challenge.KEY_ANSWER,
-          Json.toJson(this.dalManager.survey.getAnswers(obj.id))
-        )
-      case _ => withTagsJson
-    }
+    Utils.insertIntoJson(Json.toJson(obj), Tag.KEY, Json.toJson(tags.map(_.name)))
   }
 
   /**
@@ -1054,6 +1057,7 @@ class ChallengeController @Inject() (
     jsonBody = Utils.insertIntoJson(jsonBody, "hasSuggestedFixes", false)(BooleanWrites)
     jsonBody = Utils.insertIntoJson(jsonBody, "checkinComment", "")(StringWrites)
     jsonBody = Utils.insertIntoJson(jsonBody, "checkinSource", "")(StringWrites)
+    jsonBody = Utils.insertIntoJson(jsonBody, "requiresLocal", false)(BooleanWrites)
     jsonBody = Utils.insertIntoJson(jsonBody, "defaultPriority", Challenge.PRIORITY_HIGH)(IntWrites)
     jsonBody = Utils.insertIntoJson(jsonBody, "defaultZoom", Challenge.DEFAULT_ZOOM)(IntWrites)
     jsonBody = Utils.insertIntoJson(jsonBody, "minZoom", Challenge.MIN_ZOOM)(IntWrites)
@@ -1063,7 +1067,7 @@ class ChallengeController @Inject() (
     (jsonBody \ "parent").asOpt[Long] match {
       case Some(v) => jsonBody
       case None =>
-        Utils.insertIntoJson(jsonBody, "parent", this.dalManager.user.getHomeProject(user).id)
+        Utils.insertIntoJson(jsonBody, "parent", this.serviceManager.user.getHomeProject(user).id)
     }
   }
 

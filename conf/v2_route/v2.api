@@ -1,0 +1,18 @@
+### NoDocs ###
+GET     /snapshot/challenge/:challengeId/record     @org.maproulette.controllers.api.SnapshotController.recordChallengeSnapshot(challengeId:Long)
+### NoDocs ###
+GET     /snapshot/challenge/:challengeId/list       @org.maproulette.controllers.api.SnapshotController.getChallengeSnapshotList(challengeId:Long, includeAllData:Boolean ?= false)
+### NoDocs ###
+GET     /snapshot/challenge/:challengeId/export     @org.maproulette.controllers.api.SnapshotController.exportChallengeSnapshots(challengeId:Long)
+### NoDocs ###
+GET     /snapshot/:snapshotId                       @org.maproulette.controllers.api.SnapshotController.getChallengeSnapshot(snapshotId:Long)
+### NoDocs ###
+POST    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
+### NoDocs ###
+PUT     /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
+### NoDocs ###
+GET     /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
+### NoDocs ###
+DELETE  /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)
+### NoDocs ###
+HEAD    /*path                                      @org.maproulette.controllers.api.APIController.invalidAPIPath(path)

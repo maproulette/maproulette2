@@ -1,0 +1,639 @@
+###
+# tags: [ User ]
+# summary: Retrieves current user
+# produces: [ application/json ]
+# description: Retrieves the current logged-in user's JSON
+# responses:
+#   '200':
+#     description: The current logged-in User
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: If user is not logged in.
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/whoami                               @org.maproulette.framework.controller.UserController.whoami()
+###
+# tags: [ User ]
+# summary: Retrieves Users Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied ID
+# responses:
+#   '200':
+#     description: The retrieved User
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User with provided ID is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id or OsmId of the user to retrieve. It will first try to match on the OSM id and if not found it will retrieve based on the MapRoulette Id.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/:userId                               @org.maproulette.framework.controller.UserController.getUser(userId:Long)
+###
+# tags: [ User ]
+# summary: Retrieves Users Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied OSM username
+# responses:
+#   '200':
+#     description: The retrieved User
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User with provided OSM username is not found.
+# parameters:
+#   - name: username
+#     in: path
+#     description: The OSM username of the user to retrieve
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /osmuser/:username                          @org.maproulette.framework.controller.UserController.getUserByOSMUsername(username:String)
+###
+# tags: [ User ]
+# summary: Deletes a user from the database
+# produces: [ application/json ]
+# description: This will delete a user completely from the database. It can also optionally anonymize the users data from actions taken in MapRoulette, like change in status for tasks, comments on tasks and answers to survey questions
+# responses:
+#   '200':
+#     description: An ok message stating the user was deleted.
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request, only super users can make this request
+# parameters:
+#   - name: osmId
+#     in: path
+#     description: The OSM id of the user you want to delete
+#   - name: anonymize
+#     in: query
+#     description: Whether to anonymize the users data, false by default
+#     default: false
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /user/:osmId                                @org.maproulette.framework.controller.UserController.deleteUser(osmId:Long, anonymize:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves a JSON object that represents the user's public information that anyone can retrieve. This is a limited set of information that only includes certain fields.
+# responses:
+#   '200':
+#     description: The retrieved User (with only basic info)
+#     schema:
+#       $ref: '#/definitions/PublicUser'
+#   '404':
+#     description: If User with provided ID is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve
+###
+GET     /user/:userId/public                               @org.maproulette.framework.controller.UserController.getPublicUser(userId:Long)
+###
+# tags: [ User ]
+# summary: Retrieves Users public Json information
+# produces: [ application/json ]
+# description: Retrieves User Json based on the supplied OSM username
+# responses:
+#   '200':
+#     description: The retrieved User (with basic info)
+#     schema:
+#       $ref: '#/definitions/PublicUser'
+#   '404':
+#     description: If User with provided OSM username is not found.
+# parameters:
+#   - name: username
+#     in: path
+#     description: The OSM username of the user to retrieve
+###
+GET     /osmuser/:username/public                          @org.maproulette.framework.controller.UserController.getPublicUserByOSMUsername(username:String)
+###
+# tags: [ User ]
+# summary: Deletes a user from the database
+# produces: [ application/json ]
+# description: This will delete a user completely from the database. It can also optionally anonymize the users data from actions taken in MapRoulette, like change in status for tasks, comments on tasks and answers to survey questions
+# responses:
+#   '200':
+#     description: An ok message stating the user was deleted
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request, only super users can make this request
+# parameters:
+#   - name: osmId
+#     in: path
+#     description: The OSM id of the user you want to delete
+#   - name: anonymize
+#     in: query
+#     description: Whether to anonymize the users data, false by default
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /user/:osmId                                @org.maproulette.framework.controller.UserController.deleteUser(osmId:Long, anonymize:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Generates an API_KEY for a specified user
+# produces: [ application/json ]
+# description: This API will generate or regenerate the API_KEY for a specified user
+# responses:
+#   '200':
+#     description: The retrieved User
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: The user is not authorized to make this request, only super users or user matching the supplied ID can make this request
+#   '404':
+#     description: If User with provided ID is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/:userId/apikey                        @org.maproulette.framework.controller.UserController.generateAPIKey(userId:Long)
+###
+# tags: [ User ]
+# summary: Search for users by OSM username
+# produces: [ application/json ]
+# description: Retrieves list of matching users
+# responses:
+#   '200':
+#     description: The retrieved users
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: username
+#     in: path
+#     description: The OSM username or username fragment to search
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses.
+###
+GET     /users/find/:username                          @org.maproulette.framework.controller.UserController.searchUserByOSMUsername(username:String, limit:Int ?= 10)
+###
+# tags: [ User ]
+# summary: Retrieves Users Saved Challenged
+# produces: [ application/json ]
+# description: Retrieves that list of challenges that has been saved by the User
+# responses:
+#   '200':
+#     description: The retrieved Challenges
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve the challenges for
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/:userId/saved                         @org.maproulette.framework.controller.UserController.getSavedChallenges(userId:Long, limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ User ]
+# summary: Saves Challenge for a User
+# description: Saves a Challenge to a user account
+# responses:
+#   '200':
+#     description: A simple OK status message
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User or Challenge for provided ID's is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to save the challenges for
+#   - name: challengeId
+#     in: path
+#     description: The id of the challenge to save
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+POST    /user/:userId/save/:challengeId             @org.maproulette.framework.controller.UserController.saveChallenge(userId:Long, challengeId:Long)
+###
+# tags: [ User ]
+# summary: Unsaves Challenge for a User
+# description: Unsaves a Challenge to a user account
+# responses:
+#   '200':
+#     description: A simple OK status message
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User or Challenge for provided ID's is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to unsave the challenges for
+#   - name: challengeId
+#     in: path
+#     description: The id of the challenge to unsave
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE   /user/:userId/unsave/:challengeId          @org.maproulette.framework.controller.UserController.unsaveChallenge(userId:Long, challengeId:Long)
+###
+# tags: [ User ]
+# summary: Retrieves Users Saved Tasks
+# produces: [ application/json ]
+# description: Retrieves that list of tasks that has been saved by the User
+# responses:
+#   '200':
+#     description: The retrieved Tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve the challenges for
+#   - name: challengeIds
+#     in: query
+#     description: A comma separated list of challenge Ids that you want to filter the tasks by
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/:userId/savedTasks                    @org.maproulette.framework.controller.UserController.getSavedTasks(userId:Long, challengeIds:String ?= "", limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ User ]
+# summary: Saves a Task for a User
+# description: Saves a Task to a user account
+# responses:
+#   '200':
+#     description: A simple OK status message
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User or Task for provided ID's is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to save the tasks for
+#   - name: taskId
+#     in: path
+#     description: The id of the Task to save
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+POST    /user/:userId/saveTask/:taskId              @org.maproulette.framework.controller.UserController.saveTask(userId:Long, taskId:Long)
+###
+# tags: [ User ]
+# summary: Unsaves Task for a User
+# description: Unsaves a Task from a user account
+# responses:
+#   '200':
+#     description: A simple OK status message
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User or Task for provided ID's is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to unsave the tasks for
+#   - name: taskId
+#     in: path
+#     description: The id of the task to unsave
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE   /user/:userId/unsaveTask/:taskId           @org.maproulette.framework.controller.UserController.unsaveTask(userId:Long, taskId:Long)
+###
+# tags: [ User ]
+# summary: Updates UserSettings
+# description: Updates the user settings for a specified user
+# responses:
+#   '200':
+#     description: A response of the User object that was just updated
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.User'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: If User or Challenge for provided ID's is not found.
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to update the settings for
+#   - name: body
+#     in: body
+#     description: The JSON structure for the users UserSettings. You can optionally include a key properties which would be a JSON object that contains any extra information for the user.
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.UserSettings'
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT    /user/:userId                                @org.maproulette.framework.controller.UserController.updateUser(userId:Long)
+###
+# tags: [ User ]
+# summary: Refresh User Profile
+# description: Refreshes the user profile from OSM
+# responses:
+#   '200':
+#     description: Ok with no content
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The osm id of the user to update the settings for
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/:userId/refresh                        @org.maproulette.framework.controller.UserController.refreshProfile(userId:Long)
+###
+# tags: [ User ]
+# summary: Gets a list of users managing project
+# description: Gets list of users managing project along with their groupTypes (1 - Admin, 2 - Write, 3 - Read)
+# responses:
+#   '200':
+#     description: The retrieved project managers
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.ProjectManager'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The id of the project
+#   - name: osmIds
+#     in: query
+#     description: A list of comma separated OSM id's to filter the request by
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/project/:projectId                     @org.maproulette.framework.controller.UserController.getUsersManagingProject(projectId:Long, osmIds:String ?= "")
+###
+# tags: [ User ]
+# summary: Add user to project group
+# description: Adds a user with the specific ids to a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to add. If using an OSM user id, then
+#                  the isOSMUserId query parameter must be set to true
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user id is to be treated as an OSM user id
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+POST     /user/:userId/project/:projectId/:groupType  @org.maproulette.framework.controller.UserController.addUserToProject(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Set project group for user, removing any prior groups
+# description: Sets a user with the specific ids to a Admin, Write or Read project group. This will also remove the user from any other project groups the they may belong too.
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to add
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user id is to be treated as an OSM user id
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/:userId/project/:projectId/:groupType  @org.maproulette.framework.controller.UserController.setUserProjectGroup(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Adds a list of user to project group
+# description: Adds a list of users with the specific ids to a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The id of the project to add the user too
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. If using OSM user Ids then the
+#                  isOSMUserId query parameter must be set to true
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: integer
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/project/:projectId/:groupType         @org.maproulette.framework.controller.UserController.addUsersToProject(projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Removes a user from a project group
+# description: Removes a user with the specific id from a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to remove. If using an OSM user id, then
+#                  the isOSMUserId query parameter must be set to true
+#   - name: projectId
+#     in: path
+#     description: The id of the project to remove the user from
+#   - name: groupType
+#     in: path
+#     description: Either -1 all, 1 - Admin, 2 - Write, 3 - Read
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /user/:userId/project/:projectId/:groupType  @org.maproulette.framework.controller.UserController.removeUserFromProject(userId:Long, projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)
+###
+# tags: [ User ]
+# summary: Removes a list of users from a project group
+# description: Removes a list of users with the specific id from a Admin, Write or Read project group
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: projectId
+#     in: path
+#     description: The id of the project to remove the users from
+#   - name: groupType
+#     in: path
+#     description: Either 1 - Admin, 2 - Write, 3 - Read
+#   - name: body
+#     in: body
+#     description: A JSON array of user ids. This can be either the MapRoulette or OSM Id.
+#                  If using OSM user ids, then the isOSMUserId query parameter must be
+#                  set to true
+#     required: true
+#     schema:
+#       type: array
+#       items:
+#         type: integer
+#   - name: isOSMUserId
+#     in: query
+#     type: boolean
+#     default: false
+#     description: Specify if the user ids are to be treated as OSM user ids
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /user/project/:projectId/:groupType         @org.maproulette.framework.controller.UserController.removeUsersFromProject(projectId:Long, groupType:Int, isOSMUserId:Boolean ?= false)

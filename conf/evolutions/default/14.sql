@@ -22,3 +22,8 @@ ALTER TABLE task_comments ADD CONSTRAINT task_comments_project_id_fkey
 SELECT add_drop_column('challenges', 'status_message', 'text NULL');;
 
 # --- !Downs
+SELECT add_drop_column('task_comments', 'challenge_id', '', false);;
+SELECT add_drop_column('task_comments', 'project_id', '', false);;
+ALTER TABLE task_comments DROP CONSTRAINT IF EXISTS task_comments_challenge_id_fkey;;
+ALTER TABLE task_comments DROP CONSTRAINT IF EXISTS task_comments_project_id_fkey;;
+SELECT add_drop_column('challenges', 'status_message', '', false);;

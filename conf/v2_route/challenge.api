@@ -1,0 +1,1174 @@
+###
+# tags: [ Challenge ]
+# summary: Create a Challenge
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will create a new challenge from the supplied JSON in the body. When creating the Challenge, leave the ID field
+#               out of the body json, if updating (generally use the PUT method) include the ID field.
+# responses:
+#   '200':
+#     description: The newly created Challenge with a unique id.
+#                   The Challenge object is flattened so the "general", "creation", "priority", and "extra"
+#                   fields are remove and the keys from that object are moved into the challenge object
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '304':
+#     description: Not updated responding with empty payload if Challenge already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Challenge
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Challenge body, include the key "children" to create Task children objects.
+#                   Although the model schema shows a hierarchy include "general", "creation", "priority" and "extra" this
+#                   JSON structure can be flatten and you can exclude those top level keys and have the children in the root level.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+###
+POST    /challenge                                  @org.maproulette.controllers.api.ChallengeController.create
+###
+# tags: [ Challenge ]
+# summary: Updates a Challenge
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Will update an already existing challenge from the supplied JSON in the body.
+#               When updating the Challenge object you can within the same json body include Task
+#               children under the "children" key.
+# responses:
+#   '200':
+#     description: The updated JSON Challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '304':
+#     description: Not updated responding with empty payload if Challenge already exists and nothing to update
+#   '400':
+#     description: Invalid json payload for Challenge
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the Challenge that is being updated
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The JSON structure for the Challenge body, include the key "children" to create or update Task children objects.
+#     required: true
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+###
+PUT     /challenge/:id                              @org.maproulette.controllers.api.ChallengeController.update(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieves an already existing Challenge
+# produces: [ application/json ]
+# description: Retrieves an already existing Challenge based on the supplied ID in the URL.
+# responses:
+#   '200':
+#     description: The retrieved Challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '404':
+#     description: ID field supplied but no object found matching the id
+# parameters:
+#   - name: id
+#     description: The id of the Challenge to retrieve
+###
+GET     /challenge/:id                              @org.maproulette.controllers.api.ChallengeController.read(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieves an already existing Challenge
+# produces: [ application/json ]
+# description: Retrieves an already existing Challenge based on the name of the Challenge rather than an ID
+# responses:
+#   '200':
+#     description: The retrieved Challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '404':
+#     description: No Challenge found matching the provided name
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Project of the Challenge
+#   - name: name
+#     in: path
+#     description: The name of the Challenge being retrieved
+###
+GET     /project/:id/challenge/:name                @org.maproulette.controllers.api.ChallengeController.readByName(id:Long, name:String)
+###
+# tags: [ Challenge ]
+# summary: Deletes an existing Challenge
+# description: Deletes an existing Challenge based on the supplied ID. This will delete all children Tasks under the Challenge.
+# responses:
+#   '200':
+#     description: A status message containing the ID of the Challenge that was just deleted
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Challenge found matching the provided id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Challenge being deleted
+#   - name: immediate
+#     in: query
+#     description: If set to true, will delete the virtual challenge immediately instead of delayed
+#     default: false
+#     type: boolean
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /challenge/:id                              @org.maproulette.controllers.api.ChallengeController.delete(id:Long, immediate:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Deletes all Challenge Tasks
+# description: Deletes all the existing tasks within a challenge. This API will also give the option to delete tasks based on the tasks current status.
+#               So can delete all "false positive" tasks, or all "fixed and created" tasks.
+# responses:
+#   '200':
+#     description: Empty Ok stating that it completed successfully
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Challenge found matching the provided id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Challenge being deleted
+#   - name: statusFilters
+#     in: query
+#     description: A comma separated list of status ID's. 0 = Created, 1 = Fixed, 2 = False Positive, 3 = Skipped, 4 = Deleted, 5 = Already Fixed, 6 = Too Hard
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /challenge/:id/tasks                        @org.maproulette.controllers.api.ChallengeController.deleteTasks(id:Long, statusFilters ?= "")
+###
+# tags: [ Challenge ]
+# summary: Find Challenge matching search criteria
+# produces: [ application/json ]
+# description: Finds a list of Challenges that match a specific search criteria. The search criteria is simply a string that is contained in the Challenge name. String case sensitivity is ignored.
+# responses:
+#   '200':
+#     description: A list of Challenges found
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: q
+#     in: query
+#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match everything.
+#   - name: parentId
+#     in: query
+#     description: This field will be ignored for this request
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: onlyEnabled
+#     in: query
+#     description: Flag to set if only wanting enabled Challenges returned. Default value is true.
+###
+GET     /challenges/find                            @org.maproulette.controllers.api.ChallengeController.find(q:String ?= "", parentId:Long ?= -1, limit:Int ?= 10, page:Int ?= 0, onlyEnabled:Boolean ?= true)
+###
+# tags: [ Challenge ]
+# summary: Extended Find Challenge matching search criteria
+# produces: [ application/json ]
+# description: Finds a list of Challenges that match a specific search criteria. The search criteria is uses multiple values from the query string
+# responses:
+#   '200':
+#     description: A list of Challenges found
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: pid
+#     in: query
+#     description: The id of the project to limit your search too
+#   - name: ps
+#     in: query
+#     description: The search string used to match the project names. Default value is empty string, ie. will match all projects.
+#   - name: pe
+#     in: query
+#     description: Boolean variable true|false that limits the search by enabled projects only if set to true. Default will is true.
+#   - name: ct
+#     in: query
+#     description: Comma separated list of tags to limit the returned challenges by
+#   - name: cs
+#     in: query
+#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
+#   - name: ce
+#     in: query
+#     description: Boolean variable true|false that limits the search by enabled projects only if set to true. Default will is true.
+#   - name: cd
+#     in: query
+#     description: The difficulty level to limit the returned challenges by. Following difficulty Integers can be used. 1 - Easy, 2 - Normal, 3 - Expert, -1 - Any difficulty. Default value is -1.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: sort
+#     in: query
+#     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
+#   - name: order
+#     in: query
+#     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+###
+GET     /challenges/extendedFind                    @org.maproulette.controllers.api.ChallengeController.extendedFind(limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+###
+# tags: [ Challenge ]
+# summary: List challenges in specified projects
+# produces: [ application/json ]
+# description: Retrieves a lightweight listing of challenges, with just a few basic fields for each, that belong to the specified project(s).
+# responses:
+#   '200':
+#     description: A listing of challenges containing a few basic fields for each.
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.ChallengeListing'
+# parameters:
+#   - name: projectIds
+#     in: query
+#     description: Comma-separated list of project ids for which child challenges are desired. Default value is empty string, ie. all projects.
+#   - name: parentId
+#     in: query
+#     description: This field will be ignored for this request
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: onlyEnabled
+#     in: query
+#     description: Flag to set if only wanting enabled Challenges returned. Default value is true.
+###
+GET     /challenges/listing                         @org.maproulette.controllers.api.ChallengeController.listing(projectIds:String ?= "", limit:Int ?= 10, page:Int ?= 0, onlyEnabled:Boolean ?= true)
+###
+# tags: [ Challenge ]
+# summary: Move Challenge to another Project
+# produces: [ application/json ]
+# description: Will move a challenge into another project
+# responses:
+#   '200':
+#     description: Empty status body
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Tag'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#   - name: projectId
+#     in: path
+#     description: The ID of the project you are moving the challenge too.
+###
+POST     /challenge/:id/project/:projectId           @org.maproulette.controllers.api.ChallengeController.moveChallenge(projectId:Long, id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieve tags for Challenge
+# produces: [ application/json ]
+# description: Retrieves all the Tags that have been added to the specified Challenge
+# responses:
+#   '200':
+#     description: A list of Tags associated with the Challenge. Empty array if not found.
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Tag'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+###
+GET     /challenge/:id/tags                         @org.maproulette.controllers.api.ChallengeController.getTagsForChallenge(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieve challenges based on provided tags
+# produces: [ application/json ]
+# description: Retrieves all the challenges that contain at least one of the supplied tags.
+# responses:
+#   '200':
+#     description: A list of Challenges that contain at least one of the supplied tags. An empty list otherwise.
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '400':
+#     description: If not tags are supplied a BadRequest response will be returned
+# parameters:
+#   - name: tags
+#     in: query
+#     description: A comma separated list of tags
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenges/tags                            @org.maproulette.controllers.api.ChallengeController.getItemsBasedOnTags(tags:String ?= "", limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Delete Challenge Tags
+# description: Deletes all the supplied tags from the Challenge
+# responses:
+#   '304':
+#     description: A basic 304 with NoContent will be returned on a successful delete
+#   '400':
+#     description: If no tags are supplied a BadRequest response will be returned
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#   - name: tags
+#     in: query
+#     description: A comma separated list of tags
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /challenge/:id/tags                         @org.maproulette.controllers.api.ChallengeController.deleteTagsFromItem(id:Long, tags:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Featured Challenges.
+# produces: [ application/json ]
+# description: Get all the currently featured challenges
+# responses:
+#   '200':
+#     description: A list of all the featured Challenges
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenges/featured                        @org.maproulette.controllers.api.ChallengeController.getFeaturedChallenges(limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Hottest Challenges.
+# produces: [ application/json ]
+# description: Get the hottest (recently popular) challenges
+# responses:
+#   '200':
+#     description: A list of all the hottest Challenges in order of recent popularity
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenges/hot                             @org.maproulette.controllers.api.ChallengeController.getHotChallenges(limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Preferred Challenges.
+# produces: [ application/json ]
+# description: Get the preferred challenges which include popular, featured, and newest
+# responses:
+#   '200':
+#     description: A map of each list challenge types ("popular":[], "featured":[], "newest":[])
+#     schema:
+#       type: object
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in each category. Default value is 10.
+###
+GET     /challenges/preferred                             @org.maproulette.controllers.api.ChallengeController.getPreferredChallenges(limit:Int ?= 10)
+###
+# tags: [ Challenge ]
+# summary: List all the Challenges.
+# produces: [ application/json ]
+# description: Lists all the Challenges in the system
+# responses:
+#   '200':
+#     description: A list of all the Challenges
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: onlyEnabled
+#     in: query
+#     description: Only retrieve challenges that are enabled, default is false.
+###
+GET     /challenges                                 @org.maproulette.controllers.api.ChallengeController.list(limit:Int ?= 10, page:Int ?= 0, onlyEnabled:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: List all the Challenges Tasks.
+# consumes: [ application/json ]
+# produces: [ application/json ]
+# description: Lists all the Tasks that are children of the supplied Challenge.
+# responses:
+#   '200':
+#     description: A list of all the Tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The project ID.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenge/:id/tasks                        @org.maproulette.controllers.api.ChallengeController.listChildren(id:Long, limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Add tasks to a challenge
+# consumes: [ application/json ]
+# description: This will create tasks within a challenge based on the provided geojson in the body of the PUT request
+# responses:
+#   '304':
+#     description: No Content, just a successful creation when getting this message
+#   '400':
+#     description: Invalid json payload. It is required that the body is JSON.
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Challenge where all the children are being created.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The geojson to build the tasks from.
+#     required: true
+###
+PUT     /challenge/:id/addTasks                     @org.maproulette.controllers.api.ChallengeController.addTasksToChallenge(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Add tasks to a challenge
+# consumes: [ application/json ]
+# description: This will create tasks within a challenge based on the provided file uploaded as part of the PUT request.
+# responses:
+#   '304':
+#     description: No Content, just a successful creation when getting this message
+#   '400':
+#     description: Invalid json payload. It is required that the file is JSON.
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Challenge where all the children are being created.
+#   - name: lineByLine
+#     in: query
+#     description: If the JSON provided includes seperate GeoJSON on each line, then this must be true
+#   - name: removeUnmatched
+#     in: query
+#     description: Used to remove incomplete tasks that have been addressed
+#                  externally since the last rebuild, assuming the source data
+#                  represents all tasks outstanding. If set to true, all
+#                  existing tasks in CREATED or SKIPPED status (only) will be
+#                  removed prior to rebuilding with the assumption that they
+#                  will be recreated if they still appear in the updated source
+#                  data. If set to false, unmatched existing tasks are simply
+#                  left as-is.
+#     default: false
+#   - name: skipSnapshot
+#     in: query
+#     description: If included will skip recording a snapshot before proceeding. (By default false, so it will create snapshot.)
+#     default: false
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: body
+#     in: body
+#     description: The geojson to build the tasks from.
+#     required: true
+###
+PUT     /challenge/:id/addFileTasks                 @org.maproulette.controllers.api.ChallengeController.addTasksToChallengeFromFile(id:Long, lineByLine:Boolean ?= true, removeUnmatched:Boolean ?= false, dataOriginDate:Option[String], skipSnapshot:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Retrieves children for Challenge
+# produces: [ application/json ]
+# description: Retrieves all the children for a Challenge in an expanded list. Unlike the GET
+#               request /challenge/{id}/tasks, this function will wrap the json array list
+#               inside of the parent Challenge object, so that you see the full hierarchy.
+# responses:
+#   '200':
+#     description: The Challenge with all the Task Challenge objects of the Challenge in a JSON array in the key "children"
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Challenge.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenge/:id/children                     @org.maproulette.controllers.api.ChallengeController.expandedList(id:Long, limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Clones a Challenge
+# produces: [ application/json ]
+# description: Clones a challenge
+# responses:
+#   '200':
+#     description: The newly created cloned challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '401':
+#     description: The user is not authorized to make this request\
+#   '404':
+#     description: No Challenge found matching the provided id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Challenge to clone.
+#   - name: name
+#     in: path
+#     description: The name of the new challenge
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /challenge/:id/clone/:name                  @org.maproulette.controllers.api.ChallengeController.cloneChallenge(id:Long, name:String)
+###
+# tags: [ Challenge ]
+# summary: Rebuild a Challenge
+# produces: [ application/json ]
+# description: Rebuilds a challenge that was originally built by an overpass query or remote geojson.
+# responses:
+#   '200':
+#     description: Empty OK status
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Challenge found matching the provided id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the Challenge to rebuild.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: removeUnmatched
+#     in: query
+#     description: Used to remove incomplete tasks that have been addressed
+#                  externally since the last rebuild, assuming the source data
+#                  represents all tasks outstanding. If set to true, all
+#                  existing tasks in CREATED or SKIPPED status (only) will be
+#                  removed prior to rebuilding with the assumption that they
+#                  will be recreated if they still appear in the updated source
+#                  data. If set to false, unmatched existing tasks are simply
+#                  left as-is.
+#     default: false
+#   - name: skipSnapshot
+#     in: query
+#     description: If included will skip recording a snapshot before proceeding. (By default false, so it will create snapshot.)
+#     default: false
+###
+PUT     /challenge/:id/rebuild                      @org.maproulette.controllers.api.ChallengeController.rebuildChallenge(id:Long, removeUnmatched:Boolean ?= false, skipSnapshot:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Retrieves random Task
+# produces: [ application/json ]
+# description: Retrieves a random Task based on the search criteria and contained within the current Challenge
+# responses:
+#   '200':
+#     description: The list of tasks that match the search criteria
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: cid
+#     in: path
+#     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
+#   - name: tags
+#     in: query
+#     description: A comma separated list of task tags. The search will only retrieve random tasks that contain those tags
+#   - name: s
+#     in: query
+#     description: The task search string. Retrieve only tasks that contain the search string in the task name. Match is case insensitive.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 1.
+#   - name: proximity
+#     in: query
+#     description: Id of task that you wish to find the next task based on the proximity of that task
+###
+GET     /challenge/:cid/tasks/random                @org.maproulette.controllers.api.ChallengeController.getRandomTasks(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
+###
+# tags: [ Challenge ]
+# summary: Retrieves random Task
+# produces: [ application/json ]
+# description: Retrieves a random Task based on the search criteria and contained within the current Challenge
+# responses:
+#   '200':
+#     description: The list of tasks that match the search criteria
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: cid
+#     in: path
+#     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
+#   - name: tags
+#     in: query
+#     description: A comma separated list of task tags. The search will only retrieve random tasks that contain those tags
+#   - name: s
+#     in: query
+#     description: The task search string. Retrieve only tasks that contain the search string in the task name. Match is case insensitive.
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 1.
+#   - name: proximity
+#     in: query
+#     description: Id of task that you wish to find the next task based on the proximity of that task
+###
+GET     /challenge/:cid/tasks/randomTasks           @org.maproulette.controllers.api.ChallengeController.getRandomTasks(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
+###
+# tags: [ Challenge ]
+# summary: Retrieves nearby Tasks
+# produces: [ application/json ]
+# description: Retrieves tasks geographically closest to the specified task within the same Challenge
+# responses:
+#   '200':
+#     description: The list of geographically closest tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 5.
+#   - name: proximity
+#     in: query
+#     description: Id of task around which geographically closest tasks are desired
+#   - name: excludeSelfLocked
+#     in: query
+#     description: exclude tasks this user has locked (always excludes tasks locked by others)
+###
+GET     /challenge/:cid/tasksNearby/:proximityId           @org.maproulette.controllers.api.ChallengeController.getNearbyTasks(cid:Long, proximityId:Long, excludeSelfLocked:Boolean ?=false, limit:Int ?= 5)
+###
+# tags: [ Challenge ]
+# summary: Retrieves prioritized random Task
+# produces: [ application/json ]
+# description: Retrieves a prioritized random Task contained within the current Challenge,
+#              with higher priority tasks being returned ahead of lower priority tasks
+# responses:
+#   '200':
+#     description: The list of tasks that match the search criteria
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: cid
+#     in: path
+#     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
+#   - name: s
+#     in: query
+#     description: The task search string. Retrieve only tasks that contain the search string in the task name. Match is case insensitive.
+#   - name: tags
+#     in: query
+#     description: A comma separated list of task tags. The search will only retrieve random tasks that contain those tags
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 1.
+#   - name: proximity
+#     in: query
+#     description: Id of task that you wish to find the next task based on the proximity of that task
+###
+GET     /challenge/:cid/tasks/prioritizedTasks      @org.maproulette.controllers.api.ChallengeController.getRandomTasksWithPriority(cid:Long, s:String ?= "", tags:String ?= "", limit:Int ?= 1, proximity:Long ?= -1)
+###
+# tags: [ Challenge ]
+# summary: Retrieves next Task
+# produces: [ application/json ]
+# description: Retrieves the next sequential Task based on the task ordering within the Challenge. If it is currently on the last task it will response with the first task in the challenge.
+# responses:
+#   '200':
+#     description: The next task in the list
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: cid
+#     in: path
+#     description: The id of the parent Challenge.
+#   - name: id
+#     in: path
+#     description: The id of the current task being viewed, so that we can get context of what the next task should be
+#   - name: statusList
+#     in: query
+#     description: A comma separated list of Task status' to limit to the response by.
+###
+GET     /challenge/:cid/nextTask/:id                @org.maproulette.controllers.api.ChallengeController.getSequentialNextTask(cid:Long, id:Long, statusList:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Retrieves previous Task
+# produces: [ application/json ]
+# description: Retrieves the previous sequential Task based on the task ordering within the Challenge. If it is currently on the first task it will response with the last task in the challenge.
+# responses:
+#   '200':
+#     description: The previous task in the list
+#     schema:
+#       $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: cid
+#     in: path
+#     description: The id of the parent Challenge.
+#   - name: id
+#     in: path
+#     description: The id of the current task being viewed, so that we can get context of what the next task should be
+#   - name: statusList
+#     in: query
+#     description: A comma separated list of Task status' to limit to the response by.
+###
+GET     /challenge/:cid/previousTask/:id            @org.maproulette.controllers.api.ChallengeController.getSequentialPreviousTask(cid:Long, id:Long, statusList:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Retrieves Challenge GeoJSON
+# produces: [ application/json ]
+# description: Retrieves the GeoJSON for the Challenge that represents all the Task children of the Challenge.
+# responses:
+#   '200':
+#     description: Standard GeoJSON Challenge Geometry
+#   '404':
+#     description: ID field supplied but no object found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
+###
+GET     /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Retrieves Challenge GeoJSON
+# produces: [ application/json ]
+# description: Retrieves the GeoJSON for the Challenge that represents all the Task children of the Challenge.
+# responses:
+#   '200':
+#     description: Standard GeoJSON Challenge Geometry
+#   '404':
+#     description: ID field supplied but no object found matching the id
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent Challenge limiting the tasks to only a descendent of that Challenge.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
+###
+POST    /challenge/view/:id                         @org.maproulette.controllers.api.ChallengeController.getChallengeGeoJSON(id:Long, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Retrieves clustered Task points
+# produces: [ application/json ]
+# description: Retrieves all the Tasks for a specific Challenge as clustered points to potentially display on a map
+# responses:
+#   '200':
+#     description: An array of clustered point representations for a Task. If none found will return an empty list
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.ClusteredPoint'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent project.
+#   - name: filter
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+###
+GET     /challenge/clustered/:id                    @org.maproulette.controllers.api.ChallengeController.getClusteredPoints(id:Long, filter:String ?= "", limit:Int ?= 2500, excludeLocked:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Update Task Priorities
+# produces: [ application/json ]
+# description: Updates all the Task priorities in a Challenge based on the priority rules setup in the Challenge
+# responses:
+#   '200':
+#     description: A simple OK status.
+#     schema:
+#       $ref: '#/definitions/org.maproulette.exception.StatusMessage'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent project.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /challenge/:id/updateTaskPriorities         @org.maproulette.controllers.api.ChallengeController.updateTaskPriorities(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Reset Task Instructions
+# description: This will reset all the task instructions so that the task instructions revert to the Challenge instruction.
+# responses:
+#   '200':
+#     description: A simple OK status.
+#   '400':
+#     description: If the Challenge does not contain any instructions, then it will not revert the task instructions
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: The Challenge for the supplied ID was not found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent project.
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /challenge/:id/resetTaskInstructions        @org.maproulette.controllers.api.ChallengeController.resetTaskInstructions(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieve all comments for Challenge
+# description: This will retrieve all the comments for all the children tasks of a given challenge
+# response:
+#   '200':
+#     description: A list of comments for that challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Comment'
+#   '404':
+#     description: No Challenge with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenge/:id/comments                     @org.maproulette.controllers.api.ChallengeController.retrieveComments(id:Long, limit:Int ?= 10, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Retrieve all comments for Challenge
+# description: This will retrieve all the comments for all the children tasks of a given challenge and respond with a csv
+# response:
+#   '200':
+#     description: A CSV file containing the following data "ProjectID,ChallengeID,TaskID,OSM_UserID,OSM_Username,Comments,TaskLink"
+#   '404':
+#     description: No Challenge with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+###
+GET     /challenge/:id/comments/extract             @org.maproulette.controllers.api.ChallengeController.extractComments(id:Long, limit:Int ?= -1, page:Int ?= 0)
+###
+# tags: [ Challenge ]
+# summary: Retrieve summaries of all tasks for Challenge
+# description: This will retrieve summaries of all the tasks of a given challenge and respond with a csv
+# response:
+#   '200':
+#     description: A CSV file containing the following data "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,Username"
+#   '404':
+#     description: No Challenge with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
+###
+GET     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "", exportProperties:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Retrieve summaries of all tasks for Challenge
+# description: This will retrieve summaries of all the tasks of a given challenge and respond with a csv
+# response:
+#   '200':
+#     description: A CSV file containing the following data "TaskID,ChallengeID,TaskName,TaskStatus,TaskPriority,Username"
+#   '404':
+#     description: No Challenge with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: status
+#     in: query
+#     description: Can filter the Tasks returned by the status of the Task. 0 - Created, 1 - Fixed, 2 - False Positive, 3 - Skipped, 4 - Deleted, 5 - Already Fixed, 6 - Too Hard
+#   - name: priority
+#     in: query
+#     description: Can filter the Tasks returned by the priority of the Task. 0 - High, 1 - Medium, 2 - Low
+#   - name: reviewStatus
+#     in: query
+#     description: Can filter the Tasks returned by the reviewStatus of the Task. 0 - Requested, 1 - Approved, 2 - Rejected, 3 - Assisted, 4 - Disputed
+#   - name: taskPropertySearch
+#     in: POST form data
+#     description: Can filter by specific task properties.
+###
+POST     /challenge/:id/tasks/extract             @org.maproulette.controllers.api.ChallengeController.extractTaskSummaries(id:Long, limit:Int ?= -1, page:Int ?= 0, status:String ?= "", reviewStatus:String ?= "", priority:String ?= "", exportProperties:String ?= "")
+###
+# tags: [ Challenge ]
+# summary: Match OSM Changesets
+# description: This will go through every task and try to match an OSM changeset with the task
+# response:
+#   '200':
+#     description: Will always return Ok unless not authenticated
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Challenge with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+#   - name: skipSet
+#     in: query
+#     description: Will skip any tasks if the changesets are already set if this is set to true
+#     default: false
+###
+GET     /challenge/:id/matchChangesets          @org.maproulette.controllers.api.ChallengeController.matchChangeSets(id:Long, skipSet:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Create Challenge from Github
+# description: This will pull the following files from Github, ${name}_create.json, ${name}_geojson.json, ${name}_info.md, and create a Challenge from it. The create file will be the json used to create the challenge. Similarly to if you supplied json in the create method. The info.md file is just an informational file that can be used later for challenge information to the user. And geojson.json which is used to generate the tasks. If the challenge has been previously created, it will just update the tasks from the geojson
+# response:
+#   '200':
+#     description: The retrieved Challenge
+#     schema:
+#       $ref: '#/definitions/org.maproulette.framework.model.Challenge'
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No Project with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the parent project
+#     required: true
+#   - name: username
+#     in: path
+#     description: username of the github user that owns the repo
+#     required: true
+#   - name: repo
+#     in: path
+#     description: Github repositories that contains the challenge files
+#     required: true
+#   - name: name
+#     in: path
+#     description: The name of the challenge that prefixes all the github files
+#     required: true
+###
+POST     /project/:projectId/challenge/:username/:repo/:name   @org.maproulette.controllers.api.ChallengeController.createFromGithub(projectId:Long, username:String, repo:String, name:String, rebuild:Boolean ?= false)
+###
+# tags: [ Challenge ]
+# summary: Extracts a Challenge Package
+# description: This will retrieve a package of the challenge, which will contain json to recreate the challenge, geojson to recreate the tasks, info page in md format if any, all the comments extracted from for the challenge and any metrics and the time the challenge was extracted.
+# response:
+#   '200':
+#     description: A gzipped file containing a package of the challenge
+#   '401':
+#     description: The user is not authorized to make this request
+#   '404':
+#     description: No project with provided ID found
+# parameters:
+#   - name: id
+#     in: path
+#     description: The ID of the challenge
+#     required: true
+###
+GET     /challenge/:id/extract                      @org.maproulette.controllers.api.ChallengeController.extractPackage(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Retrieves tasks in a cluster
+# produces: [ application/json ]
+# description: Retrieves tasks contained in a cluster retrieved from api /api/v2/challenge/:id/taskCluster
+# responses:
+#   '200':
+#     description: An array of tasks that are contained in a cluster. If none found will return an empty list.
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.ClusteredPoint'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the parent project.
+#   - name: clusterId
+#     in: path
+#     description: The id of the single cluster.
+#   - name: points
+#     in: query
+#     description: The number of clusters that you want returned
+###
+GET     /tasksInCluster/:clusterId                  @org.maproulette.controllers.api.TaskController.getTasksInCluster(clusterId:Int, points:Int ?= 100)
+###
+# tags: [ Challenge ]
+# summary: Create a batch of Challenges
+# deprecated: true
+###
+POST    /challenges                                 @org.maproulette.controllers.api.ChallengeController.batchUploadPost
+###
+# tags: [ Challenge ]
+# summary: Update a batch of Challenges
+# deprecated: true
+###
+PUT     /challenges                                 @org.maproulette.controllers.api.ChallengeController.batchUploadPut
+###
+# tags: [ Challenge ]
+# summary: Undeletes a Challenge
+# deprecated : true
+###
+PUT  /challenge/:id/undelete                         @org.maproulette.controllers.api.ChallengeController.undelete(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Create Tasks for Challenge
+# deprecated: true
+###
+POST    /challenge/:id/tasks                        @org.maproulette.controllers.api.ChallengeController.createChildren(id:Long)
+###
+# tags: [ Challenge ]
+# summary: Create Tasks for Challenge
+# deprecated: true
+###
+PUT     /challenge/:id/tasks                        @org.maproulette.controllers.api.ChallengeController.updateChildren(id:Long)

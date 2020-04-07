@@ -32,3 +32,5 @@ CREATE TABLE IF NOT EXISTS virtual_challenge_tasks
 SELECT create_index_if_not_exists('virtual_challenge_tasks', 'virtual_challenge_id', '(virtual_challenge_id)');;
 
 # --- !Downs
+DROP TABLE virtual_challenge_tasks;;
+DROP TABLE virtual_challenges;;

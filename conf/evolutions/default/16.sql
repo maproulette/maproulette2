@@ -5,3 +5,4 @@
 SELECT add_drop_column('users', 'leaderboard_opt_out', 'boolean DEFAULT FALSE');;
 
 # --- !Downs
+SELECT add_drop_column('users', 'leaderboard_opt_out', '', false);;

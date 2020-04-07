@@ -7,7 +7,7 @@
 -- existing locks to match the creation timestamp with their current
 -- locked_time
 ALTER TABLE "locked" ADD COLUMN created timestamp without time zone DEFAULT NOW();;
-UPDATE locked set created=locked_time;
+UPDATE locked set created=locked_time;;
 
 # --- !Downs
 ALTER TABLE "locked" DROP COLUMN created;;

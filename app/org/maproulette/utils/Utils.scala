@@ -1,12 +1,14 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.utils
 
 import org.apache.commons.lang3.{StringEscapeUtils, StringUtils}
 import org.joda.time.DateTime
 import org.maproulette.exception.NotFoundException
+import org.maproulette.framework.model.User
 import org.maproulette.models.{Lock, Task}
-import org.maproulette.session.User
 import play.api.libs.json._
 import play.api.mvc.Result
 import play.api.mvc.Results._

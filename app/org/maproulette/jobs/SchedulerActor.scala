@@ -1,28 +1,26 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.jobs
 
 import akka.actor.{Actor, Props}
 import anorm.JodaParameterMetaData._
-import anorm._
 import anorm.SqlParser._
+import anorm._
 import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
+import org.maproulette.data.SnapshotManager
+import org.maproulette.framework.model.User
+import org.maproulette.framework.service.ServiceManager
 import org.maproulette.jobs.SchedulerActor.RunJob
 import org.maproulette.jobs.utils.LeaderboardHelper
 import org.maproulette.metrics.Metrics
-import org.maproulette.models.{
-  Task,
-  UserNotification,
-  UserNotificationEmail,
-  UserNotificationEmailDigest
-}
 import org.maproulette.models.Task.STATUS_CREATED
 import org.maproulette.models.dal.DALManager
-import org.maproulette.data.SnapshotManager
-import org.maproulette.provider.{KeepRightBox, KeepRightError, KeepRightProvider, EmailProvider}
-import org.maproulette.session.User
+import org.maproulette.models.{Task, UserNotification, UserNotificationEmailDigest}
+import org.maproulette.provider.{EmailProvider, KeepRightBox, KeepRightError, KeepRightProvider}
 import org.maproulette.utils.BoundingBoxFinder
 import org.slf4j.LoggerFactory
 import play.api.Application
@@ -42,6 +40,7 @@ class SchedulerActor @Inject() (
     application: Application,
     db: Database,
     dALManager: DALManager,
+    serviceManager: ServiceManager,
     keepRightProvider: KeepRightProvider,
     boundingBoxFinder: BoundingBoxFinder,
     emailProvider: EmailProvider,
@@ -251,8 +250,8 @@ class SchedulerActor @Inject() (
         implicit val id = values(1).toLong
         values(0) match {
           case "p" =>
-            dALManager.project
-              .listChildren(-1)
+            this.serviceManager.project
+              .children(-1)
               .foreach(c => {
                 dALManager.challenge
                   .listChildren(-1)(c.id)
@@ -470,7 +469,7 @@ class SchedulerActor @Inject() (
         .foreach(notification => {
           // Send email if user has an email address on file
           try {
-            dALManager.user.retrieveById(notification.userId) match {
+            this.serviceManager.user.retrieve(notification.userId) match {
               case Some(user) =>
                 user.settings.email match {
                   case Some(address) if (!address.isEmpty) =>
@@ -515,7 +514,7 @@ class SchedulerActor @Inject() (
     // Email each digest if recipient has an email address on file
     digests.foreach(digest => {
       try {
-        dALManager.user.retrieveById(digest.userId) match {
+        this.serviceManager.user.retrieve(digest.userId) match {
           case Some(user) =>
             user.settings.email match {
               case Some(address) if (!address.isEmpty) =>
@@ -528,6 +527,80 @@ class SchedulerActor @Inject() (
         case e: Exception => logger.error("Failed to send digest email: " + e)
       }
     })
+  }
+
+  /**
+    * Snapshots the user_metrics table and stores in in user_metrics_history
+    *
+    * @param action - action string
+    */
+  def snapshotUserMetrics(action: String): Unit = {
+    logger.info(action)
+
+    db.withConnection { implicit c =>
+      SQL(s"""UPDATE user_metrics set score=data.score, total_fixed=data.total_fixed,
+              total_false_positive=data.total_false_positive, total_already_fixed=data.total_already_fixed,
+              total_too_hard=data.total_too_hard, total_skipped=data.total_skipped,
+              total_time_spent=data.total_time_spent, tasks_with_time=data.tasks_with_time
+              FROM (
+              SELECT users.id,
+                       SUM(CASE sa.status
+                           WHEN ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed}
+                           WHEN ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive}
+                           WHEN ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed}
+                           WHEN ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard}
+                           WHEN ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped}
+                           ELSE 0
+                       END) AS score,
+                       SUM(CASE WHEN sa.status = ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed} else 0 end) total_fixed,
+                       SUM(CASE WHEN sa.status = ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive} else 0 end) total_false_positive,
+                       SUM(CASE WHEN sa.status = ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed} else 0 end) total_already_fixed,
+                       SUM(CASE WHEN sa.status = ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard} end) total_too_hard,
+                       SUM(CASE WHEN sa.status = ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped} else 0 end) total_skipped,
+                       SUM(CASE WHEN (sa.created IS NOT NULL AND
+                                       sa.started_at IS NOT NULL)
+                                THEN (EXTRACT(EPOCH FROM (sa.created - sa.started_at)) * 1000)
+                                ELSE 0 END) as total_time_spent,
+                       SUM(CASE WHEN (sa.created IS NOT NULL AND
+                                       sa.started_at IS NOT NULL)
+                                THEN 1 ELSE 0 END) as tasks_with_time
+               FROM status_actions sa, users
+               WHERE users.osm_id = sa.osm_user_id AND sa.old_status <> sa.status
+               GROUP BY sa.osm_user_id, users.id) AS data
+              WHERE user_metrics.user_id = data.id
+           """).executeUpdate()
+      logger.info(s"Refreshed user metrics from status actions.")
+    }
+
+    db.withConnection { implicit c =>
+      SQL(s"""INSERT INTO user_metrics_history
+              SELECT user_id, score, total_fixed, total_false_positive, total_already_fixed,
+                     total_too_hard, total_skipped, now(), initial_rejected, initial_approved,
+                     initial_assisted, total_rejected, total_approved, total_assisted,
+                     total_disputed_as_mapper, total_disputed_as_reviewer,
+                     total_time_spent, tasks_with_time, total_review_time, tasks_with_review_time
+              FROM user_metrics
+           """).executeUpdate()
+
+      logger.info(s"Succesfully created snapshot of user metrics.")
+    }
+  }
+
+  /**
+    * Records snaphshots for all challenges.
+    *
+    * @param action - action string
+    */
+  def snapshotChallenges(action: String): Unit = {
+    logger.info(action)
+
+    db.withConnection { implicit c =>
+      val ids = SQL(s"""SELECT id FROM challenges""").as(long("id").*)
+      ids.foreach(id => {
+        this.snapshotManager.recordChallengeSnapshot(id, false)
+      })
+      logger.info(s"Succesfully created snapshots of challenges.")
+    }
   }
 
   /**
@@ -553,71 +626,6 @@ class SchedulerActor @Inject() (
       case Failure(f) =>
         // something went wrong, we should bail out immediately
         logger.warn(s"The KeepRight challenge creation failed. ${f.getMessage}")
-    }
-  }
-
-  /**
-    * Snapshots the user_metrics table and stores in in user_metrics_history
-    *
-    * @param action - action string
-    */
-  def snapshotUserMetrics(action: String): Unit = {
-    logger.info(action)
-
-    db.withConnection { implicit c =>
-      SQL(s"""UPDATE user_metrics set score=data.score, total_fixed=data.total_fixed,
-              total_false_positive=data.total_false_positive, total_already_fixed=data.total_already_fixed,
-              total_too_hard=data.total_too_hard, total_skipped=data.total_skipped
-              FROM (
-              SELECT users.id,
-                       SUM(CASE sa.status
-                           WHEN ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed}
-                           WHEN ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive}
-                           WHEN ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed}
-                           WHEN ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard}
-                           WHEN ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped}
-                           ELSE 0
-                       END) AS score,
-                       SUM(CASE WHEN sa.status = ${Task.STATUS_FIXED} THEN ${config.taskScoreFixed} else 0 end) total_fixed,
-                       SUM(CASE WHEN sa.status = ${Task.STATUS_FALSE_POSITIVE} THEN ${config.taskScoreFalsePositive} else 0 end) total_false_positive,
-                       SUM(CASE WHEN sa.status = ${Task.STATUS_ALREADY_FIXED} THEN ${config.taskScoreAlreadyFixed} else 0 end) total_already_fixed,
-                       SUM(CASE WHEN sa.status = ${Task.STATUS_TOO_HARD} THEN ${config.taskScoreTooHard} end) total_too_hard,
-                       SUM(CASE WHEN sa.status = ${Task.STATUS_SKIPPED} THEN ${config.taskScoreSkipped} else 0 end) total_skipped
-               FROM status_actions sa, users
-               WHERE users.osm_id = sa.osm_user_id AND sa.old_status <> sa.status
-               GROUP BY sa.osm_user_id, users.id) AS data
-              WHERE user_metrics.user_id = data.id
-           """).executeUpdate()
-      logger.info(s"Refreshed user metrics from status actions.")
-    }
-
-    db.withConnection { implicit c =>
-      SQL(s"""INSERT INTO user_metrics_history
-              SELECT user_id, score, total_fixed, total_false_positive, total_already_fixed,
-                     total_too_hard, total_skipped, now(), initial_rejected, initial_approved,
-                     initial_assisted, total_rejected, total_approved, total_assisted,
-                     total_disputed_as_mapper, total_disputed_as_reviewer
-              FROM user_metrics
-           """).executeUpdate()
-
-      logger.info(s"Succesfully created snapshot of user metrics.")
-    }
-  }
-
-  /**
-    * Records snaphshots for all challenges.
-    *
-    * @param action - action string
-    */
-  def snapshotChallenges(action: String): Unit = {
-    logger.info(action)
-
-    db.withConnection { implicit c =>
-      val ids = SQL(s"""SELECT id FROM challenges""").as(long("id").*)
-      ids.foreach(id => {
-        this.snapshotManager.recordChallengeSnapshot(id, false)
-      })
-      logger.info(s"Succesfully created snapshots of challenges.")
     }
   }
 }

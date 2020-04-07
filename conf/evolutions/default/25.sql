@@ -33,4 +33,4 @@ SELECT create_index_if_not_exists('task_suggested_fix', 'task_id', '(task_id)');
 # --- !Downs
 ALTER TABLE "user_leaderboard" DROP COLUMN country_code;;
 ALTER TABLE "user_top_challenges" DROP COLUMN country_code;;
---DROP TABLE task_suggested_fix
+DROP TABLE task_suggested_fix;;

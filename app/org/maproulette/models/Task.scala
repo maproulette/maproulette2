@@ -1,10 +1,13 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models
 
 import org.apache.commons.lang3.StringUtils
 import org.joda.time.DateTime
 import org.maproulette.data.{ItemType, TaskType}
+import org.maproulette.framework.model.Challenge
 import org.maproulette.utils.Utils
 import play.api.data.format.Formats
 import play.api.libs.json._
@@ -17,7 +20,8 @@ case class TaskReviewFields(
     reviewedBy: Option[Long] = None,
     reviewedAt: Option[DateTime] = None,
     reviewStartedAt: Option[DateTime] = None,
-    reviewClaimedBy: Option[Long] = None
+    reviewClaimedBy: Option[Long] = None,
+    reviewClaimedAt: Option[DateTime] = None
 ) extends DefaultWrites
 
 /**
@@ -51,6 +55,8 @@ case class Task(
     suggestedFix: Option[String] = None,
     status: Option[Int] = None,
     mappedOn: Option[DateTime] = None,
+    completedTimeSpent: Option[Long] = None,
+    completedBy: Option[Long] = None,
     review: TaskReviewFields = TaskReviewFields(),
     priority: Int = Challenge.PRIORITY_HIGH,
     changesetId: Option[Long] = None,
@@ -197,16 +203,18 @@ object Task {
     STATUS_DISABLED       -> STATUS_DISABLED_NAME
   )
 
-  val REVIEW_STATUS_REQUESTED      = 0
-  val REVIEW_STATUS_REQUESTED_NAME = "Requested"
-  val REVIEW_STATUS_APPROVED       = 1
-  val REVIEW_STATUS_APPROVED_NAME  = "Approved"
-  val REVIEW_STATUS_REJECTED       = 2
-  val REVIEW_STATUS_REJECTED_NAME  = "Rejected"
-  val REVIEW_STATUS_ASSISTED       = 3
-  val REVIEW_STATUS_ASSISTED_NAME  = "Assisted"
-  val REVIEW_STATUS_DISPUTED       = 4
-  val REVIEW_STATUS_DISPUTED_NAME  = "Disputed"
+  val REVIEW_STATUS_REQUESTED        = 0
+  val REVIEW_STATUS_REQUESTED_NAME   = "Requested"
+  val REVIEW_STATUS_APPROVED         = 1
+  val REVIEW_STATUS_APPROVED_NAME    = "Approved"
+  val REVIEW_STATUS_REJECTED         = 2
+  val REVIEW_STATUS_REJECTED_NAME    = "Rejected"
+  val REVIEW_STATUS_ASSISTED         = 3
+  val REVIEW_STATUS_ASSISTED_NAME    = "Assisted"
+  val REVIEW_STATUS_DISPUTED         = 4
+  val REVIEW_STATUS_DISPUTED_NAME    = "Disputed"
+  val REVIEW_STATUS_UNNECESSARY      = 5
+  val REVIEW_STATUS_UNNECESSARY_NAME = "Unnecessary"
 
   // For display purposes
   val REVIEW_STATUS_NOT_REQUESTED      = -1
@@ -218,7 +226,8 @@ object Task {
     REVIEW_STATUS_APPROVED      -> REVIEW_STATUS_APPROVED_NAME,
     REVIEW_STATUS_REJECTED      -> REVIEW_STATUS_REJECTED_NAME,
     REVIEW_STATUS_ASSISTED      -> REVIEW_STATUS_ASSISTED_NAME,
-    REVIEW_STATUS_DISPUTED      -> REVIEW_STATUS_DISPUTED_NAME
+    REVIEW_STATUS_DISPUTED      -> REVIEW_STATUS_DISPUTED_NAME,
+    REVIEW_STATUS_UNNECESSARY   -> REVIEW_STATUS_UNNECESSARY_NAME
   )
 
   /**
@@ -292,7 +301,7 @@ object Task {
   /**
     * Gets the string name of the review status based on a status id
     *
-    * @param reivewStatus The review status id
+    * @param reviewStatus The review status id
     * @return None if review status id is invalid, otherwise the name of the status
     */
   def getReviewStatusName(reviewStatus: Int): Option[String] = reviewStatusMap.get(reviewStatus)

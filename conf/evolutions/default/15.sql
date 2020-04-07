@@ -20,3 +20,4 @@ CREATE TRIGGER on_task_comment_insert BEFORE INSERT ON task_comments
   FOR EACH ROW EXECUTE PROCEDURE on_task_comment_insert();;
 
 # --- !Downs
+DROP TRIGGER IF EXISTS on_task_comment_insert ON task_comments;;

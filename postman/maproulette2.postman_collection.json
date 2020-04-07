@@ -1,6 +1,6 @@
 {
 	"info": {
-		"_postman_id": "3a20f62f-1c75-432e-8e63-d738d4411a8e",
+		"_postman_id": "1ba35054-27f6-4d7b-88d8-dab711fff4dc",
 		"name": "maproulette2",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
@@ -1513,6 +1513,76 @@
 								{
 									"key": "cid",
 									"value": "{{TestChallenge}}"
+								}
+							]
+						},
+						"description": "Gets the challenge for the provided ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Change Status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "040adc26-6e95-4944-b364-3aab59535897",
+								"exec": [
+									"var jsonData = JSON.parse(responseBody);",
+									"tests[\"response code is 200\"] = responseCode.code === 200;",
+									"pm.test(\"Body matches string\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"2\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "apiKey",
+								"value": "test"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"taskPropertySearch\": {\n\t\t\"operationType\": \"or\",\n\t\t\"left\": {\n\t\t\t\"key\": \"id\",\n\t\t\t\"value\": \"test1\",\n\t\t\t\"valueType\": \"string\",\n\t\t\t\"searchType\": \"equals\"\n\t\t},\n\t\t\"right\": {\n\t\t\t\"operationType\": \"and\",\n\t\t\t\"left\": {\n\t\t\t\t\"key\": \"id\",\n\t\t\t\t\"value\": \"test2\",\n\t\t\t\t\"valueType\": \"string\",\n\t\t\t\t\"searchType\": \"contains\"\n\t\t\t},\n\t\t\t\"right\": {\n\t\t\t\t\"key\": \"version\",\n\t\t\t\t\"value\": \"0\",\n\t\t\t\t\"valueType\": \"number\",\n\t\t\t\t\"searchType\": \"greater_than\"\n\t\t\t}\n\t\t}\n\t}\n}\n"
+						},
+						"url": {
+							"raw": "http://localhost:9000/api/v2/tasks/changeStatus?cid={{TestChallenge}}&tbb=-180,-90,180,90&newStatus=2&tStatus=-1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9000",
+							"path": [
+								"api",
+								"v2",
+								"tasks",
+								"changeStatus"
+							],
+							"query": [
+								{
+									"key": "cid",
+									"value": "{{TestChallenge}}"
+								},
+								{
+									"key": "tbb",
+									"value": "-180,-90,180,90"
+								},
+								{
+									"key": "newStatus",
+									"value": "2"
+								},
+								{
+									"key": "tStatus",
+									"value": "-1"
 								}
 							]
 						},
@@ -6987,9 +7057,7 @@
 								"exec": [
 									"var jsonData = JSON.parse(responseBody);",
 									"tests[\"response code is 200\"] = responseCode.code === 200;",
-									"tests[\"taskName1\"] = jsonData.tasks[0].name === \"NewTask1\"",
 									"tests[\"taskStatus1\"] = jsonData.tasks[0].status === 2",
-									"tests[\"taskName2\"] = jsonData.tasks[1].name === \"NewTask2\"",
 									"tests[\"taskStatus2\"] = jsonData.tasks[1].status === 2"
 								],
 								"type": "text/javascript"

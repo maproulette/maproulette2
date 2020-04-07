@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.data
 
 import java.sql.Connection
@@ -27,7 +29,9 @@ case class ActionSummary(
     tooHard: Int,
     answered: Int,
     validated: Int,
-    disabled: Int
+    disabled: Int,
+    avgTimeSpent: Double,
+    tasksWithTime: Int
 ) {
   def percentComplete: Double = (((trueAvailable / total) * 100) - 100) * -1
 
@@ -72,17 +76,7 @@ case class UserSummary(
     avgActionsPerChallengePerUser: ActionSummary
 )
 
-case class UserSurveySummary(
-    distinctTotalUsers: Int,
-    avgUsersPerChallenge: Double,
-    activeUsers: Double,
-    answerPerUser: Double,
-    answersPerChallenge: Double
-)
-
 case class ChallengeSummary(id: Long, name: String, actions: ActionSummary)
-
-case class SurveySummary(id: Long, name: String, count: Int)
 
 case class ChallengeActivity(date: DateTime, status: Int, statusName: String, count: Int)
 
@@ -118,65 +112,6 @@ case class LeaderboardUser(
 class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: BoundingBoxFinder)(
     implicit application: Application
 ) extends DALHelper {
-  def getUserSurveySummary(
-      projectList: Option[List[Long]] = None,
-      surveyId: Option[Long] = None,
-      start: Option[DateTime] = None,
-      end: Option[DateTime] = None,
-      priority: Option[Int]
-  ): UserSurveySummary = {
-    this.db.withConnection { implicit c =>
-      val surveyProjectFilter = surveyId match {
-        case Some(id) => s"AND survey_id = $id"
-        case None     => getLongListFilter(projectList, "project_id")
-      }
-
-      val perUser: Double =
-        SQL"""SELECT AVG(answered) AS answered FROM (
-                            SELECT osm_user_id, COUNT(DISTINCT answer_id) AS answered
-                            FROM survey_answers sa
-                            #${this.getEnabledPriorityClause(
-          surveyId.isEmpty,
-          true,
-          start,
-          end,
-          priority
-        )}
-                            #$surveyProjectFilter
-                            GROUP BY osm_user_id
-                          ) AS t""".as(get[Option[Double]]("answered").single).getOrElse(0)
-      val perSurvey: Double =
-        SQL"""SELECT AVG(answered) AS answered FROM (
-                              SELECT osm_user_id, survey_id, COUNT(DISTINCT answer_id) AS answered
-                              FROM survey_answers sa
-                              #${this.getEnabledPriorityClause(
-          surveyId.isEmpty,
-          true,
-          start,
-          end,
-          priority
-        )}
-                              #$surveyProjectFilter
-                              GROUP BY osm_user_id, survey_id
-                            ) AS t""".as(get[Option[Double]]("answered").single).getOrElse(0)
-
-      UserSurveySummary(
-        this.getDistinctUsers(surveyProjectFilter, true, surveyId.isEmpty, start, end, priority),
-        this.getDistinctUsersPerChallenge(
-          surveyProjectFilter,
-          true,
-          surveyId.isEmpty,
-          start,
-          end,
-          priority
-        ),
-        this.getActiveUsers(surveyProjectFilter, true, surveyId.isEmpty, start, end, priority),
-        perUser,
-        perSurvey
-      )
-    }
-  }
-
   private def getDistinctUsers(
       projectFilter: String,
       survey: Boolean = false,
@@ -277,7 +212,9 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
         tooHard.getOrElse(0),
         answered.getOrElse(0),
         validated.getOrElse(0),
-        disabled.getOrElse(0)
+        disabled.getOrElse(0),
+        0,
+        0
       )
 
       val perUser =
@@ -375,39 +312,6 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
   }
 
   /**
-    * Gets the summarized survey data
-    *
-    * @param surveyId The id for the survey
-    * @param priority The optional priority value
-    * @return a list of SurveySummary object
-    */
-  def getSurveySummary(surveyId: Long, priority: Option[Int] = None): List[SurveySummary] = {
-    this.db.withConnection { implicit c =>
-      val parser = for {
-        answer_id <- int("answer_id")
-        answer    <- str("answer")
-        count     <- int("count")
-      } yield SurveySummary(answer_id, answer, count)
-      val priorityFilter = priority match {
-        case Some(p) => s"AND t.priority = $p"
-        case None    => ""
-      }
-      SQL"""(SELECT answer_id, answer, COUNT(answer_id)
-            FROM survey_answers sa
-            INNER JOIN answers a ON a.id = sa.answer_id
-            INNER JOIN tasks t ON t.id = sa.task_id
-            WHERE sa.survey_id = $surveyId
-            #$priorityFilter
-            GROUP BY answer_id, answer)
-            UNION
-            (
-              SELECT -3, 'total', COUNT(*) FROM tasks t WHERE parent_id = $surveyId #$priorityFilter
-            )
-        """.as(parser.*)
-    }
-  }
-
-  /**
     * Gets the summarized challenge activity
     *
     * @param projectList The projects to filter by default None, will assume all projects
@@ -428,19 +332,21 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
   ): List[ChallengeSummary] = {
     this.db.withConnection { implicit c =>
       val parser = for {
-        id            <- int("tasks.parent_id")
-        name          <- str("challenges.name")
-        total         <- int("total")
-        available     <- int("available")
-        fixed         <- int("fixed")
-        falsePositive <- int("false_positive")
-        skipped       <- int("skipped")
-        deleted       <- int("deleted")
-        alreadyFixed  <- int("already_fixed")
-        tooHard       <- int("too_hard")
-        answered      <- int("answered")
-        validated     <- int("validated")
-        disabled      <- int("disabled")
+        id             <- int("tasks.parent_id")
+        name           <- str("challenges.name")
+        total          <- int("total")
+        available      <- int("available")
+        fixed          <- int("fixed")
+        falsePositive  <- int("false_positive")
+        skipped        <- int("skipped")
+        deleted        <- int("deleted")
+        alreadyFixed   <- int("already_fixed")
+        tooHard        <- int("too_hard")
+        answered       <- int("answered")
+        validated      <- int("validated")
+        disabled       <- int("disabled")
+        totalTimeSpent <- int("totalTimeSpent")
+        tasksWithTime  <- int("tasksWithTime")
       } yield ChallengeSummary(
         id,
         name,
@@ -455,7 +361,9 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
           tooHard,
           answered,
           validated,
-          disabled
+          disabled,
+          if (tasksWithTime > 0) (totalTimeSpent / tasksWithTime) else 0,
+          tasksWithTime
         )
       )
       val challengeFilter = challengeId match {
@@ -525,47 +433,35 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
       // It won't decrease performance as this is simple basic math calculations, but it certainly
       // isn't pretty
       val query =
-        s"""SELECT *,
-                        (((CAST(available AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100)-100)*1 AS complete_percentage,
-                        (CAST(available AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS available_perc,
-                        (CAST(fixed AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS fixed_perc,
-                        (CAST(false_positive AS DOUBLE PRECISION)/CAST(NULLIF(total, 0)AS DOUBLE PRECISION))*100 AS false_positive_perc,
-                        (CAST(skipped AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS skipped_perc,
-                        (CAST(already_fixed AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS already_fixed_perc,
-                        (CAST(too_hard AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS too_hard_perc,
-                        (CAST(answered AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS answered_perc,
-                        (CAST(validated AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS validated_perc,
-                        (CAST(disabled AS DOUBLE PRECISION)/CAST(NULLIF(total, 0) AS DOUBLE PRECISION))*100 AS disabled_perc
-                      FROM (
-                      SELECT t.parent_id, c.name,
-                                SUM(CASE WHEN t.status != 4 THEN 1 ELSE 0 END) as total,
-                                SUM(CASE t.status WHEN 0 THEN 1 ELSE 0 END) as available,
-                                SUM(CASE t.status WHEN 1 THEN 1 ELSE 0 END) as fixed,
-                                SUM(CASE t.status WHEN 2 THEN 1 ELSE 0 END) as false_positive,
-                                SUM(CASE t.status WHEN 3 THEN 1 ELSE 0 END) as skipped,
-                                SUM(CASE t.status WHEN 4 THEN 1 ELSE 0 END) as deleted,
-                                SUM(CASE t.status WHEN 5 THEN 1 ELSE 0 END) as already_fixed,
-                                SUM(CASE t.status WHEN 6 THEN 1 ELSE 0 END) AS too_hard,
-                                SUM(CASE t.status WHEN 7 THEN 1 ELSE 0 END) AS answered,
-                                SUM(CASE t.status WHEN 8 THEN 1 ELSE 0 END) AS validated,
-                                SUM(CASE t.status WHEN 9 THEN 1 ELSE 0 END) AS disabled
-                              FROM tasks t
-                              INNER JOIN challenges c ON c.id = t.parent_id
-                              INNER JOIN projects p ON p.id = c.parent_id
-                              WHERE ${if (onlyEnabled) {
+        s"""SELECT t.parent_id, c.name,
+              COUNT(t.completed_time_spent) as tasksWithTime,
+              COALESCE(SUM(t.completed_time_spent), 0) as totalTimeSpent,
+              SUM(CASE WHEN t.status != 4 THEN 1 ELSE 0 END) as total,
+              SUM(CASE t.status WHEN 0 THEN 1 ELSE 0 END) as available,
+              SUM(CASE t.status WHEN 1 THEN 1 ELSE 0 END) as fixed,
+              SUM(CASE t.status WHEN 2 THEN 1 ELSE 0 END) as false_positive,
+              SUM(CASE t.status WHEN 3 THEN 1 ELSE 0 END) as skipped,
+              SUM(CASE t.status WHEN 4 THEN 1 ELSE 0 END) as deleted,
+              SUM(CASE t.status WHEN 5 THEN 1 ELSE 0 END) as already_fixed,
+              SUM(CASE t.status WHEN 6 THEN 1 ELSE 0 END) AS too_hard,
+              SUM(CASE t.status WHEN 7 THEN 1 ELSE 0 END) AS answered,
+              SUM(CASE t.status WHEN 8 THEN 1 ELSE 0 END) AS validated,
+              SUM(CASE t.status WHEN 9 THEN 1 ELSE 0 END) AS disabled
+            FROM tasks t
+            INNER JOIN challenges c ON c.id = t.parent_id
+            INNER JOIN projects p ON p.id = c.parent_id
+            WHERE ${if (onlyEnabled) {
           "c.enabled = true AND p.enabled = true AND"
         } else {
           ""
         }}
-                              challenge_type = ${Actions.ITEM_TYPE_CHALLENGE} $challengeFilter $priorityFilter
-                              ${if (searchString != "") searchField("c.name") else ""} ${searchFilters
-          .toString()}
-                              GROUP BY t.parent_id, c.name
-                    ) AS t
-                    ${this.order(orderColumn, orderDirection)}
-                    LIMIT ${this.sqlLimit(limit)} OFFSET {offset}
+              1=1 $challengeFilter $priorityFilter
+              ${if (searchString != "") searchField("c.name") else ""}
+              ${searchFilters.toString()}
+            GROUP BY t.parent_id, c.name
+            ${this.order(orderColumn, orderDirection)}
+            LIMIT ${this.sqlLimit(limit)} OFFSET {offset}
         """
-
       SQL(query)
         .on(Symbol("ss") -> this.search(searchString), Symbol("offset") -> offset)
         .as(parser.*)
@@ -600,49 +496,8 @@ class DataManager @Inject() (config: Config, db: Database, boundingBoxFinder: Bo
         } else {
           ""
         }}
-                      challenge_type = ${Actions.ITEM_TYPE_CHALLENGE}
-                      $challengeFilter ${this.searchField("c.name")}"""
+                      1=1 $challengeFilter ${this.searchField("c.name")}"""
       SQL(query).on(Symbol("ss") -> this.search(searchString)).as(int("total").single)
-    }
-  }
-
-  /**
-    * Gets the survey activity which includes the answers for the survey
-    *
-    * @param surveyId The id for the survey
-    * @param start    the start date
-    * @param end      the end date
-    * @param priority any priority being applied
-    * @return A list of challenge activities
-    */
-  def getSurveyActivity(
-      surveyId: Long,
-      start: Option[DateTime] = None,
-      end: Option[DateTime] = None,
-      priority: Option[Int] = None
-  ): List[ChallengeActivity] = {
-    this.db.withConnection { implicit c =>
-      val parser = for {
-        seriesDate <- get[DateTime]("series_date")
-        answer_id  <- get[Option[Int]]("survey_answers.answer_id")
-        answer     <- get[Option[String]]("answers.answer")
-        count      <- int("count")
-      } yield ChallengeActivity(seriesDate, answer_id.getOrElse(-2), answer.getOrElse("N/A"), count)
-      val dates = this.getDates(start, end)
-      SQL"""
-           SELECT series_date, answer_id, answer,
-              CASE WHEN count IS NULL THEN 0 ELSE count END AS count
-           FROM (SELECT CURRENT_DATE + i AS series_date
-                  FROM generate_series(date '#${dates._1}' - CURRENT_DATE, date '#${dates._2}' - CURRENT_DATE) i) d
-                  LEFT JOIN (
-                    SELECT sa.created::date, sa.answer_id, a.answer, COUNT(sa.answer_id) AS count
-                    FROM survey_answers sa
-                    INNER JOIN answers a ON a.id = sa.answer_id
-                    #${this.getEnabledPriorityClause(false, true, start, end, priority)}
-                    AND sa.survey_id = $surveyId
-                    GROUP BY sa.created::date, sa.answer_id, a.answer
-                    ORDER BY sa.created::date, sa.answer_id, a.answer ASC
-                ) sa ON d.series_date = sa.created""".as(parser.*)
     }
   }
 

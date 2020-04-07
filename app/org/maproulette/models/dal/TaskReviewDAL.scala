@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
 import java.sql.Connection
@@ -12,10 +14,14 @@ import javax.inject.{Inject, Provider, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.exception.InvalidException
+import org.maproulette.framework.model
+import org.maproulette.framework.model.{ReviewMetrics, TaskReview, TaskWithReview, User}
+import org.maproulette.framework.service.ServiceManager
 import org.maproulette.models._
+import org.maproulette.data.ChallengeType
 import org.maproulette.permissions.Permission
 import org.maproulette.provider.websockets.{WebSocketMessages, WebSocketProvider}
-import org.maproulette.session.{SearchParameters, User}
+import org.maproulette.session.SearchParameters
 import play.api.db.Database
 import play.api.libs.ws.WSClient
 
@@ -30,11 +36,21 @@ class TaskReviewDAL @Inject() (
     override val db: Database,
     override val tagDAL: TagDAL,
     override val permission: Permission,
+    serviceManager: ServiceManager,
     config: Config,
     dalManager: Provider[DALManager],
     webSocketProvider: WebSocketProvider,
     ws: WSClient
-) extends TaskDAL(db, tagDAL, permission, config, dalManager, webSocketProvider, ws) {
+) extends TaskDAL(
+      db,
+      tagDAL,
+      permission,
+      serviceManager,
+      config,
+      dalManager,
+      webSocketProvider,
+      ws
+    ) {
 
   implicit val taskWithReviewParser: RowParser[TaskWithReview] = {
     get[Long]("tasks.id") ~
@@ -48,12 +64,15 @@ class TaskReviewDAL @Inject() (
       get[Option[String]]("geo_json") ~
       get[Option[String]]("suggested_fix") ~
       get[Option[DateTime]]("tasks.mapped_on") ~
+      get[Option[Long]]("tasks.completed_time_spent") ~
+      get[Option[Long]]("tasks.completed_by") ~
       get[Option[Int]]("task_review.review_status") ~
       get[Option[Long]]("task_review.review_requested_by") ~
       get[Option[Long]]("task_review.reviewed_by") ~
       get[Option[DateTime]]("task_review.reviewed_at") ~
       get[Option[DateTime]]("task_review.review_started_at") ~
       get[Option[Long]]("task_review.review_claimed_by") ~
+      get[Option[DateTime]]("task_review.review_claimed_at") ~
       get[Int]("tasks.priority") ~
       get[Option[Long]]("tasks.changeset_id") ~
       get[Option[Long]]("tasks.bundle_id") ~
@@ -63,11 +82,12 @@ class TaskReviewDAL @Inject() (
       get[Option[String]]("reviewed_by_username") ~
       get[Option[String]]("responses") map {
       case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ status ~ geojson ~
-            suggestedFix ~ mappedOn ~ reviewStatus ~ reviewRequestedBy ~ reviewedBy ~ reviewedAt ~
-            reviewStartedAt ~ reviewClaimedBy ~ priority ~ changesetId ~ bundleId ~ isBundlePrimary ~
-            challengeName ~ reviewRequestedByUsername ~ reviewedByUsername ~ responses =>
+            suggestedFix ~ mappedOn ~ completedTimeSpent ~ completedBy ~ reviewStatus ~ reviewRequestedBy ~
+            reviewedBy ~ reviewedAt ~ reviewStartedAt ~ reviewClaimedBy ~ reviewClaimedAt ~ priority ~
+            changesetId ~ bundleId ~ isBundlePrimary ~ challengeName ~ reviewRequestedByUsername ~
+            reviewedByUsername ~ responses =>
         val values = this.updateAndRetrieve(id, geojson, location, suggestedFix)
-        TaskWithReview(
+        model.TaskWithReview(
           Task(
             id,
             name,
@@ -80,13 +100,16 @@ class TaskReviewDAL @Inject() (
             values._3,
             status,
             mappedOn,
+            completedTimeSpent,
+            completedBy,
             TaskReviewFields(
               reviewStatus,
               reviewRequestedBy,
               reviewedBy,
               reviewedAt,
               reviewStartedAt,
-              reviewClaimedBy
+              reviewClaimedBy,
+              reviewClaimedAt
             ),
             priority,
             changesetId,
@@ -141,14 +164,14 @@ class TaskReviewDAL @Inject() (
       }
     }
 
-    for (task <- taskList) {
-      this.withMRTransaction { implicit c =>
-        // Unclaim everything before starting a new task.
-        SQL"""UPDATE task_review SET review_claimed_by = NULL, review_claimed_at = NULL
-                WHERE review_claimed_by = #${user.id}""".executeUpdate()
+    this.withMRTransaction { implicit c =>
+      // Unclaim everything before starting a new task.
+      SQL"""UPDATE task_review SET review_claimed_by = NULL, review_claimed_at = NULL
+              WHERE review_claimed_by = #${user.id}""".executeUpdate()
 
+      for (task <- taskList) {
         SQL"""UPDATE task_review SET review_claimed_by = #${user.id}, review_claimed_at = NOW()
-                  WHERE task_id = #${task.id} AND review_claimed_at IS NULL""".executeUpdate()
+                    WHERE task_id = #${task.id} AND review_claimed_at IS NULL""".executeUpdate()
 
         try {
           this.lockItem(user, task)
@@ -175,10 +198,29 @@ class TaskReviewDAL @Inject() (
     val updatedTask =
       primaryTask.copy(review = primaryTask.review.copy(reviewClaimedBy = Option(user.id.toInt)))
 
-    this.cacheManager.withOptionCaching { () =>
+    this.manager.task.cacheManager.withOptionCaching { () =>
       Some(updatedTask)
     }
     Option(updatedTask)
+  }
+
+  def getTaskWithReview(taskId: Long): TaskWithReview = {
+    this.withMRConnection { implicit c =>
+      val query =
+        s"""
+        SELECT $retrieveColumnsWithReview,
+               challenges.name as challenge_name,
+               mappers.name as review_requested_by_username,
+               reviewers.name as reviewed_by_username
+        FROM ${this.tableName}
+        LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
+        LEFT OUTER JOIN users mappers ON task_review.review_requested_by = mappers.id
+        LEFT OUTER JOIN users reviewers ON task_review.reviewed_by = reviewers.id
+        INNER JOIN challenges ON challenges.id = tasks.parent_id
+        WHERE tasks.id = {taskId}
+      """
+      SQL(query).on(Symbol("taskId") -> taskId).as(this.taskWithReviewParser.single)
+    }
   }
 
   /**
@@ -223,25 +265,6 @@ class TaskReviewDAL @Inject() (
       Some(updatedTask)
     }
     Option(updatedTask)
-  }
-
-  def getTaskWithReview(taskId: Long): TaskWithReview = {
-    this.withMRConnection { implicit c =>
-      val query =
-        s"""
-        SELECT $retrieveColumnsWithReview,
-               challenges.name as challenge_name,
-               mappers.name as review_requested_by_username,
-               reviewers.name as reviewed_by_username
-        FROM ${this.tableName}
-        LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id
-        LEFT OUTER JOIN users mappers ON task_review.review_requested_by = mappers.id
-        LEFT OUTER JOIN users reviewers ON task_review.reviewed_by = reviewers.id
-        INNER JOIN challenges ON challenges.id = tasks.parent_id
-        WHERE tasks.id = {taskId}
-      """
-      SQL(query).on(Symbol("taskId") -> taskId).as(this.taskWithReviewParser.single)
-    }
   }
 
   /**
@@ -336,62 +359,6 @@ class TaskReviewDAL @Inject() (
       this.withMRTransaction { implicit c =>
         sqlWithParameters(query, parameters).as(this.parser.*).headOption
       }
-    }
-  }
-
-  /**
-    * Gets a list of tasks that have requested review (and are in this user's project group)
-    *
-    * @param user            The user executing the request
-    * @param startDate       Limit tasks to reviewed after date (YYYY-MM-DD)
-    * @param endDate         Limit tasks to reviewed before date (YYYY-MM-DD)
-    * @param limit           The number of tasks to return
-    * @param offset          Offset to start paging
-    * @param sort            Sort column
-    * @param order           DESC or ASC
-    * @param includeDisputed Whether disputed tasks whould be returned in results (default is true)
-    * @return A list of tasks
-    */
-  def getReviewRequestedTasks(
-      user: User,
-      searchParameters: SearchParameters,
-      startDate: String,
-      endDate: String,
-      onlySaved: Boolean = false,
-      limit: Int = -1,
-      offset: Int = 0,
-      sort: String,
-      order: String,
-      includeDisputed: Boolean = true,
-      excludeOtherReviewers: Boolean = false
-  )(implicit c: Connection = null): (Int, List[Task]) = {
-    val (countQuery, query, parameters) =
-      _getReviewRequestedQueries(
-        user,
-        searchParameters,
-        startDate,
-        endDate,
-        onlySaved,
-        limit,
-        offset,
-        sort,
-        order,
-        includeDisputed,
-        excludeOtherReviewers
-      )
-
-    // This only happens if a non-reviewer is trying to get review tasks
-    if (query == null) {
-      (0, List[Task]())
-    } else {
-      var count = 0
-      val tasks = this.manager.task.cacheManager.withIDListCaching { implicit cachedItems =>
-        this.withMRTransaction { implicit c =>
-          count = sqlWithParameters(countQuery, parameters).as(SqlParser.int("count").single)
-          sqlWithParameters(query, parameters).as(this.parser.*)
-        }
-      }
-      (count, tasks)
     }
   }
 
@@ -516,6 +483,62 @@ class TaskReviewDAL @Inject() (
     }
 
     (countQuery, query, parameters)
+  }
+
+  /**
+    * Gets a list of tasks that have requested review (and are in this user's project group)
+    *
+    * @param user            The user executing the request
+    * @param startDate       Limit tasks to reviewed after date (YYYY-MM-DD)
+    * @param endDate         Limit tasks to reviewed before date (YYYY-MM-DD)
+    * @param limit           The number of tasks to return
+    * @param offset          Offset to start paging
+    * @param sort            Sort column
+    * @param order           DESC or ASC
+    * @param includeDisputed Whether disputed tasks whould be returned in results (default is true)
+    * @return A list of tasks
+    */
+  def getReviewRequestedTasks(
+      user: User,
+      searchParameters: SearchParameters,
+      startDate: String,
+      endDate: String,
+      onlySaved: Boolean = false,
+      limit: Int = -1,
+      offset: Int = 0,
+      sort: String,
+      order: String,
+      includeDisputed: Boolean = true,
+      excludeOtherReviewers: Boolean = false
+  )(implicit c: Connection = null): (Int, List[Task]) = {
+    val (countQuery, query, parameters) =
+      _getReviewRequestedQueries(
+        user,
+        searchParameters,
+        startDate,
+        endDate,
+        onlySaved,
+        limit,
+        offset,
+        sort,
+        order,
+        includeDisputed,
+        excludeOtherReviewers
+      )
+
+    // This only happens if a non-reviewer is trying to get review tasks
+    if (query == null) {
+      (0, List[Task]())
+    } else {
+      var count = 0
+      val tasks = this.manager.task.cacheManager.withIDListCaching { implicit cachedItems =>
+        this.withMRTransaction { implicit c =>
+          count = sqlWithParameters(countQuery, parameters).as(SqlParser.int("count").single)
+          sqlWithParameters(query, parameters).as(this.parser.*)
+        }
+      }
+      (count, tasks)
+    }
   }
 
   /**
@@ -694,6 +717,7 @@ class TaskReviewDAL @Inject() (
     this.paramsLocation(searchParameters, whereClause)
     this.paramsProjectSearch(searchParameters, whereClause)
     this.paramsTaskId(searchParameters, whereClause)
+    this.paramsPriority(searchParameters, whereClause)
 
     if (startDate != null && startDate.matches("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]")) {
       this.appendInWhereClause(whereClause, "reviewed_at >= '" + startDate + " 00:00:00'")
@@ -829,6 +853,8 @@ class TaskReviewDAL @Inject() (
     val query =
       s"""
      SELECT COUNT(*) AS total,
+     COUNT(tasks.completed_time_spent) as tasksWithReviewTime,
+     COALESCE(SUM(EXTRACT(EPOCH FROM (reviewed_at - review_started_at)) * 1000),0) as totalReviewTime,
      COUNT(review_status) FILTER (where review_status = 0) AS requested,
      COUNT(review_status) FILTER (where review_status = 1) AS approved,
      COUNT(review_status) FILTER (where review_status = 2) AS rejected,
@@ -843,6 +869,7 @@ class TaskReviewDAL @Inject() (
      ${joinClause}
      WHERE
      ${whereClause}
+     AND task_review.review_status != ${Task.REVIEW_STATUS_UNNECESSARY}
     """
     val reviewMetricsParser: RowParser[ReviewMetrics] = {
       get[Int]("total") ~
@@ -855,9 +882,12 @@ class TaskReviewDAL @Inject() (
         get[Int]("falsePositive") ~
         get[Int]("skipped") ~
         get[Int]("alreadyFixed") ~
-        get[Int]("tooHard") map {
+        get[Int]("tooHard") ~
+        get[Double]("totalReviewTime") ~
+        get[Int]("tasksWithReviewTime") map {
         case total ~ requested ~ approved ~ rejected ~ assisted ~ disputed ~
-              fixed ~ falsePositive ~ skipped ~ alreadyFixed ~ tooHard => {
+              fixed ~ falsePositive ~ skipped ~ alreadyFixed ~ tooHard ~
+              totalReviewTime ~ tasksWithReviewTime => {
           new ReviewMetrics(
             total,
             requested,
@@ -869,7 +899,8 @@ class TaskReviewDAL @Inject() (
             falsePositive,
             skipped,
             alreadyFixed,
-            tooHard
+            tooHard,
+            if (tasksWithReviewTime > 0) (totalReviewTime / tasksWithReviewTime) else 0
           )
         }
       }
@@ -963,7 +994,7 @@ class TaskReviewDAL @Inject() (
         whereClause.toString
       } else {
         "WHERE " + whereClause.toString
-      }
+      } + s" AND task_review.review_status != ${Task.REVIEW_STATUS_UNNECESSARY}"
 
       val query =
         this.manager.taskCluster.getTaskClusterQuery(joinClause.toString, where, numberOfPoints)
@@ -995,8 +1026,15 @@ class TaskReviewDAL @Inject() (
       commentContent: String = ""
   )(implicit c: Connection = null): Int = {
     if (!user.isSuperUser && !user.settings.isReviewer.get && reviewStatus != Task.REVIEW_STATUS_REQUESTED &&
-        reviewStatus != Task.REVIEW_STATUS_DISPUTED) {
+        reviewStatus != Task.REVIEW_STATUS_DISPUTED && reviewStatus != Task.REVIEW_STATUS_UNNECESSARY) {
       throw new IllegalAccessException("User must be a reviewer to edit task review status.")
+    } else if (reviewStatus == Task.REVIEW_STATUS_UNNECESSARY) {
+      if (task.review.reviewStatus.getOrElse(0) != Task.REVIEW_STATUS_REQUESTED) {
+        // We should not update review status to Unnecessary unless the review status is requested
+        return 0
+      }
+
+      this.permission.hasWriteAccess(ChallengeType(), user)(task.parent)
     }
 
     val now = Instant.now()
@@ -1053,7 +1091,8 @@ class TaskReviewDAL @Inject() (
       )
 
       val comment = commentContent.nonEmpty match {
-        case true  => Some(this.manager.comment.add(user, task, commentContent, actionId))
+        case true =>
+          Some(this.serviceManager.comment.create(user, task.id, commentContent, actionId))
         case false => None
       }
 
@@ -1080,13 +1119,15 @@ class TaskReviewDAL @Inject() (
                               (task_id, requested_by, reviewed_by, review_status, reviewed_at, review_started_at)
                   VALUES (${task.id}, ${task.review.reviewRequestedBy}, ${user.id},
                           $reviewStatus, $now, ${task.review.reviewStartedAt})""".executeUpdate()
-            this.manager.notification.createReviewNotification(
-              user,
-              task.review.reviewRequestedBy.getOrElse(-1),
-              reviewStatus,
-              task,
-              comment
-            )
+            if (reviewStatus != Task.REVIEW_STATUS_UNNECESSARY) {
+              this.manager.notification.createReviewNotification(
+                user,
+                task.review.reviewRequestedBy.getOrElse(-1),
+                reviewStatus,
+                task,
+                comment
+              )
+            }
           }
         } else {
           // For disputed tasks.
@@ -1097,7 +1138,7 @@ class TaskReviewDAL @Inject() (
         }
       }
 
-      this.cacheManager.withOptionCaching { () =>
+      this.manager.task.cacheManager.withOptionCaching { () =>
         Some(
           task.copy(review = task.review.copy(
             reviewStatus = Some(reviewStatus),
@@ -1109,31 +1150,56 @@ class TaskReviewDAL @Inject() (
         )
       }
 
-      if (!needsReReview) {
-        this.manager.user.updateUserScore(
-          None,
-          Option(reviewStatus),
-          task.review.reviewedBy != None,
-          false,
-          task.review.reviewRequestedBy.get
-        )
-      } else if (reviewStatus == Task.REVIEW_STATUS_DISPUTED) {
-        this.manager.user.updateUserScore(
-          None,
-          Option(reviewStatus),
-          true,
-          true,
-          task.review.reviewedBy.get
-        )
-        this.manager.user.updateUserScore(
-          None,
-          Option(reviewStatus),
-          true,
-          false,
-          task.review.reviewRequestedBy.get
-        )
-      }
+      if (reviewStatus != Task.REVIEW_STATUS_UNNECESSARY) {
+        if (!needsReReview) {
+          var reviewStartTime: Option[Long] = None
+          task.review.reviewClaimedAt match {
+            case Some(t) =>
+              reviewStartTime = Some(t.getMillis())
+            case None => // do nothing
+          }
 
+          this.serviceManager.userMetrics.updateUserScore(
+            None,
+            None,
+            Option(reviewStatus),
+            task.review.reviewedBy != None,
+            false,
+            None,
+            task.review.reviewRequestedBy.get
+          )
+          this.serviceManager.userMetrics.updateUserScore(
+            None,
+            None,
+            Option(reviewStatus),
+            false,
+            true,
+            reviewStartTime,
+            user.id
+          )
+        } else if (reviewStatus == Task.REVIEW_STATUS_DISPUTED) {
+          this.serviceManager.userMetrics.updateUserScore(
+            None,
+            None,
+            Option(reviewStatus),
+            true,
+            true,
+            None,
+            task.review.reviewedBy.get
+          )
+          this.serviceManager.userMetrics.updateUserScore(
+            None,
+            None,
+            Option(reviewStatus),
+            true,
+            false,
+            None,
+            task.review.reviewRequestedBy.get
+          )
+        }
+
+        updatedRows
+      }
       updatedRows
     }
 

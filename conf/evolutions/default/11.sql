@@ -122,3 +122,12 @@ BEGIN
 END$$;;
 
 # --- !Downs
+SELECT add_drop_column('projects', 'display_name', '', false);;
+SELECT add_drop_column('projects', 'owner_id', '', false);;
+ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_owner_id_fkey;;
+ALTER TABLE challenges DROP COLUMN bounding;;
+DROP TABLE saved_tasks;;
+DROP TRIGGER IF EXISTS update_tasks_trigger ON tasks;;
+DROP FUNCTION update_tasks();;
+CREATE TRIGGER update_tasks_modified BEFORE UPDATE ON tasks
+  FOR EACH ROW EXECUTE PROCEDURE update_modified();;

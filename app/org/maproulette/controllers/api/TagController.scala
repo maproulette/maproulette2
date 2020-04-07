@@ -1,13 +1,16 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
 import org.maproulette.controllers.CRUDController
 import org.maproulette.data.{ActionManager, TagType}
+import org.maproulette.framework.model.User
 import org.maproulette.models.Tag
 import org.maproulette.models.dal.TagDAL
-import org.maproulette.session.{SessionManager, User}
+import org.maproulette.session.SessionManager
 import org.maproulette.utils.Utils
 import play.api.libs.json._
 import play.api.mvc._

@@ -2,7 +2,7 @@
 
 # --- !Ups
 -- Add support for virtual projectSearch
-ALTER TABLE projects ADD COLUMN is_virtual boolean DEFAULT false;
+ALTER TABLE projects ADD COLUMN is_virtual boolean DEFAULT false;;
 
 CREATE TABLE virtual_project_challenges
 (
@@ -24,6 +24,6 @@ SELECT create_index_if_not_exists('virtual_project_challenges', 'vp_project_id',
 SELECT create_index_if_not_exists('virtual_project_challenges', 'vp_challenge_id', '(challenge_id)');;
 
 # --- !Downs
-ALTER TABLE projects DROP COLUMN is_virtual;
+ALTER TABLE projects DROP COLUMN is_virtual;;
 
-DROP TABLE virtual_project_challenges;
+DROP TABLE virtual_project_challenges;;

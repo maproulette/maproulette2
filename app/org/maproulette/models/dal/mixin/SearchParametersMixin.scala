@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal.mixin
 
 import anorm.NamedParameter
@@ -16,6 +18,7 @@ import scala.collection.mutable.ListBuffer
   *
   * @author mcuthbert
   */
+@deprecated
 trait SearchParametersMixin extends DALHelper {
 
   def updateWhereClause(
@@ -33,10 +36,12 @@ trait SearchParametersMixin extends DALHelper {
     this.paramsTaskReviewStatus(params, whereClause, joinClause)
     this.paramsOwner(params, whereClause, joinClause)
     this.paramsReviewer(params, whereClause, joinClause)
+    this.paramsMapper(params, whereClause, joinClause)
     this.paramsTaskPriorities(params, whereClause)
     this.paramsPriority(params, whereClause)
     this.paramsChallengeDifficulty(params, whereClause)
     this.paramsChallengeStatus(params, whereClause, joinClause)
+    this.paramsChallengeRequiresLocal(params, whereClause, joinClause)
     this.paramsBoundingGeometries(params, whereClause)
 
     // For efficiency can only query on task properties with a parent challenge id
@@ -84,7 +89,10 @@ trait SearchParametersMixin extends DALHelper {
   def paramsTaskStatus(params: SearchParameters, whereClause: StringBuilder): Unit = {
     params.taskStatus match {
       case Some(sl) if sl.nonEmpty =>
-        this.appendInWhereClause(whereClause, s"tasks.status IN (${sl.mkString(",")})")
+        // If list contains -1 then ignore filtering by status
+        if (!sl.contains(-1)) {
+          this.appendInWhereClause(whereClause, s"tasks.status IN (${sl.mkString(",")})")
+        }
       case Some(sl) if sl.isEmpty => //ignore this scenario
       case _                      => this.appendInWhereClause(whereClause, "tasks.status IN (0,3,6)")
     }
@@ -160,6 +168,27 @@ trait SearchParametersMixin extends DALHelper {
         this.appendInWhereClause(whereClause, statusClause.toString())
       case Some(sl) if sl.isEmpty => //ignore this scenario
       case _                      =>
+    }
+  }
+
+  def paramsChallengeRequiresLocal(
+      params: SearchParameters,
+      whereClause: StringBuilder,
+      joinClause: StringBuilder
+  ): Unit = {
+    params.challengeParams.challengeIds match {
+      case Some(ids) if ids.nonEmpty =>
+      // do nothing, we don't want to restrict to requiresLocal if we have
+      // specific challenge ids
+      case _ =>
+        params.challengeParams.requiresLocal match {
+          case SearchParameters.CHALLENGE_REQUIRES_LOCAL_EXCLUDE =>
+            this.appendInWhereClause(whereClause, s"c.requires_local = false")
+          case SearchParameters.CHALLENGE_REQUIRES_LOCAL_ONLY =>
+            this.appendInWhereClause(whereClause, s"c.requires_local = true")
+          case _ =>
+          // allow everything
+        }
     }
   }
 
@@ -293,6 +322,19 @@ trait SearchParametersMixin extends DALHelper {
       case Some(r) if r.nonEmpty =>
         joinClause ++= "INNER JOIN users u2 ON u2.id = task_review.reviewed_by "
         this.appendInWhereClause(whereClause, s"LOWER(u2.name) LIKE LOWER('%${r}%')")
+      case _ => // ignore
+    }
+  }
+
+  def paramsMapper(
+      params: SearchParameters,
+      whereClause: StringBuilder,
+      joinClause: StringBuilder
+  ): Unit = {
+    params.mapper match {
+      case Some(o) if o.nonEmpty =>
+        joinClause ++= "INNER JOIN users u ON u.id = tasks.completed_by "
+        this.appendInWhereClause(whereClause, s"LOWER(u.name) LIKE LOWER('%${o}%')")
       case _ => // ignore
     }
   }

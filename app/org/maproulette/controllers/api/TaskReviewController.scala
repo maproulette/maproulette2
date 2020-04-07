@@ -1,18 +1,21 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers.api
 
 import javax.inject.Inject
 import org.maproulette.Config
 import org.maproulette.data.ActionManager
+import org.maproulette.exception.NotFoundException
+import org.maproulette.framework.model.{Challenge, User}
+import org.maproulette.framework.service.ServiceManager
+import org.maproulette.models.Task
 import org.maproulette.models.dal._
-import org.maproulette.models.{Challenge, Task}
-import org.maproulette.permissions.Permission
-import org.maproulette.session.{SessionManager, SearchParameters, User}
-import org.maproulette.provider.websockets.{WebSocketMessages, WebSocketProvider}
-import org.maproulette.exception.{InvalidException, NotFoundException}
+import org.maproulette.provider.websockets.WebSocketProvider
+import org.maproulette.provider.osm.ChangesetProvider
+import org.maproulette.session.{SearchParameters, SessionManager}
 import org.maproulette.utils.Utils
-import org.maproulette.services.osm.ChangesetProvider
 import play.api.libs.json._
 import play.api.libs.ws.WSClient
 import play.api.mvc._
@@ -29,6 +32,7 @@ class TaskReviewController @Inject() (
     override val dal: TaskDAL,
     override val tagDAL: TagDAL,
     taskReviewDAL: TaskReviewDAL,
+    serviceManager: ServiceManager,
     dalManager: DALManager,
     wsClient: WSClient,
     webSocketProvider: WebSocketProvider,
@@ -41,6 +45,7 @@ class TaskReviewController @Inject() (
       actionManager,
       dal,
       tagDAL,
+      serviceManager,
       dalManager,
       wsClient,
       webSocketProvider,
@@ -176,7 +181,7 @@ class TaskReviewController @Inject() (
     *
     * @param startDate Optional start date to filter by reviewedAt date
     * @param endDate Optional end date to filter by reviewedAt date
-    * @param asReviewer Whether we should return tasks reviewed by this user or reqested by this user
+    * @param reviewers Whether we should return tasks reviewed by this user or reqested by this user
     * @param allowReviewNeeded Whether we should return tasks where status is review requested also
     * @param limit The number of tasks to return
     * @param page The page number for the results
@@ -228,8 +233,8 @@ class TaskReviewController @Inject() (
         this.dalManager.challenge.retrieveListById(-1, 0)(tasks.map(t => t.parent))
 
       val projects = Some(
-        this.dalManager.project
-          .retrieveListById(-1, 0)(fetchedChallenges.map(c => c.general.parent))
+        this.serviceManager.project
+          .list(fetchedChallenges.map(c => c.general.parent))
           .map(p => p.id -> Json.obj("id" -> p.id, "name" -> p.name, "displayName" -> p.displayName)
           )
           .toMap
@@ -250,15 +255,15 @@ class TaskReviewController @Inject() (
       )
 
       val mappers = Some(
-        this.dalManager.user
-          .retrieveListById(-1, 0)(tasks.map(t => t.review.reviewRequestedBy.getOrElse(0L)))
+        this.serviceManager.user
+          .retrieveListById(tasks.map(t => t.review.reviewRequestedBy.getOrElse(0L)))
           .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
           .toMap
       )
 
       val reviewers = Some(
-        this.dalManager.user
-          .retrieveListById(-1, 0)(tasks.map(t => t.review.reviewedBy.getOrElse(0L)))
+        this.serviceManager.user
+          .retrieveListById(tasks.map(t => t.review.reviewedBy.getOrElse(0L)))
           .map(u => u.id -> Json.obj("username" -> u.name, "id" -> u.id))
           .toMap
       )

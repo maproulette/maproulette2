@@ -1,0 +1,153 @@
+###
+# tags: [ Notification ]
+# summary: Retrieves Users notifications
+# produces: [ application/json ]
+# description: Retrieves notifications generated for the user
+# responses:
+#   '200':
+#     description: The retrieved UserNotifications
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.UserNotification'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve the notifications for
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is 10.
+#   - name: page
+#     in: query
+#     description: Used in conjunction with the limit parameter to page through X number of responses. Default value is 0, ie. first page.
+#   - name: sort
+#     in: query
+#     description: Name of column to sort by
+#   - name: order
+#     in: query
+#     description: sort order (ASC or DESC)
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+#   - name: notificationType
+#     in: query
+#     description: 0 = System, 1 = Mention, 2 = Review Approved, 3 = Review Rejected, 4 = Review Again, 5 = Challenge Completed
+#   - name: isRead
+#     in: query
+#     description: Limit by whether the notification has been read or not.
+#   - name: fromUsername
+#     in: query
+#     description: Limit by notifications from a OSM Username. This can be a SQL "like" query
+###
+GET     /user/:userId/notifications                 @org.maproulette.controllers.api.NotificationController.getUserNotifications(userId:Long, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "is_read", order:String ?= "ASC", notificationType:Option[Int], isRead:Option[Int], fromUsername:Option[String])
+###
+# tags: [ Notification ]
+# summary: Mark user notifications as read
+# produces: [ application/json ]
+# description: Marks user notifications as read
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user that owns the notifications
+#   - name: notificationIds
+#     in: query
+#     description: One or more comma-separated ids of notifications to mark as read
+#     type: string,
+#     required: true
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/:userId/notifications                 @org.maproulette.controllers.api.NotificationController.markNotificationsRead(userId:Long, notificationIds:String)
+###
+# tags: [ Notification ]
+# summary: Delete user notifications
+# produces: [ application/json ]
+# description: Deletes the specified user notifications
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user that owns the notifications
+#   - name: notificationIds
+#     in: query
+#     description: One or more comma-separated ids of notifications to delete
+#     type: string,
+#     required: true
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+DELETE  /user/:userId/notifications                 @org.maproulette.controllers.api.NotificationController.deleteNotifications(userId:Long, notificationIds:String)
+###
+# tags: [ Notification ]
+# summary: Retrieves Users notification subscriptions
+# produces: [ application/json ]
+# description: Retrieves the user's subscriptions to the various notification types
+# responses:
+#   '200':
+#     description: The retrieved NotificationSubscriptions
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.UserNotification'
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to retrieve the subscriptions for
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+GET     /user/:userId/notificationSubscriptions     @org.maproulette.controllers.api.NotificationController.getNotificationSubscriptions(userId:Long)
+###
+# tags: [ Notification ]
+# summary: Updates user's notification subscriptions
+# produces: [ application/json ]
+# description: Updates the user's subscriptions to various notification types
+# responses:
+#   '200':
+#     description: Ok with a standard message
+#   '401':
+#     description: The user is not authorized to make this request
+# parameters:
+#   - name: userId
+#     in: path
+#     description: The id of the user to update the subscriptions for
+#   - name: body
+#     in: body
+#     description: The JSON structure for the updated subscription settings
+#     required: true
+#     schema:
+#       type: object
+#       $ref: '#/definitions/org.maproulette.models.NotificationSubscriptions'
+#   - name: apiKey
+#     in: header
+#     description: The user's apiKey to authorize the request
+#     required: true
+#     type: string
+###
+PUT     /user/:userId/notificationSubscriptions     @org.maproulette.controllers.api.NotificationController.updateNotificationSubscriptions(userId:Long)

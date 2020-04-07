@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
 import java.sql.Connection
@@ -16,11 +18,16 @@ import org.maproulette.Config
 import org.maproulette.cache.CacheManager
 import org.maproulette.data._
 import org.maproulette.exception.{InvalidException, NotFoundException}
+import org.maproulette.framework.model.{Challenge, Project, StatusActions, User}
+import org.maproulette.framework.psql.filter.{BaseParameter, SubQueryFilter}
+import org.maproulette.framework.psql.{Order, Paging, Query}
+import org.maproulette.framework.repository.ProjectRepository
+import org.maproulette.framework.service.ServiceManager
 import org.maproulette.models._
 import org.maproulette.models.dal.mixin.{Locking, SearchParametersMixin, TagDALMixin}
 import org.maproulette.permissions.Permission
 import org.maproulette.provider.websockets.{WebSocketMessages, WebSocketProvider}
-import org.maproulette.session.{SearchParameters, User}
+import org.maproulette.session.SearchParameters
 import org.maproulette.utils.Utils
 import org.wololo.geojson.{FeatureCollection, GeoJSONFactory}
 import org.wololo.jts2geojson.GeoJSONReader
@@ -45,6 +52,7 @@ class TaskDAL @Inject() (
     override val db: Database,
     override val tagDAL: TagDAL,
     override val permission: Permission,
+    serviceManager: ServiceManager,
     config: Config,
     dalManager: Provider[DALManager],
     webSocketProvider: WebSocketProvider,
@@ -69,7 +77,7 @@ class TaskDAL @Inject() (
   val retrieveColumnsWithReview: String = this.retrieveColumns +
     ", task_review.review_status, task_review.review_requested_by, " +
     "task_review.reviewed_by, task_review.reviewed_at, task_review.review_started_at, " +
-    "task_review.review_claimed_by "
+    "task_review.review_claimed_by, task_review.review_claimed_at "
 
   /**
     * Retrieves the object based on the name, this function is somewhat weak as there could be
@@ -109,21 +117,24 @@ class TaskDAL @Inject() (
       get[Option[String]]("geo_json") ~
       get[Option[String]]("suggested_fix") ~
       get[Option[DateTime]]("tasks.mapped_on") ~
+      get[Option[Long]]("tasks.completed_time_spent") ~
+      get[Option[Long]]("tasks.completed_by") ~
       get[Option[Int]]("task_review.review_status") ~
       get[Option[Long]]("task_review.review_requested_by") ~
       get[Option[Long]]("task_review.reviewed_by") ~
       get[Option[DateTime]]("task_review.reviewed_at") ~
       get[Option[DateTime]]("task_review.review_started_at") ~
       get[Option[Long]]("task_review.review_claimed_by") ~
+      get[Option[DateTime]]("task_review.review_claimed_at") ~
       get[Int]("tasks.priority") ~
       get[Option[Long]]("tasks.changeset_id") ~
       get[Option[String]]("responses") ~
       get[Option[Long]]("tasks.bundle_id") ~
       get[Option[Boolean]]("tasks.is_bundle_primary") map {
       case id ~ name ~ created ~ modified ~ parent_id ~ instruction ~ location ~ status ~ geojson ~
-            suggested_fix ~ mappedOn ~ reviewStatus ~ reviewRequestedBy ~ reviewedBy ~
-            reviewedAt ~ reviewStartedAt ~ reviewClaimedBy ~ priority ~ changesetId ~ responses ~
-            bundleId ~ isBundlePrimary =>
+            suggested_fix ~ mappedOn ~ completedTimeSpent ~ completedBy ~ reviewStatus ~
+            reviewRequestedBy ~ reviewedBy ~ reviewedAt ~ reviewStartedAt ~ reviewClaimedBy ~
+            reviewClaimedAt ~ priority ~ changesetId ~ responses ~ bundleId ~ isBundlePrimary =>
         val values = this.updateAndRetrieve(id, geojson, location, suggested_fix)
         Task(
           id,
@@ -137,13 +148,16 @@ class TaskDAL @Inject() (
           values._3,
           status,
           mappedOn,
+          completedTimeSpent,
+          completedBy,
           TaskReviewFields(
             reviewStatus,
             reviewRequestedBy,
             reviewedBy,
             reviewedAt,
             reviewStartedAt,
-            reviewClaimedBy
+            reviewClaimedBy,
+            reviewClaimedAt
           ),
           priority,
           changesetId,
@@ -162,35 +176,36 @@ class TaskDAL @Inject() (
     * @param c   The connection if any
     * @return The object that it is retrieving
     */
-  override def retrieveRootObject(obj: Either[Long, Task], user: User)(
+  def retrieveRootObject(obj: Either[Long, Task], user: User)(
       implicit c: Option[Connection] = None
   ): Option[Project] = {
+    val projectParser = ProjectRepository.parser(projectId =>
+      this.serviceManager.group.retrieveProjectGroups(projectId, User.superUser)
+    )
     obj match {
       case Left(id) =>
         this.permission.hasReadAccess(TaskType(), user)(id)
-        this.manager.project.cacheManager.withOptionCaching { () =>
+        this.serviceManager.project.cacheManager.withOptionCaching { () =>
           this.withMRConnection { implicit c =>
             SQL"""SELECT p.* FROM projects p
              INNER JOIN challenges c ON c.parent_id = p.id
              INNER JOIN task t ON t.parent_id = c.id
              WHERE t.id = $id
-           """.as(this.manager.project.parser.*).headOption
+           """.as(projectParser.*).headOption
           }
         }
       case Right(task) =>
         this.permission.hasObjectReadAccess(task, user)
-        this.manager.project.cacheManager.withOptionCaching { () =>
+        this.serviceManager.project.cacheManager.withOptionCaching { () =>
           this.withMRConnection { implicit c =>
             SQL"""SELECT p.* FROM projects p
              INNER JOIN challenges c ON c.parent_id = p.id
              WHERE c.id = ${task.parent}
-           """.as(this.manager.project.parser.*).headOption
+           """.as(projectParser.*).headOption
           }
         }
     }
   }
-
-  def manager: DALManager = dalManager.get()
 
   /**
     * Inserts a new task object into the database
@@ -205,6 +220,189 @@ class TaskDAL @Inject() (
       case None    => throw new Exception("Unknown failure occurred while creating new task.")
     }
   }
+
+  /**
+    * This is a merge update function that will update the task if it exists otherwise it will
+    * insert a new item.
+    *
+    * @param element The element that needs to be inserted or updated. Although it could be updated,
+    *                it requires the element itself in case it needs to be inserted
+    * @param user    The user that is executing the function
+    * @param id      The id of the element that is being updated/inserted
+    * @param c       A connection to execute against
+    * @return
+    */
+  override def mergeUpdate(
+      element: Task,
+      user: User
+  )(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
+    this.permission.hasObjectWriteAccess(element, user)
+    // get the parent challenge, as we need the priority information
+    val parentChallenge = this.manager.challenge.retrieveById(element.parent) match {
+      case Some(c) => c
+      case None =>
+        throw new NotFoundException(
+          s"No parent was found for task with parentId [${element.parent}, this should never happen."
+        )
+    }
+    // before clearing the cache grab the cachedItem
+    // by setting the delete implicit to true we clear out the cache for the element
+    // The cachedItem could be
+    val cachedItem = this.cacheManager.withUpdatingCache(Long => retrieveById) {
+      implicit cachedItem =>
+        Some(cachedItem)
+    }(id, true, true)
+    this.withMRTransaction { implicit c =>
+      val result       = extractSuggestedFix(element.parent, element.geometries, element.suggestedFix)
+      val geometries   = result._1
+      var suggestedFix = result._2
+
+      val query =
+        """SELECT create_update_task({name}, {parentId}, {instruction},
+                    {status}, {geojson}::JSONB, {suggestedFixGeoJson}::JSONB, {id}, {priority}, {changesetId},
+                    {reset}, {mappedOn}, {reviewStatus}, CAST({reviewRequestedBy} AS INTEGER),
+                    CAST({reviewedBy} AS INTEGER), {reviewedAt})"""
+      val updatedTaskId = SQL(query)
+        .on(
+          NamedParameter("name", ToParameterValue.apply[String].apply(element.name)),
+          NamedParameter("parentId", ToParameterValue.apply[Long].apply(element.parent)),
+          NamedParameter(
+            "instruction",
+            ToParameterValue.apply[String].apply(element.instruction.getOrElse(""))
+          ),
+          NamedParameter(
+            "status",
+            ToParameterValue.apply[Option[Int]].apply(element.status)
+          ),
+          NamedParameter("geojson", ToParameterValue.apply[String].apply(geometries)),
+          NamedParameter(
+            "suggestedFixGeoJson",
+            ToParameterValue.apply[String].apply(suggestedFix.orNull)
+          ),
+          NamedParameter("id", ToParameterValue.apply[Long].apply(element.id)),
+          NamedParameter(
+            "priority",
+            ToParameterValue.apply[Int].apply(element.getTaskPriority(parentChallenge))
+          ),
+          NamedParameter(
+            "changesetId",
+            ToParameterValue.apply[Long].apply(element.changesetId.getOrElse(-1L))
+          ),
+          NamedParameter(
+            "reset",
+            ToParameterValue.apply[String].apply(s"${config.taskReset} days")
+          ),
+          NamedParameter(
+            "mappedOn",
+            ToParameterValue.apply[Option[DateTime]].apply(element.mappedOn)
+          ),
+          NamedParameter(
+            "reviewStatus",
+            ToParameterValue.apply[Option[Int]].apply(element.review.reviewStatus)
+          ),
+          NamedParameter(
+            "reviewRequestedBy",
+            ToParameterValue.apply[Option[Long]].apply(element.review.reviewRequestedBy)
+          ),
+          NamedParameter(
+            "reviewedBy",
+            ToParameterValue.apply[Option[Long]].apply(element.review.reviewedBy)
+          ),
+          NamedParameter(
+            "reviewedAt",
+            ToParameterValue.apply[Option[DateTime]].apply(element.review.reviewedAt)
+          )
+        )
+        .as(long("create_update_task").*)
+        .head
+
+      // If we are updating the task review back to None then we need to delete its entry in the task_review table
+      cachedItem match {
+        case Some(item) =>
+          if (item.review.reviewRequestedBy != None && element.review.reviewRequestedBy == None) {
+            SQL("DELETE FROM task_review WHERE task_id=" + element.id).execute()
+          }
+        case None => // ignore
+      }
+
+      val updatedElement = element.copy(id = updatedTaskId)
+      this.cacheManager.cache.remove(updatedTaskId)
+      Some(updatedElement)
+    }
+  }
+
+  /**
+    * Function that extracts the suggestedFix from the geometries
+    *
+    * @param parentId     The parent Id of the challenge (for marking this challenge has fixes)
+    * @param geometries   The geojson that contains the geometries/suggestedFix
+    * @param suggestedFix Any top level suggested fix not embedded in geometries
+    */
+  private def extractSuggestedFix(parentId: Long, geometries: String, suggestedFix: Option[String])(
+      implicit c: Option[Connection] = None
+  ): (String, Option[String]) = {
+    this.withMRTransaction { implicit c =>
+      var suggestedFixGeoJson = suggestedFix
+
+      val geoJson = Json.parse(geometries)
+      var sfMatch = (geoJson \\ "suggestedFix")
+      if (sfMatch.isEmpty) {
+        // Check to see if our suggested fix JSON was changed into a string due
+        // to being a feature property (which are always converted to strings)
+        val parentMatch = (geoJson \\ "maproulette")
+        if (!parentMatch.isEmpty) {
+          sfMatch = (Json.parse(Utils.unescapeStringifiedJSON(parentMatch.head.toString())) \\ "suggestedFix")
+        }
+      }
+
+      if (!sfMatch.isEmpty) {
+        suggestedFixGeoJson = Some(sfMatch.head.toString())
+      }
+
+      val mrTransformer = (__ \ "properties" \ "maproulette").json.prune
+      val extractedGeometries = JsArray(
+        (geoJson \ "features")
+          .as[JsArray]
+          .value
+          .map {
+            case value: JsObject => value.transform(mrTransformer).getOrElse(value)
+            case _               => // do nothing
+          }
+          .asInstanceOf[ArrayBuffer[JsObject]]
+      )
+
+      suggestedFixGeoJson match {
+        case Some(sf) =>
+          SQL(s"UPDATE challenges SET has_suggested_fixes = true WHERE id=${parentId}").execute()
+        case None => // do nothing
+      }
+
+      (JsObject(Seq("features" -> extractedGeometries)).toString, suggestedFixGeoJson)
+    }
+  }
+
+  /**
+    * A basic retrieval of the object based on the id. With caching, so if it finds
+    * the object in the cache it will return that object without checking the database, otherwise
+    * will hit the database directly.
+    *
+    * @param id The id of the object to be retrieved
+    * @return The object, None if not found
+    */
+  override def retrieveById(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
+    this.cacheManager.withCaching { () =>
+      this.withMRConnection { implicit c =>
+        val query = s"SELECT $retrieveColumnsWithReview FROM ${this.tableName} " +
+          "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id " +
+          "WHERE tasks.id = {id}"
+        SQL(query)
+          .on(Symbol("id") -> ToParameterValue.apply[Long](p = keyToStatement).apply(id))
+          .as(this.parser.singleOpt)
+      }
+    }
+  }
+
+  def manager: DALManager = dalManager.get()
 
   /**
     * Updates a task object in the database.
@@ -318,186 +516,6 @@ class TaskDAL @Inject() (
       }
 
       task
-    }
-  }
-
-  /**
-    * This is a merge update function that will update the task if it exists otherwise it will
-    * insert a new item.
-    *
-    * @param element The element that needs to be inserted or updated. Although it could be updated,
-    *                it requires the element itself in case it needs to be inserted
-    * @param user    The user that is executing the function
-    * @param id      The id of the element that is being updated/inserted
-    * @param c       A connection to execute against
-    * @return
-    */
-  override def mergeUpdate(
-      element: Task,
-      user: User
-  )(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
-    this.permission.hasObjectWriteAccess(element, user)
-    // get the parent challenge, as we need the priority information
-    val parentChallenge = this.manager.challenge.retrieveById(element.parent) match {
-      case Some(c) => c
-      case None =>
-        throw new NotFoundException(
-          s"No parent was found for task with parentId [${element.parent}, this should never happen."
-        )
-    }
-    // before clearing the cache grab the cachedItem
-    // by setting the delete implicit to true we clear out the cache for the element
-    // The cachedItem could be
-    val cachedItem = this.cacheManager.withUpdatingCache(Long => retrieveById) {
-      implicit cachedItem =>
-        Some(cachedItem)
-    }(id, true, true)
-    this.withMRTransaction { implicit c =>
-      val result       = extractSuggestedFix(element.parent, element.geometries, element.suggestedFix)
-      val geometries   = result._1
-      var suggestedFix = result._2
-
-      val query =
-        """SELECT create_update_task({name}, {parentId}, {instruction},
-                    {status}, {geojson}::JSONB, {suggestedFixGeoJson}::JSONB, {id}, {priority}, {changesetId},
-                    {reset}, {mappedOn}, {reviewStatus}, CAST({reviewRequestedBy} AS INTEGER),
-                    CAST({reviewedBy} AS INTEGER), {reviewedAt})"""
-
-      val updatedTaskId = SQL(query)
-        .on(
-          NamedParameter("name", ToParameterValue.apply[String].apply(element.name)),
-          NamedParameter("parentId", ToParameterValue.apply[Long].apply(element.parent)),
-          NamedParameter(
-            "instruction",
-            ToParameterValue.apply[String].apply(element.instruction.getOrElse(""))
-          ),
-          NamedParameter(
-            "status",
-            ToParameterValue.apply[Int].apply(element.status.getOrElse(Task.STATUS_CREATED))
-          ),
-          NamedParameter("geojson", ToParameterValue.apply[String].apply(geometries)),
-          NamedParameter(
-            "suggestedFixGeoJson",
-            ToParameterValue.apply[String].apply(suggestedFix.orNull)
-          ),
-          NamedParameter("id", ToParameterValue.apply[Long].apply(element.id)),
-          NamedParameter(
-            "priority",
-            ToParameterValue.apply[Int].apply(element.getTaskPriority(parentChallenge))
-          ),
-          NamedParameter(
-            "changesetId",
-            ToParameterValue.apply[Long].apply(element.changesetId.getOrElse(-1L))
-          ),
-          NamedParameter(
-            "reset",
-            ToParameterValue.apply[String].apply(s"${config.taskReset} days")
-          ),
-          NamedParameter(
-            "mappedOn",
-            ToParameterValue.apply[Option[DateTime]].apply(element.mappedOn)
-          ),
-          NamedParameter(
-            "reviewStatus",
-            ToParameterValue.apply[Option[Int]].apply(element.review.reviewStatus)
-          ),
-          NamedParameter(
-            "reviewRequestedBy",
-            ToParameterValue.apply[Option[Long]].apply(element.review.reviewRequestedBy)
-          ),
-          NamedParameter(
-            "reviewedBy",
-            ToParameterValue.apply[Option[Long]].apply(element.review.reviewedBy)
-          ),
-          NamedParameter(
-            "reviewedAt",
-            ToParameterValue.apply[Option[DateTime]].apply(element.review.reviewedAt)
-          )
-        )
-        .as(long("create_update_task").*)
-        .head
-
-      // If we are updating the task review back to None then we need to delete its entry in the task_review table
-      cachedItem match {
-        case Some(item) =>
-          if (item.review.reviewRequestedBy != None && element.review.reviewRequestedBy == None) {
-            SQL("DELETE FROM task_review WHERE task_id=" + element.id).execute()
-          }
-        case None => // ignore
-      }
-
-      Some(element.copy(id = updatedTaskId))
-    }
-  }
-
-  /**
-    * Function that extracts the suggestedFix from the geometries
-    *
-    * @param parentId     The parent Id of the challenge (for marking this challenge has fixes)
-    * @param geometries   The geojson that contains the geometries/suggestedFix
-    * @param suggestedFix Any top level suggested fix not embedded in geometries
-    */
-  private def extractSuggestedFix(parentId: Long, geometries: String, suggestedFix: Option[String])(
-      implicit c: Option[Connection] = None
-  ): (String, Option[String]) = {
-    this.withMRTransaction { implicit c =>
-      var suggestedFixGeoJson = suggestedFix
-
-      val geoJson = Json.parse(geometries)
-      var sfMatch = (geoJson \\ "suggestedFix")
-      if (sfMatch.isEmpty) {
-        // Check to see if our suggested fix JSON was changed into a string due
-        // to being a feature property (which are always converted to strings)
-        val parentMatch = (geoJson \\ "maproulette")
-        if (!parentMatch.isEmpty) {
-          sfMatch = (Json.parse(Utils.unescapeStringifiedJSON(parentMatch.head.toString())) \\ "suggestedFix")
-        }
-      }
-
-      if (!sfMatch.isEmpty) {
-        suggestedFixGeoJson = Some(sfMatch.head.toString())
-      }
-
-      val mrTransformer = (__ \ "properties" \ "maproulette").json.prune
-      val extractedGeometries = JsArray(
-        (geoJson \ "features")
-          .as[JsArray]
-          .value
-          .map {
-            case value: JsObject => value.transform(mrTransformer).getOrElse(value)
-            case _               => // do nothing
-          }
-          .asInstanceOf[ArrayBuffer[JsObject]]
-      )
-
-      suggestedFixGeoJson match {
-        case Some(sf) =>
-          SQL(s"UPDATE challenges SET has_suggested_fixes = true WHERE id=${parentId}").execute()
-        case None => // do nothing
-      }
-
-      (JsObject(Seq("features" -> extractedGeometries)).toString, suggestedFixGeoJson)
-    }
-  }
-
-  /**
-    * A basic retrieval of the object based on the id. With caching, so if it finds
-    * the object in the cache it will return that object without checking the database, otherwise
-    * will hit the database directly.
-    *
-    * @param id The id of the object to be retrieved
-    * @return The object, None if not found
-    */
-  override def retrieveById(implicit id: Long, c: Option[Connection] = None): Option[Task] = {
-    this.cacheManager.withCaching { () =>
-      this.withMRConnection { implicit c =>
-        val query = s"SELECT $retrieveColumnsWithReview FROM ${this.tableName} " +
-          "LEFT OUTER JOIN task_review ON task_review.task_id = tasks.id " +
-          "WHERE tasks.id = {id}"
-        SQL(query)
-          .on(Symbol("id") -> ToParameterValue.apply[Long](p = keyToStatement).apply(id))
-          .as(this.parser.singleOpt)
-      }
     }
   }
 
@@ -616,7 +634,8 @@ class TaskDAL @Inject() (
 
         if (!skipStatusUpdate) {
           updatedRows =
-            SQL"""UPDATE tasks t SET status = $status, mapped_on = NOW(), completion_responses = ${responses}::JSONB  #$bundleUpdate
+            SQL"""UPDATE tasks t SET status = $status, mapped_on = NOW(), completion_responses = ${responses}::JSONB,
+                                 completed_by = ${user.id}  #$bundleUpdate
                                  WHERE t.id = (
                                     SELECT t2.id FROM tasks t2
                                     LEFT JOIN locked l on l.item_id = t2.id AND l.item_type = ${task.itemType.typeId}
@@ -630,9 +649,20 @@ class TaskDAL @Inject() (
           }
         }
 
-        val startedLock = (SQL"""SELECT locked_time FROM locked l WHERE l.item_id = ${task.id} AND
+        val startedLock = (SQL"""SELECT created FROM locked l WHERE l.item_id = ${task.id} AND
                                        l.item_type = ${task.itemType.typeId} AND l.user_id = ${user.id}
                              """).as(SqlParser.scalar[DateTime].singleOpt)
+
+        var completedTimeSpent: Option[Long] = None
+        if (!skipStatusUpdate) {
+          startedLock match {
+            case Some(l) =>
+              SQL"""UPDATE tasks SET completed_time_spent = (SELECT (extract(epoch from NOW()) * 1000 - ${l
+                .getMillis()}))
+                    WHERE id = ${task.id}""".executeUpdate()
+            case _ => // do nothing
+          }
+        }
 
         this.manager.statusAction.setStatusAction(user, task, status, startedLock)
 
@@ -643,6 +673,20 @@ class TaskDAL @Inject() (
                       SET review_status = ${Task.REVIEW_STATUS_REQUESTED}, review_requested_by = ${user.id}
                       WHERE tr.task_id = ${task.id}
                  """.executeUpdate()
+
+              // Let's note in the task_review_history table that this task needs review again
+              SQL"""INSERT INTO task_review_history
+                                 (task_id, requested_by, reviewed_by, review_status, reviewed_at, review_started_at)
+                     VALUES (${task.id}, ${user.id}, ${task.review.reviewedBy},
+                             ${Task.REVIEW_STATUS_REQUESTED}, ${Instant.now()},
+                             ${task.review.reviewStartedAt})""".executeUpdate()
+              this.manager.notification.createReviewNotification(
+                user,
+                task.review.reviewedBy.getOrElse(-1),
+                Task.REVIEW_STATUS_REQUESTED,
+                task,
+                None
+              )
             case None =>
               SQL"""INSERT INTO task_review (task_id, review_status, review_requested_by)
                       VALUES (${task.id}, ${Task.REVIEW_STATUS_REQUESTED}, ${user.id})"""
@@ -718,7 +762,15 @@ class TaskDAL @Inject() (
 
           // let's give the user credit for doing this task.
           if (oldStatus.getOrElse(Task.STATUS_CREATED) != status) {
-            this.manager.user.updateUserScore(Option(status), None, false, false, user.id)
+            this.serviceManager.userMetrics.updateUserScore(
+              Option(status),
+              completedTimeSpent,
+              None,
+              false,
+              false,
+              None,
+              user.id
+            )
           }
 
           // Get the latest task data and notify clients of the update
@@ -1197,19 +1249,22 @@ class TaskDAL @Inject() (
   def getLastModifiedUser(user: User, id: Long, limit: Int = 1)(
       implicit c: Option[Connection] = None
   ): List[User] = {
-    withMRConnection { implicit c =>
-      val query =
-        s"""
-           |SELECT ${this.manager.user.retrieveColumns}, score FROM users
-           |  LEFT JOIN user_metrics ON users.id = user_metrics.user_id
-           |  WHERE osm_id IN (
-           |  SELECT osm_user_id FROM status_actions WHERE task_id = {id}
-           |  ORDER BY created DESC
-           |  LIMIT {limit}
-           |)
-         """.stripMargin
-      SQL(query).on(Symbol("id") -> id, Symbol("limit") -> limit).as(this.manager.user.parser.*)
-    }
+    this.serviceManager.user.query(
+      Query.simple(
+        List(
+          SubQueryFilter(
+            User.FIELD_OSM_ID,
+            Query.simple(
+              List(BaseParameter(StatusActions.FIELD_TASK_ID, id)),
+              "SELECT osm_user_id FROM status_action",
+              order = Order.simple("created"),
+              paging = Paging(limit)
+            )
+          )
+        )
+      ),
+      user
+    )
   }
 
   def retrieveTaskSummaries(
@@ -1220,23 +1275,25 @@ class TaskDAL @Inject() (
   ): (List[TaskSummary], Map[Long, String]) =
     db.withConnection { implicit c =>
       val parser = for {
-        taskId            <- long("tasks.id")
-        parentId          <- long("tasks.parent_id")
-        name              <- str("tasks.name")
-        status            <- int("tasks.status")
-        priority          <- int("tasks.priority")
-        geojson           <- get[Option[String]]("geo_json")
-        username          <- get[Option[String]]("users.username")
-        mappedOn          <- get[Option[DateTime]]("mapped_on")
-        reviewStatus      <- get[Option[Int]]("task_review.review_status")
-        reviewRequestedBy <- get[Option[String]]("reviewRequestedBy")
-        reviewedBy        <- get[Option[String]]("reviewedBy")
-        reviewedAt        <- get[Option[DateTime]]("task_review.reviewed_at")
-        reviewStartedAt   <- get[Option[DateTime]]("task_review.review_started_at")
-        tags              <- get[Option[String]]("tags")
-        responses         <- get[Option[String]]("responses")
-        bundleId          <- get[Option[Long]]("bundle_id")
-        isBundlePrimary   <- get[Option[Boolean]]("is_bundle_primary")
+        taskId             <- long("tasks.id")
+        parentId           <- long("tasks.parent_id")
+        name               <- str("tasks.name")
+        status             <- int("tasks.status")
+        priority           <- int("tasks.priority")
+        geojson            <- get[Option[String]]("geo_json")
+        username           <- get[Option[String]]("users.username")
+        mappedOn           <- get[Option[DateTime]]("mapped_on")
+        completedTimeSpent <- get[Option[Long]]("completed_time_spent")
+        completedBy        <- get[Option[String]]("completedBy")
+        reviewStatus       <- get[Option[Int]]("task_review.review_status")
+        reviewRequestedBy  <- get[Option[String]]("reviewRequestedBy")
+        reviewedBy         <- get[Option[String]]("reviewedBy")
+        reviewedAt         <- get[Option[DateTime]]("task_review.reviewed_at")
+        reviewStartedAt    <- get[Option[DateTime]]("task_review.review_started_at")
+        tags               <- get[Option[String]]("tags")
+        responses          <- get[Option[String]]("responses")
+        bundleId           <- get[Option[Long]]("bundle_id")
+        isBundlePrimary    <- get[Option[Boolean]]("is_bundle_primary")
       } yield TaskSummary(
         taskId,
         parentId,
@@ -1245,6 +1302,8 @@ class TaskDAL @Inject() (
         priority,
         username,
         mappedOn,
+        completedTimeSpent,
+        completedBy,
         reviewStatus,
         reviewRequestedBy,
         reviewedBy,
@@ -1276,6 +1335,8 @@ class TaskDAL @Inject() (
 
       val query =
         SQL"""SELECT tasks.id, tasks.parent_id, tasks.name, tasks.status, tasks.priority, sa_outer.username, tasks.mapped_on,
+                   tasks.completed_time_spent,
+                   (SELECT name as completedBy FROM users WHERE users.id = tasks.completed_by),
                    task_review.review_status, tasks.is_bundle_primary, tasks.bundle_id, tasks.geojson::TEXT AS geo_json,
                    (SELECT name as reviewRequestedBy FROM users WHERE users.id = task_review.review_requested_by),
                    (SELECT name as reviewedBy FROM users WHERE users.id = task_review.reviewed_by),
@@ -1375,6 +1436,8 @@ class TaskDAL @Inject() (
       priority: Int,
       username: Option[String],
       mappedOn: Option[DateTime],
+      completedTimeSpent: Option[Long],
+      completedBy: Option[String],
       reviewStatus: Option[Int],
       reviewRequestedBy: Option[String],
       reviewedBy: Option[String],

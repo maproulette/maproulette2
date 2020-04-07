@@ -1,13 +1,15 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.controllers
 
 import java.sql.Connection
 
 import org.maproulette.exception.{NotFoundException, StatusMessage}
+import org.maproulette.framework.model.User
 import org.maproulette.models.BaseObject
 import org.maproulette.models.dal.ParentDAL
-import org.maproulette.session.User
 import play.api.libs.json._
 import play.api.mvc.{AbstractController, Action, AnyContent}
 

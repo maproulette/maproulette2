@@ -1,0 +1,242 @@
+###
+# tags: [ Review ]
+# summary: Retrieves and claims a review needed Task
+# produces: [ application/json ]
+# description: Retrieves a Task and claims that task for review
+# responses:
+#   '200':
+#     description: The task
+#     schema:
+#       type: object
+#       $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the task to fetch and claim
+###
+GET     /task/:id/review/start                       @org.maproulette.controllers.api.TaskReviewController.startTaskReview(id:Long)
+###
+# tags: [ Review ]
+# summary: Cancels a claim on a task for review
+# produces: [ application/json ]
+# description: Cancels a claim on a task for review
+# responses:
+#   '200':
+#     description: The task
+#     schema:
+#       type: object
+#       $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: id
+#     in: path
+#     description: The id of the task to cancel claim on
+###
+GET     /task/:id/review/cancel                       @org.maproulette.controllers.api.TaskReviewController.cancelTaskReview(id:Long)
+###
+# tags: [ Review ]
+# summary: Retrieves tasks that need review
+# produces: [ application/json ]
+# description: Retrieves list of Tasks and total count
+# responses:
+#   '200':
+#     description: The list of tasks that need review (and that the user has group permission to access)
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: startDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
+#   - name: endDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is -1 (all).
+#   - name: sort
+#     in: query
+#     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
+#   - name: order
+#     in: query
+#     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+#   - name: cs
+#     in: query
+#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
+#   - name: o
+#     in: query
+#     description: The search string used to match the name of the person requesting the review. (review_requested_by)
+###
+GET     /tasks/review                          @org.maproulette.controllers.api.TaskReviewController.getReviewRequestedTasks(startDate: String ?= null, endDate: String ?= null, onlySaved: Boolean ?= false, limit:Int ?= -1, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC", excludeOtherReviewers: Boolean ?= false)
+###
+# tags: [ Review ]
+# summary: Retrieves reviewed tasks that have been reviewed either by this user or where the user requested
+#          the review.
+# produces: [ application/json ]
+# description: Retrieves list of Tasks
+# responses:
+#   '200':
+#     description: The list of tasks and total count
+#     description: The list of tasks
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: startDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
+#   - name: endDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
+#   - name: mappers
+#     in: query
+#     description: The mapper ids to search by. (review_requested_by)
+#   - name: reviewers
+#     in: query
+#     description: The reviewer ids to search by. (review_requested_by)
+#     in: query
+#     description: Whether results should be included tasks in tasks 'review requested'
+#   - name: limit
+#     in: query
+#     description: Limit the number of results returned in the response. Default value is -1 (all).
+#   - name: sort
+#     in: query
+#     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
+#   - name: order
+#     in: query
+#     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+#   - name: cs
+#     in: query
+#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
+#   - name: o
+#     in: query
+#     description: The search string used to match the name of the person requesting the review. (review_requested_by)
+#   - name: r
+#     in: query
+#     description: The search string used to match the Reviewer names. (reviewed_by)
+###
+GET     /tasks/reviewed                          @org.maproulette.controllers.api.TaskReviewController.getReviewedTasks(mappers:String ?= "", reviewers:String ?= "", startDate: String ?= null, endDate: String ?= null, allowReviewNeeded:Boolean ?= false, limit:Int ?= 10, page:Int ?= 0, sort:String ?= "", order:String ?= "ASC")
+###
+# tags: [ Review ]
+# summary: Retrieves and claims a the next review needed Task
+# produces: [ application/json ]
+# description: Retrieves the next Task (given the search parameters) and claims that task for review
+# responses:
+#   '200':
+#     description: The task
+#     schema:
+#       type: object
+#       $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: sort
+#     in: query
+#     description: Sorts the results retuned in the response. Parameter is optional, if not provided then results will not be sorted.
+#   - name: order
+#     in: query
+#     description: Sort order direction. Either ASC or DESC. Default is "ASC" (ascending)
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+#   - name: lastTaskId
+#     in: query
+#     description: Fetch the next task after the lastTaskId. (so if you want to 'skip' a task you can get the next one)
+#   - name: cs
+#     in: query
+#     description: The search string used to match the Challenge names. Default value is empty string, ie. will match all challenges.
+#   - name: o
+#     in: query
+#     description: The search string used to match the name of the person requesting the review. (review_requested_by)
+#   - name: r
+#     in: query
+#     description: The search string used to match the Reviewer names. (reviewed_by)
+###
+GET     /tasks/review/next                       @org.maproulette.controllers.api.TaskReviewController.nextTaskReview(onlySaved:Boolean ?= false, sort:String ?= "", order:String ?= "ASC", lastTaskId:Long ?= -1, excludeOtherReviewers:Boolean ?= false)
+###
+# tags: [ Review ]
+# summary: Retrieves tasks that need review
+# produces: [ application/json ]
+# description: Retrieves list of Tasks and total count
+# responses:
+#   '200':
+#     description: The list of tasks that need review (and that the user has group permission to access)
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.Task'
+# parameters:
+#   - name: reviewTasksType
+#     in: query
+#     description: integer value > 1 - To Be Reviewed 2 - User's reviewed Tasks 3 - All reviewed by users
+#   - name: mappers
+#     in: query
+#     description: the mapper ids to search by (review_requested_by)
+#   - name: reviewers
+#     in: query
+#     description: the reviewer ids to search by (reviewed_by)
+#   - name: priorities
+#     in: query
+#     description: the priorities to search by
+#   - name: startDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed after this date (format 'YYYY-MM-DD')
+#   - name: endDate
+#     in: query
+#     description: Whether results should be tasks that have been reviewed before this date (format 'YYYY-MM-DD')
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+#   - name: includeByPriority
+#     in: query
+#     description: Also include a breakdown of review status by priority
+###
+GET     /tasks/review/metrics                          @org.maproulette.controllers.api.TaskReviewController.getReviewMetrics(reviewTasksType: Int, mappers: String ?= "", reviewers: String ?= "", priorities:String ?= "", startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false, excludeOtherReviewers: Boolean ?= false, includeByPriority:Boolean ?= false)
+###
+# tags: [ Review ]
+# summary: Retrieves task review clusters
+# produces: [ application/json ]
+# description: Retrieves task clusters that contain the centroid location for a group of review tasks
+# responses:
+#   '200':
+#     description: An array of task clusters that represents clusters of tasks for the review criteria. If none found will return an empty list
+#     schema:
+#       type: array
+#       items:
+#         type: object
+#         $ref: '#/definitions/org.maproulette.models.TaskCluster'
+# parameters:
+#   - name: reviewTasksType
+#     in: query
+#     description: integer value > 1 - To Be Reviewed 2 - User's reviewed Tasks 3 - All reviewed by users
+#   - name: points
+#     in: query
+#     description: The number of clusters that you want returned
+#   - name: startDate
+#     in: query
+#     description: The start date to search within
+#   - name: endDate
+#     in: query
+#     description: The end date to search within
+#   - name: onlySaved
+#     in: query
+#     description: Only show challenges that have been saved.
+#   - name: excludeOtherReviewers
+#     in: query
+#     description: exclude tasks that have been reviewed by someone else
+###
+GET     /taskCluster/review                                @org.maproulette.controllers.api.TaskReviewController.getReviewTaskClusters(reviewTasksType:Int, points:Int ?= 100, startDate: String ?= null, endDate: String ?= null, onlySaved:Boolean ?= false, excludeOtherReviewers:Boolean ?= false)

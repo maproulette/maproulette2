@@ -1,5 +1,7 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.data
 
 import java.sql.Connection
@@ -9,12 +11,13 @@ import anorm._
 import javax.inject.{Inject, Singleton}
 import org.joda.time.DateTime
 import org.maproulette.Config
-import org.maproulette.models.{Task, Challenge}
-import org.maproulette.models.utils.{AND, DALHelper, WHERE}
+import org.maproulette.models.Task
+import org.maproulette.models.utils.WHERE
 import org.maproulette.models.dal.ChallengeDAL
 import org.maproulette.session.SearchParameters
 import org.maproulette.utils.BoundingBoxFinder
 import org.maproulette.exception.NotFoundException
+import org.maproulette.framework.model.Challenge
 import play.api.Application
 import play.api.db.Database
 
@@ -24,7 +27,9 @@ case class ReviewActions(
     approved: Int,
     rejected: Int,
     assisted: Int,
-    disputed: Int
+    disputed: Int,
+    avgReviewTime: Double,
+    tasksWithReviewTime: Int
 )
 
 case class Snapshot(
@@ -80,6 +85,8 @@ class SnapshotManager @Inject() (
     answered            <- int("answered")
     validated           <- int("validated")
     disabled            <- int("disabled")
+    avgTimeSpent        <- double("avg_time_spent")
+    tasksWithTime       <- int("tasks_with_time")
     availableLow        <- int("availableLow")
     fixedLow            <- int("fixedLow")
     falsePositiveLow    <- int("false_positiveLow")
@@ -90,6 +97,8 @@ class SnapshotManager @Inject() (
     answeredLow         <- int("answeredLow")
     validatedLow        <- int("validatedLow")
     disabledLow         <- int("disabledLow")
+    avgTimeSpentLow     <- double("avg_time_spent")
+    tasksWithTimeLow    <- int("tasks_with_time")
     availableMedium     <- int("availableMedium")
     fixedMedium         <- int("fixedMedium")
     falsePositiveMedium <- int("false_positiveMedium")
@@ -100,6 +109,8 @@ class SnapshotManager @Inject() (
     answeredMedium      <- int("answeredMedium")
     validatedMedium     <- int("validatedMedium")
     disabledMedium      <- int("disabledMedium")
+    avgTimeSpentMedium  <- double("avg_time_spent")
+    tasksWithTimeMedium <- int("tasks_with_time")
     availableHigh       <- int("availableHigh")
     fixedHigh           <- int("fixedHigh")
     falsePositiveHigh   <- int("false_positiveHigh")
@@ -110,11 +121,15 @@ class SnapshotManager @Inject() (
     answeredHigh        <- int("answeredHigh")
     validatedHigh       <- int("validatedHigh")
     disabledHigh        <- int("disabledHigh")
+    avgTimeSpentHigh    <- double("avg_time_spent")
+    tasksWithTimeHigh   <- int("tasks_with_time")
     reviewRequested     <- int("requested")
     reviewApproved      <- int("approved")
     reviewRejected      <- int("rejected")
     reviewAssisted      <- int("assisted")
     reviewDisputed      <- int("disputed")
+    totalReviewTime     <- double("total_review_time")
+    tasksWithReviewTime <- int("tasks_with_review_time")
   } yield Snapshot(
     id,
     challengeId,
@@ -135,7 +150,9 @@ class SnapshotManager @Inject() (
         tooHard,
         answered,
         validated,
-        disabled
+        disabled,
+        avgTimeSpent,
+        tasksWithTime
       )
     ),
     Some(
@@ -152,7 +169,9 @@ class SnapshotManager @Inject() (
           tooHardLow,
           answeredLow,
           validatedLow,
-          disabledLow
+          disabledLow,
+          avgTimeSpentLow,
+          tasksWithTimeLow
         ),
         Challenge.PRIORITY_MEDIUM.toString -> ActionSummary(
           (availableMedium + fixedMedium + falsePositiveMedium + skippedMedium + deletedMedium +
@@ -166,7 +185,9 @@ class SnapshotManager @Inject() (
           tooHardMedium,
           answeredMedium,
           validatedMedium,
-          disabledMedium
+          disabledMedium,
+          avgTimeSpentMedium,
+          tasksWithTimeMedium
         ),
         Challenge.PRIORITY_HIGH.toString -> ActionSummary(
           (availableHigh + fixedHigh + falsePositiveHigh + skippedHigh + deletedHigh +
@@ -180,7 +201,9 @@ class SnapshotManager @Inject() (
           tooHardHigh,
           answeredHigh,
           validatedHigh,
-          disabledHigh
+          disabledHigh,
+          avgTimeSpentHigh,
+          tasksWithTimeHigh
         )
       )
     ),
@@ -191,7 +214,9 @@ class SnapshotManager @Inject() (
         reviewApproved,
         reviewRejected,
         reviewAssisted,
-        reviewDisputed
+        reviewDisputed,
+        if (tasksWithReviewTime > 0) (totalReviewTime / tasksWithReviewTime) else 0,
+        tasksWithReviewTime
       )
     )
   )
@@ -225,7 +250,6 @@ class SnapshotManager @Inject() (
         WHERE snap.id = ${snapshotId}
       """
 
-      println(query)
       SQL(query).as(snapshotParser.*).head
     }
   }
@@ -242,7 +266,8 @@ class SnapshotManager @Inject() (
 
       val result = this.getChallengeSummary(challengeId = Some(challengeId)) match {
         case l if (l.size > 0) => l.head
-        case _                 => ChallengeSummary(challengeId, "", ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        case _ =>
+          ChallengeSummary(challengeId, "", ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
       }
 
       val resultLow =
@@ -252,7 +277,11 @@ class SnapshotManager @Inject() (
         ) match {
           case l if (l.size > 0) => l.head
           case _ =>
-            ChallengeSummary(result.id, result.name, ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            ChallengeSummary(
+              result.id,
+              result.name,
+              ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            )
         }
 
       val resultMedium =
@@ -262,7 +291,11 @@ class SnapshotManager @Inject() (
         ) match {
           case l if (l.size > 0) => l.head
           case _ =>
-            ChallengeSummary(result.id, result.name, ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            ChallengeSummary(
+              result.id,
+              result.name,
+              ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            )
         }
 
       val resultHigh =
@@ -272,7 +305,11 @@ class SnapshotManager @Inject() (
         ) match {
           case l if (l.size > 0) => l.head
           case _ =>
-            ChallengeSummary(result.id, result.name, ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+            ChallengeSummary(
+              result.id,
+              result.name,
+              ActionSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            )
         }
 
       val allPriorities = _recordCompletionSnapshot(result, None)
@@ -283,13 +320,21 @@ class SnapshotManager @Inject() (
 
       val reviewQuery      = s"""
         INSERT INTO review_snapshots
-         (type_id, item_id, requested, approved, rejected, assisted, disputed)
+         (type_id, item_id, requested, approved, rejected, assisted, disputed,
+          total_review_time, tasks_with_review_time)
         SELECT ${Actions.ITEM_TYPE_CHALLENGE}, ${challengeId},
             COUNT(review_status) FILTER (where review_status = 0) AS requested,
             COUNT(review_status) FILTER (where review_status = 1) AS approved,
             COUNT(review_status) FILTER (where review_status = 2) AS rejected,
             COUNT(review_status) FILTER (where review_status = 3) AS assisted,
-            COUNT(review_status) FILTER (where review_status = 4) AS disputed
+            COUNT(review_status) FILTER (where review_status = 4) AS disputed,
+            SUM(CASE WHEN (task_review.reviewed_at IS NOT NULL AND
+                           task_review.review_started_at IS NOT NULL)
+                     THEN (EXTRACT(EPOCH FROM (reviewed_at - review_started_at)) * 1000)
+                     ELSE 0 END) as totalReviewTime,
+      	    SUM(CASE WHEN (task_review.reviewed_at IS NOT NULL AND
+                                 task_review.review_started_at IS NOT NULL)
+                           THEN 1 ELSE 0 END) as tasksWithReviewTime
            FROM task_review
             INNER JOIN tasks t ON t.id = task_review.task_id
             INNER JOIN challenges c ON c.id = t.parent_id
@@ -338,6 +383,8 @@ class SnapshotManager @Inject() (
         INSERT INTO completion_snapshots
          (type_id,
           item_id,
+          avg_time_spent,
+          tasks_with_time,
           priority,
           available,
           fixed,
@@ -349,14 +396,16 @@ class SnapshotManager @Inject() (
           answered,
           validated,
           disabled)
-        VALUES (${Actions.ITEM_TYPE_CHALLENGE}, {id}, {priority}, {available}, {fixed},
-                {false_positive}, {skipped}, {deleted}, {already_fixed}, {too_hard},
-                {answered}, {validated}, {disabled})
+        VALUES (${Actions.ITEM_TYPE_CHALLENGE}, {id}, {avgTimeSpent}, {tasksWithTime},
+                {priority}, {available}, {fixed}, {false_positive}, {skipped}, {deleted},
+                {already_fixed}, {too_hard}, {answered}, {validated}, {disabled})
       """
       SQL(query)
         .on(
           Symbol("id")             -> summary.id,
           Symbol("priority")       -> priority,
+          Symbol("avgTimeSpent")   -> summary.actions.avgTimeSpent,
+          Symbol("tasksWithTime")  -> summary.actions.tasksWithTime,
           Symbol("available")      -> summary.actions.available,
           Symbol("fixed")          -> summary.actions.fixed,
           Symbol("false_positive") -> summary.actions.falsePositive,
@@ -388,12 +437,16 @@ class SnapshotManager @Inject() (
          cs${p}.answered as answered${p},
          cs${p}.validated as validated${p},
          cs${p}.disabled as disabled${p},
+         cs${p}.avg_time_spent as avg_time_spent${p},
+         cs${p}.tasks_with_time as tasks_with_time${p},
       """
     })
 
     s"""
       SELECT snap.id as id, challenge_id, challenge_name, challenge_status, snap.created,
-             cs.type_id as type_id, $cols review_snapshots.*
+             cs.type_id as type_id, $cols review_snapshots.*,
+             COALESCE(review_snapshots.total_review_time, 0) as total_review_time,
+             COALESCE(review_snapshots.tasks_with_review_time, 0) as tasks_with_review_time
       FROM challenge_snapshots snap
       INNER JOIN completion_snapshots cs ON cs.id = completion_snapshot_id
       INNER JOIN completion_snapshots csLow ON csLow.id = low_completion_snapshot_id

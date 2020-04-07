@@ -1,8 +1,10 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
 package org.maproulette.models.dal
 
-import java.sql.{Connection, PreparedStatement}
+import java.sql.Connection
 
 import anorm.SqlParser._
 import anorm._
@@ -10,10 +12,11 @@ import org.joda.time.DateTime
 import org.maproulette.Config
 import org.maproulette.cache.CacheManager
 import org.maproulette.exception.NotFoundException
-import org.maproulette.models.utils.{DALHelper, TransactionManager}
+import org.maproulette.framework.model.User
+import org.maproulette.framework.psql.TransactionManager
+import org.maproulette.models.utils.DALHelper
 import org.maproulette.models.{BaseObject, Lock}
 import org.maproulette.permissions.Permission
-import org.maproulette.session.User
 import org.maproulette.utils.{Readers, Writers}
 import org.slf4j.LoggerFactory
 import play.api.db.Database
@@ -30,22 +33,21 @@ trait BaseDAL[Key, T <: BaseObject[Key]]
     with TransactionManager
     with Readers
     with Writers {
-  protected val logger = LoggerFactory.getLogger(this.getClass)
-
   // Service that handles all the permissions for the objects
   val permission: Permission
   // Manager to handle all the caching for this particular layer
   val cacheManager: CacheManager[Key, T]
   // The name of the table in the database
   val tableName: String
-  // where caching is turned on or off by default.
-  implicit val caching: Boolean = true
   // The object parser specific for this data access layer
   val parser: RowParser[T]
+  // where caching is turned on or off by default.
+  implicit val caching: Boolean = true
   // this allows for columns used in the retrieve functions to be optionally built
   val retrieveColumns: String = "*"
   // Database that should be injected in any implementing classes
   val db: Database
+  protected val logger = LoggerFactory.getLogger(this.getClass)
 
   def clearCaches: Unit = cacheManager.clearCaches
 
@@ -53,11 +55,13 @@ trait BaseDAL[Key, T <: BaseObject[Key]]
     get[Option[DateTime]]("locked.locked_time") ~
       get[Option[Int]]("locked.item_type") ~
       get[Option[Long]]("locked.item_id") ~
-      get[Option[Long]]("locked.user_id") map {
-      case locked_time ~ itemType ~ itemId ~ userId =>
+      get[Option[Long]]("locked.user_id") ~
+      get[Option[Long]]("locked.changeset_id") map {
+      case locked_time ~ itemType ~ itemId ~ userId ~ changesetId =>
         locked_time match {
-          case Some(d) => Lock(locked_time, itemType.get, itemId.get, userId.get)
-          case None    => Lock.emptyLock
+          case Some(d) =>
+            Lock(locked_time, itemType.get, itemId.get, userId.get, changesetId.getOrElse(-1))
+          case None => Lock.emptyLock
         }
     }
   }
@@ -195,24 +199,6 @@ trait BaseDAL[Key, T <: BaseObject[Key]]
           .on(Symbol("id") -> ToParameterValue.apply[Key](p = keyToStatement).apply(id))
           .as(this.parser.singleOpt)
       }
-    }
-  }
-
-  /**
-    * This will retrieve the root object in the hierarchy of the object, by default the root
-    * object is itself.
-    *
-    * @param obj This is either the id of the object, or the object itself
-    * @param user
-    * @param c   The connection if any
-    * @return The object that it is retrieving
-    */
-  def retrieveRootObject(obj: Either[Key, T], user: User)(
-      implicit c: Option[Connection] = None
-  ): Option[_ <: BaseObject[Key]] = {
-    obj match {
-      case Left(id)     => this.retrieveById(id, c)
-      case Right(value) => Some(value)
     }
   }
 

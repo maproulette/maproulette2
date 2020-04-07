@@ -1,11 +1,13 @@
-// Copyright (C) 2019 MapRoulette contributors (see CONTRIBUTORS.md).
-// Licensed under the Apache License, Version 2.0 (see LICENSE).
-package org.maproulette.services.osm.objects
+/*
+ * Copyright (C) 2020 MapRoulette contributors (see CONTRIBUTORS.md).
+ * Licensed under the Apache License, Version 2.0 (see LICENSE).
+ */
+package org.maproulette.provider.osm.objects
 
 import org.joda.time.DateTime
 import org.maproulette.cache.CacheObject
-import org.maproulette.services.osm.OSMType
-import org.maproulette.services.osm.OSMType.OSMType
+import org.maproulette.provider.osm.OSMType
+import org.maproulette.provider.osm.OSMType.OSMType
 
 import scala.collection.mutable
 import scala.xml.{Attribute, Elem, Null, Text}
