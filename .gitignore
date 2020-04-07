@@ -21,3 +21,4 @@ project/play-fork-run.sbt
 project/sbt-ui.sbt
 *.keystore
 .DS_Store
+conf/generated.routes
