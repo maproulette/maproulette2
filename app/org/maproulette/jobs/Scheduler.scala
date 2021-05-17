@@ -95,6 +95,14 @@ class Scheduler @Inject() (
     1.minute,
     Config.KEY_SCHEDULER_NOTIFICATION_IMMEDIATE_EMAIL_INTERVAL
   )
+
+  scheduleAtTime(
+    "sendReviewNotificationEmails",
+    "Sending Review Notification Emails",
+    config.getValue(Config.KEY_SCHEDULER_NOTIFICATION_REVIEW_EMAIL_START),
+    Config.KEY_SCHEDULER_NOTIFICATION_REVIEW_EMAIL_INTERVAL
+  )
+
   scheduleAtTime(
     "sendDigestNotificationEmails",
     "Sending Notification Email Digests",
