@@ -46,6 +46,8 @@ object UserNotification extends CommonField {
   val FIELD_CHALLENGE_ID      = "challenge_id"
   val FIELD_FROM_USERNAME     = "from_username"
   val FIELD_EMAIL_STATUS      = "email_status"
+  val TASK_TYPE_REVIEW        = "review"
+  val TASK_TYPE_REVISION      = "revision"
 
   val NOTIFICATION_TYPE_SYSTEM                          = 0
   val NOTIFICATION_TYPE_SYSTEM_NAME                     = "System Message"

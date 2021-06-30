@@ -513,7 +513,7 @@ class SchedulerActor @Inject() (
         this.emailProvider.emailCountNotification(user.email, user.name, user.tasks, taskType)
       }
     } catch {
-      case e: Exception => logger.error("Failed to send count daily email: " + e)
+      case e: Exception => logger.error("Failed to send count email: " + e)
     }
   }
 
@@ -526,7 +526,7 @@ class SchedulerActor @Inject() (
       )
       .foreach(user => {
         if (user.reviewCountSubscriptionType == subscriptionType) {
-          sendCountNotificationEmails(user, "review")
+          sendCountNotificationEmails(user, UserNotification.TASK_TYPE_REVIEW)
         }
       })
 
@@ -536,7 +536,7 @@ class SchedulerActor @Inject() (
       )
       .foreach(user => {
         if (user.revisionCountSubscriptionType == subscriptionType) {
-          sendCountNotificationEmails(user, "revision")
+          sendCountNotificationEmails(user, UserNotification.TASK_TYPE_REVISION)
         }
       })
   }

@@ -74,7 +74,7 @@ class EmailProvider @Inject() (mailerClient: MailerClient, config: Config) {
     val notificationDetails = s"${name}, you have ${tasks.length} ${taskType}/s pending."
     var subRoute            = "";
 
-    if (taskType == "review") {
+    if (taskType == UserNotification.TASK_TYPE_REVIEW) {
       subRoute = "/review";
     }
 
